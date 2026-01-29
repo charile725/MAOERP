@@ -1119,6 +1119,10 @@ export default function POSPage() {
         handleSaveDraft={handleSaveDraft}
         handleLoadDraft={handleLoadDraft}
         handleDeleteDraft={handleDeleteDraft}
+        lastClosingTime={lastClosingTime}
+        closingStats={closingStats}
+        fetchClosingStats={fetchClosingStats}
+        handleClosing={handleClosing}
       />
     )
   }

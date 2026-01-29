@@ -29,7 +29,8 @@
       "Bash(npm run lint)",
       "Bash(cd:*)",
       "Bash(npx tsc:*)",
-      "Bash(npx eslint:*)"
+      "Bash(npx eslint:*)",
+      "Bash(dir:*)"
     ]
   }
 }

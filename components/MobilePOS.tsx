@@ -56,6 +56,22 @@ type SaleDraft = {
     customers?: { customer_name: string }
 }
 
+type ClosingStats = {
+    sales_count: number
+    total_sales: number
+    store_credit_converted: number
+    store_credit_count: number
+    fake_total_sales: number
+    paid_sales: number
+    paid_count: number
+    unpaid_sales: number
+    unpaid_count: number
+    paid_cash: number
+    paid_card: number
+    paid_transfer: number
+    paid_cod: number
+}
+
 type MobilePOSProps = {
     cart: CartItem[]
     setCart: (cart: CartItem[] | ((prev: CartItem[]) => CartItem[])) => void
@@ -86,6 +102,11 @@ type MobilePOSProps = {
     handleSaveDraft: () => void
     handleLoadDraft: (draft: SaleDraft) => void
     handleDeleteDraft: (draftId: string) => void
+    // 日結功能
+    lastClosingTime: string
+    closingStats: ClosingStats | null
+    fetchClosingStats: () => Promise<void>
+    handleClosing: () => Promise<void>
 }
 
 export default function MobilePOS({
@@ -117,11 +138,18 @@ export default function MobilePOS({
     handleSaveDraft,
     handleLoadDraft,
     handleDeleteDraft,
+    // 日結功能
+    lastClosingTime,
+    closingStats,
+    fetchClosingStats,
+    handleClosing,
 }: MobilePOSProps) {
     const [showCameraScanner, setShowCameraScanner] = useState(false)
     const [showCustomerPicker, setShowCustomerPicker] = useState(false)
     const [showPaymentPicker, setShowPaymentPicker] = useState(false)
     const [showDraftsPicker, setShowDraftsPicker] = useState(false)
+    const [showClosingModal, setShowClosingModal] = useState(false)
+    const [closingInProgress, setClosingInProgress] = useState(false)
     const [customerSearchQuery, setCustomerSearchQuery] = useState('')
     const scanTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -239,6 +267,15 @@ export default function MobilePOS({
                     >
                         📷
                     </button>
+                    <button
+                        onClick={async () => {
+                            await fetchClosingStats()
+                            setShowClosingModal(true)
+                        }}
+                        className="px-4 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium"
+                    >
+                        日結
+                    </button>
                 </div>
             </div>
 
@@ -274,16 +311,26 @@ export default function MobilePOS({
                                             −
                                         </button>
                                         <input
-                                            type="number"
-                                            min="1"
-                                            value={item.quantity}
-                                            onChange={(e) => {
+                                            type="text"
+                                            inputMode="numeric"
+                                            pattern="[0-9]*"
+                                            defaultValue={item.quantity}
+                                            key={`qty-${item.product_id}-${index}-${item.quantity}`}
+                                            onFocus={(e) => e.target.select()}
+                                            onBlur={(e) => {
                                                 const newQty = parseInt(e.target.value) || 1
-                                                if (newQty > 0) {
+                                                if (newQty > 0 && newQty !== item.quantity) {
                                                     updateQuantity(item.product_id, newQty)
+                                                } else if (newQty <= 0) {
+                                                    e.target.value = String(item.quantity)
                                                 }
                                             }}
-                                            className="w-12 py-1 text-white text-center bg-transparent border-0 focus:outline-none focus:ring-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    e.currentTarget.blur()
+                                                }
+                                            }}
+                                            className="w-12 py-1 text-white text-center bg-transparent border-0 focus:outline-none focus:ring-0 focus:bg-slate-600 rounded"
                                         />
                                         <button
                                             onClick={() => updateQuantity(item.product_id, item.quantity + 1)}
@@ -590,6 +637,119 @@ export default function MobilePOS({
                                 className="w-full bg-slate-700 text-slate-300 py-3 rounded-lg"
                             >
                                 關閉
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* 日結 Modal */}
+            {showClosingModal && closingStats && (
+                <div className="fixed inset-0 bg-black/70 z-50 flex items-end">
+                    <div className="w-full bg-slate-800 rounded-t-2xl max-h-[85vh] flex flex-col">
+                        {/* Header */}
+                        <div className="bg-emerald-600 px-4 py-3 rounded-t-2xl">
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-lg font-bold text-white">營業日結算</h3>
+                                <button onClick={() => setShowClosingModal(false)} className="text-white/80 text-2xl">×</button>
+                            </div>
+                            <div className="text-emerald-100 text-xs mt-1">
+                                {new Date(lastClosingTime).toLocaleString('zh-TW', { timeZone: 'UTC' })} ~ 現在
+                            </div>
+                        </div>
+
+                        {/* 內容 */}
+                        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                            {/* 總覽 */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="bg-blue-900/30 rounded-lg p-3">
+                                    <div className="text-blue-400 text-xs mb-1">總銷售筆數</div>
+                                    <div className="text-white text-xl font-bold">{closingStats.sales_count} 筆</div>
+                                </div>
+                                <div className="bg-emerald-900/30 rounded-lg p-3">
+                                    <div className="text-emerald-400 text-xs mb-1">總營業額</div>
+                                    <div className="text-white text-xl font-bold">{formatCurrency(closingStats.total_sales)}</div>
+                                </div>
+                            </div>
+
+                            {/* 假營業額（轉購物金前） */}
+                            {closingStats.store_credit_converted > 0 && (
+                                <div className="bg-purple-900/30 border border-purple-700 rounded-lg p-3">
+                                    <div className="flex justify-between items-center">
+                                        <div>
+                                            <div className="text-purple-400 text-xs mb-1">🎭 假營業額（轉購物金前）</div>
+                                            <div className="text-purple-300 text-xs">含 {closingStats.store_credit_count} 筆已轉購物金</div>
+                                        </div>
+                                        <div className="text-white text-xl font-bold">{formatCurrency(closingStats.fake_total_sales)}</div>
+                                    </div>
+                                    <div className="mt-2 pt-2 border-t border-purple-700 text-sm text-purple-300 flex justify-between">
+                                        <span>轉購物金金額：</span>
+                                        <span className="font-semibold">-{formatCurrency(closingStats.store_credit_converted)}</span>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* 已收款 vs 未收款 */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="bg-emerald-900/30 border border-emerald-700 rounded-lg p-3">
+                                    <div className="text-emerald-400 text-xs mb-1">✅ 已收款</div>
+                                    <div className="text-white text-lg font-bold">{formatCurrency(closingStats.paid_sales || 0)}</div>
+                                    <div className="text-emerald-400 text-xs">{closingStats.paid_count || 0} 筆</div>
+                                </div>
+                                <div className="bg-orange-900/30 border border-orange-700 rounded-lg p-3">
+                                    <div className="text-orange-400 text-xs mb-1">⏳ 未收款</div>
+                                    <div className="text-white text-lg font-bold">{formatCurrency(closingStats.unpaid_sales || 0)}</div>
+                                    <div className="text-orange-400 text-xs">{closingStats.unpaid_count || 0} 筆</div>
+                                </div>
+                            </div>
+
+                            {/* 已收款明細 */}
+                            <div className="border-t border-slate-700 pt-4">
+                                <div className="text-white font-semibold mb-3">✅ 已收款明細</div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div className="bg-slate-700 rounded-lg px-3 py-2 flex justify-between items-center">
+                                        <span className="text-slate-300 text-sm">現金</span>
+                                        <span className="text-white font-semibold">{formatCurrency(closingStats.paid_cash || 0)}</span>
+                                    </div>
+                                    <div className="bg-slate-700 rounded-lg px-3 py-2 flex justify-between items-center">
+                                        <span className="text-slate-300 text-sm">刷卡</span>
+                                        <span className="text-white font-semibold">{formatCurrency(closingStats.paid_card || 0)}</span>
+                                    </div>
+                                    <div className="bg-slate-700 rounded-lg px-3 py-2 flex justify-between items-center">
+                                        <span className="text-slate-300 text-sm">轉帳</span>
+                                        <span className="text-white font-semibold">{formatCurrency(closingStats.paid_transfer || 0)}</span>
+                                    </div>
+                                    <div className="bg-slate-700 rounded-lg px-3 py-2 flex justify-between items-center">
+                                        <span className="text-slate-300 text-sm">貨到付款</span>
+                                        <span className="text-white font-semibold">{formatCurrency(closingStats.paid_cod || 0)}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 底部按鈕 */}
+                        <div className="p-3 pb-6 border-t border-slate-700 flex gap-3">
+                            <button
+                                onClick={async () => {
+                                    setClosingInProgress(true)
+                                    try {
+                                        await handleClosing()
+                                        setShowClosingModal(false)
+                                    } finally {
+                                        setClosingInProgress(false)
+                                    }
+                                }}
+                                disabled={closingInProgress}
+                                className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-600 text-white font-bold py-3 rounded-lg"
+                            >
+                                {closingInProgress ? '結算中...' : '確認日結'}
+                            </button>
+                            <button
+                                onClick={() => setShowClosingModal(false)}
+                                disabled={closingInProgress}
+                                className="flex-1 bg-slate-700 text-slate-300 py-3 rounded-lg"
+                            >
+                                取消
                             </button>
                         </div>
                     </div>
