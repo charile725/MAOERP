@@ -46,6 +46,8 @@ export default function CustomersPage() {
   const [profitDateFrom, setProfitDateFrom] = useState('')
   const [profitDateTo, setProfitDateTo] = useState('')
   const [profitLoading, setProfitLoading] = useState(false)
+  const [profitSortField, setProfitSortField] = useState<'net_profit' | 'total_sales' | 'total_cost' | 'order_count' | null>('net_profit')
+  const [profitSortDir, setProfitSortDir] = useState<'asc' | 'desc'>('desc')
 
   const fetchCustomers = async () => {
     setLoading(true)
@@ -100,9 +102,29 @@ export default function CustomersPage() {
     fetchCustomers()
   }
 
-  // 分頁計算
-  const totalPages = Math.ceil(customers.length / pageSize)
-  const paginatedCustomers = customers.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+  // 排序和分頁計算
+  const sortedCustomers = showProfit && profitSortField
+    ? [...customers].sort((a, b) => {
+        const profitA = profitData[a.customer_code]
+        const profitB = profitData[b.customer_code]
+        const valA = profitA?.[profitSortField] || 0
+        const valB = profitB?.[profitSortField] || 0
+        return profitSortDir === 'desc' ? valB - valA : valA - valB
+      })
+    : customers
+
+  const totalPages = Math.ceil(sortedCustomers.length / pageSize)
+  const paginatedCustomers = sortedCustomers.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+
+  const handleProfitSort = (field: 'net_profit' | 'total_sales' | 'total_cost' | 'order_count') => {
+    if (profitSortField === field) {
+      setProfitSortDir(profitSortDir === 'desc' ? 'asc' : 'desc')
+    } else {
+      setProfitSortField(field)
+      setProfitSortDir('desc')
+    }
+    setCurrentPage(1)
+  }
 
   const openEditModal = (customer: Customer) => {
     setEditingCustomer(customer)
@@ -367,10 +389,38 @@ export default function CustomersPage() {
                     {!showProfit && <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400">門市地址</th>}
                     {!showProfit && <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400">宅配地址</th>}
                     <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600 dark:text-gray-400">購物金</th>
-                    {showProfit && <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600 dark:text-gray-400">訂單數</th>}
-                    {showProfit && <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600 dark:text-gray-400">總銷售</th>}
-                    {showProfit && <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600 dark:text-gray-400">總成本</th>}
-                    {showProfit && <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600 dark:text-gray-400">淨損益</th>}
+                    {showProfit && (
+                      <th
+                        className="px-4 py-2 text-right text-xs font-semibold text-gray-600 dark:text-gray-400 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 select-none"
+                        onClick={() => handleProfitSort('order_count')}
+                      >
+                        訂單數 {profitSortField === 'order_count' && (profitSortDir === 'desc' ? '↓' : '↑')}
+                      </th>
+                    )}
+                    {showProfit && (
+                      <th
+                        className="px-4 py-2 text-right text-xs font-semibold text-gray-600 dark:text-gray-400 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 select-none"
+                        onClick={() => handleProfitSort('total_sales')}
+                      >
+                        總銷售 {profitSortField === 'total_sales' && (profitSortDir === 'desc' ? '↓' : '↑')}
+                      </th>
+                    )}
+                    {showProfit && (
+                      <th
+                        className="px-4 py-2 text-right text-xs font-semibold text-gray-600 dark:text-gray-400 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 select-none"
+                        onClick={() => handleProfitSort('total_cost')}
+                      >
+                        總成本 {profitSortField === 'total_cost' && (profitSortDir === 'desc' ? '↓' : '↑')}
+                      </th>
+                    )}
+                    {showProfit && (
+                      <th
+                        className="px-4 py-2 text-right text-xs font-semibold text-gray-600 dark:text-gray-400 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 select-none"
+                        onClick={() => handleProfitSort('net_profit')}
+                      >
+                        淨損益 {profitSortField === 'net_profit' && (profitSortDir === 'desc' ? '↓' : '↑')}
+                      </th>
+                    )}
                     {!showProfit && <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400">付款方式</th>}
                     {!showProfit && <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400">LINE ID</th>}
                     <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-400">狀態</th>
