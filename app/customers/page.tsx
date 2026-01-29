@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import type { Customer } from '@/types'
-import { MoreHorizontal, Edit, Trash2, Wallet } from 'lucide-react'
+import { MoreHorizontal, Edit, Trash2, Wallet, TrendingUp, TrendingDown } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,6 +33,17 @@ export default function CustomersPage() {
   const [adjustNote, setAdjustNote] = useState('')
   const [adjustError, setAdjustError] = useState('')
 
+  // 客户损益数据
+  type CustomerProfit = {
+    customer_code: string
+    total_sales: number
+    total_cost: number
+    net_profit: number
+    order_count: number
+  }
+  const [profitData, setProfitData] = useState<Record<string, CustomerProfit>>({})
+  const [showProfit, setShowProfit] = useState(true)
+
   const fetchCustomers = async () => {
     setLoading(true)
     try {
@@ -52,8 +63,25 @@ export default function CustomersPage() {
     }
   }
 
+  const fetchProfitData = async () => {
+    try {
+      const res = await fetch('/api/customers/profit')
+      const data = await res.json()
+      if (data.ok) {
+        const profitMap: Record<string, CustomerProfit> = {}
+        for (const item of data.data || []) {
+          profitMap[item.customer_code] = item
+        }
+        setProfitData(profitMap)
+      }
+    } catch (err) {
+      console.error('Failed to fetch profit data:', err)
+    }
+  }
+
   useEffect(() => {
     fetchCustomers()
+    fetchProfitData()
   }, [activeFilter])
 
   const handleSearch = (e: React.FormEvent) => {
@@ -226,7 +254,7 @@ export default function CustomersPage() {
             </button>
           </form>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <button
               onClick={() => setActiveFilter(null)}
               className={`rounded px-4 py-1 font-medium ${activeFilter === null
@@ -254,6 +282,17 @@ export default function CustomersPage() {
             >
               停用
             </button>
+            <div className="border-l border-gray-300 dark:border-gray-600 mx-2"></div>
+            <button
+              onClick={() => setShowProfit(!showProfit)}
+              className={`rounded px-4 py-1 font-medium flex items-center gap-1 ${showProfit
+                ? 'bg-purple-600 text-white'
+                : 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600'
+                }`}
+            >
+              {showProfit ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+              損益
+            </button>
           </div>
         </div>
 
@@ -271,31 +310,41 @@ export default function CustomersPage() {
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400">客戶編號</th>
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400">客戶名稱</th>
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400">電話</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400">門市地址</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400">宅配地址</th>
+                    {!showProfit && <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400">門市地址</th>}
+                    {!showProfit && <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400">宅配地址</th>}
                     <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600 dark:text-gray-400">購物金</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400">付款方式</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400">LINE ID</th>
+                    {showProfit && <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600 dark:text-gray-400">訂單數</th>}
+                    {showProfit && <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600 dark:text-gray-400">總銷售</th>}
+                    {showProfit && <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600 dark:text-gray-400">總成本</th>}
+                    {showProfit && <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600 dark:text-gray-400">淨損益</th>}
+                    {!showProfit && <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400">付款方式</th>}
+                    {!showProfit && <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400">LINE ID</th>}
                     <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-400">狀態</th>
                     <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-400">操作</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                  {paginatedCustomers.map((customer) => (
+                  {paginatedCustomers.map((customer) => {
+                    const profit = profitData[customer.customer_code]
+                    return (
                     <tr key={customer.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                       <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{customer.customer_code}</td>
                       <td className="px-4 py-3 text-sm font-semibold text-gray-900 dark:text-gray-100">{customer.customer_name}</td>
                       <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{customer.phone || '-'}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
-                        <div className="max-w-[200px] truncate" title={customer.store_address || ''}>
-                          {customer.store_address || '-'}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
-                        <div className="max-w-[200px] truncate" title={customer.delivery_address || ''}>
-                          {customer.delivery_address || '-'}
-                        </div>
-                      </td>
+                      {!showProfit && (
+                        <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
+                          <div className="max-w-[200px] truncate" title={customer.store_address || ''}>
+                            {customer.store_address || '-'}
+                          </div>
+                        </td>
+                      )}
+                      {!showProfit && (
+                        <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
+                          <div className="max-w-[200px] truncate" title={customer.delivery_address || ''}>
+                            {customer.delivery_address || '-'}
+                          </div>
+                        </td>
+                      )}
                       <td className="px-4 py-3 text-sm text-right">
                         <span className={`font-bold ${customer.store_credit >= 0
                           ? 'text-green-600 dark:text-green-400'
@@ -304,16 +353,43 @@ export default function CustomersPage() {
                           ${customer.store_credit?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-sm text-center">
-                        <span className="inline-block px-2 py-0.5 rounded text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
-                          {customer.payment_method === 'cash' && '現金'}
-                          {customer.payment_method === 'card' && '刷卡'}
-                          {customer.payment_method === 'transfer' && '轉帳'}
-                          {customer.payment_method === 'cod' && '貨到付款'}
-                          {!customer.payment_method && '-'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{customer.line_id || '-'}</td>
+                      {showProfit && (
+                        <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100">
+                          {profit?.order_count || 0}
+                        </td>
+                      )}
+                      {showProfit && (
+                        <td className="px-4 py-3 text-sm text-right text-blue-600 dark:text-blue-400 font-medium">
+                          ${profit?.total_sales?.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || '0'}
+                        </td>
+                      )}
+                      {showProfit && (
+                        <td className="px-4 py-3 text-sm text-right text-orange-600 dark:text-orange-400 font-medium">
+                          ${profit?.total_cost?.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || '0'}
+                        </td>
+                      )}
+                      {showProfit && (
+                        <td className="px-4 py-3 text-sm text-right">
+                          <span className={`font-bold ${(profit?.net_profit || 0) >= 0
+                            ? 'text-green-600 dark:text-green-400'
+                            : 'text-red-600 dark:text-red-400'
+                            }`}>
+                            {(profit?.net_profit || 0) >= 0 ? '+' : ''}${profit?.net_profit?.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || '0'}
+                          </span>
+                        </td>
+                      )}
+                      {!showProfit && (
+                        <td className="px-4 py-3 text-sm text-center">
+                          <span className="inline-block px-2 py-0.5 rounded text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                            {customer.payment_method === 'cash' && '現金'}
+                            {customer.payment_method === 'card' && '刷卡'}
+                            {customer.payment_method === 'transfer' && '轉帳'}
+                            {customer.payment_method === 'cod' && '貨到付款'}
+                            {!customer.payment_method && '-'}
+                          </span>
+                        </td>
+                      )}
+                      {!showProfit && <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{customer.line_id || '-'}</td>}
                       <td className="px-4 py-3 text-center text-sm">
                         <span
                           className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${customer.is_active
@@ -351,7 +427,7 @@ export default function CustomersPage() {
                         </DropdownMenu>
                       </td>
                     </tr>
-                  ))}
+                  )})}
                 </tbody>
               </table>
             </div>
