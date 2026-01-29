@@ -43,6 +43,9 @@ export default function CustomersPage() {
   }
   const [profitData, setProfitData] = useState<Record<string, CustomerProfit>>({})
   const [showProfit, setShowProfit] = useState(true)
+  const [profitDateFrom, setProfitDateFrom] = useState('')
+  const [profitDateTo, setProfitDateTo] = useState('')
+  const [profitLoading, setProfitLoading] = useState(false)
 
   const fetchCustomers = async () => {
     setLoading(true)
@@ -63,9 +66,14 @@ export default function CustomersPage() {
     }
   }
 
-  const fetchProfitData = async () => {
+  const fetchProfitData = async (dateFrom?: string, dateTo?: string) => {
+    setProfitLoading(true)
     try {
-      const res = await fetch('/api/customers/profit')
+      const params = new URLSearchParams()
+      if (dateFrom) params.set('date_from', dateFrom)
+      if (dateTo) params.set('date_to', dateTo)
+
+      const res = await fetch(`/api/customers/profit?${params}`)
       const data = await res.json()
       if (data.ok) {
         const profitMap: Record<string, CustomerProfit> = {}
@@ -76,6 +84,8 @@ export default function CustomersPage() {
       }
     } catch (err) {
       console.error('Failed to fetch profit data:', err)
+    } finally {
+      setProfitLoading(false)
     }
   }
 
@@ -294,6 +304,50 @@ export default function CustomersPage() {
               損益
             </button>
           </div>
+
+          {/* 损益日期区间筛选 */}
+          {showProfit && (
+            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">損益區間：</span>
+                <input
+                  type="date"
+                  value={profitDateFrom}
+                  onChange={(e) => setProfitDateFrom(e.target.value)}
+                  className="rounded border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-sm text-gray-900 dark:text-gray-100 dark:bg-gray-700"
+                />
+                <span className="text-gray-500 dark:text-gray-400">~</span>
+                <input
+                  type="date"
+                  value={profitDateTo}
+                  onChange={(e) => setProfitDateTo(e.target.value)}
+                  className="rounded border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-sm text-gray-900 dark:text-gray-100 dark:bg-gray-700"
+                />
+                <button
+                  onClick={() => fetchProfitData(profitDateFrom, profitDateTo)}
+                  disabled={profitLoading}
+                  className="rounded bg-purple-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-purple-700 disabled:bg-gray-400"
+                >
+                  {profitLoading ? '載入中...' : '查詢'}
+                </button>
+                <button
+                  onClick={() => {
+                    setProfitDateFrom('')
+                    setProfitDateTo('')
+                    fetchProfitData()
+                  }}
+                  className="rounded bg-gray-200 dark:bg-gray-700 px-4 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+                >
+                  全部
+                </button>
+                {(profitDateFrom || profitDateTo) && (
+                  <span className="text-sm text-purple-600 dark:text-purple-400 font-medium">
+                    {profitDateFrom || '起始'} ~ {profitDateTo || '至今'}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Customers table */}
