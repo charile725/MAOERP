@@ -49,20 +49,26 @@ export const vendorSchema = z.object({
 })
 
 // Sale schemas
+// 統一定義所有付款方式 - 新增帳戶時記得在此處加入對應的 payment_method_code
+export const paymentMethodEnum = z.enum([
+  'cash',
+  'card',
+  'transfer_cathay',
+  'transfer_cathay_biz',
+  'transfer_fubon',
+  'transfer_esun',
+  'transfer_union',
+  'transfer_linepay',
+  'transfer_linebank',
+  'transfer_post',
+  'cod',
+  'pending'
+])
+
 export const saleDraftSchema = z.object({
   customer_code: z.string().optional(),
   source: z.enum(['pos', 'live', 'manual']).default('pos'),
-  payment_method: z.enum([
-    'cash',
-    'card',
-    'transfer_cathay',
-    'transfer_fubon',
-    'transfer_esun',
-    'transfer_union',
-    'transfer_linepay',
-    'cod',
-    'pending'
-  ]).default('cash'),
+  payment_method: paymentMethodEnum.default('cash'),
   is_paid: z.boolean().default(false),
   note: z.string().optional(),
   discount_type: z.enum(['none', 'percent', 'amount']).default('none'),
@@ -70,16 +76,7 @@ export const saleDraftSchema = z.object({
   // Multi-payment support
   payments: z.array(
     z.object({
-      method: z.enum([
-        'cash',
-        'card',
-        'transfer_cathay',
-        'transfer_fubon',
-        'transfer_esun',
-        'transfer_union',
-        'transfer_linepay',
-        'cod',
-      ]),
+      method: paymentMethodEnum,
       amount: z.number().positive('Amount must be positive'),
     })
   ).optional(),
@@ -95,17 +92,7 @@ export const saleDraftSchema = z.object({
 })
 
 export const saleUpdateSchema = z.object({
-  payment_method: z.enum([
-    'cash',
-    'card',
-    'transfer_cathay',
-    'transfer_fubon',
-    'transfer_esun',
-    'transfer_union',
-    'transfer_linepay',
-    'cod',
-    'pending'
-  ])
+  payment_method: paymentMethodEnum
 })
 
 // Purchase schemas

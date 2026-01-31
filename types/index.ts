@@ -56,10 +56,13 @@ export type PaymentMethod =
   | 'cash'
   | 'card'
   | 'transfer_cathay'
+  | 'transfer_cathay_biz'
   | 'transfer_fubon'
   | 'transfer_esun'
   | 'transfer_union'
   | 'transfer_linepay'
+  | 'transfer_linebank'
+  | 'transfer_post'
   | 'cod'
   | 'pending'
 
