@@ -76,11 +76,14 @@ export async function POST(
             )
         }
 
-        // 2.5 驗證並設定轉換數量
-        const convertQuantity = requestedQuantity ?? saleItem.quantity
-        if (convertQuantity > saleItem.quantity) {
+        // 2.5 驗證並設定轉換數量（考慮已轉換的數量）
+        const alreadyConverted = saleItem.store_credit_qty || 0
+        const remainingConvertible = saleItem.quantity - alreadyConverted
+        const convertQuantity = requestedQuantity ?? remainingConvertible
+
+        if (convertQuantity > remainingConvertible) {
             return NextResponse.json(
-                { ok: false, error: `轉換數量不能超過品項數量（${saleItem.quantity}）` },
+                { ok: false, error: `轉換數量超過可轉換數量（剩餘可轉換：${remainingConvertible}）` },
                 { status: 400 }
             )
         }
@@ -203,8 +206,14 @@ export async function POST(
                 created_at: getTaiwanTime(),
             })
 
-        // 9. 標記品項為已轉換（可選：刪除品項或添加標記）
-        // 這裡不需要更新價格因為已經是 0
+        // 9. 更新品項的購物金轉換狀態
+        await (supabaseServer
+            .from('sale_items') as any)
+            .update({
+                store_credit_qty: (saleItem.store_credit_qty || 0) + convertQuantity,
+                store_credit_amount: (saleItem.store_credit_amount || 0) + conversionAmount,
+            })
+            .eq('id', saleItemId)
 
         return NextResponse.json({
             ok: true,

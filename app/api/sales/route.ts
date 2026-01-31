@@ -33,6 +33,8 @@ export async function GET(request: NextRequest) {
           snapshot_name,
           product_id,
           cost,
+          store_credit_qty,
+          store_credit_amount,
           products (
             item_code,
             unit

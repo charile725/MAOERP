@@ -215,6 +215,8 @@ export interface Database {
           price: number
           subtotal: number
           snapshot_name: string | null
+          store_credit_qty: number
+          store_credit_amount: number
         }
         Insert: {
           id?: string
@@ -224,6 +226,8 @@ export interface Database {
           price: number
           subtotal?: number
           snapshot_name?: string | null
+          store_credit_qty?: number
+          store_credit_amount?: number
         }
         Update: {
           id?: string
@@ -233,6 +237,8 @@ export interface Database {
           price?: number
           subtotal?: number
           snapshot_name?: string | null
+          store_credit_qty?: number
+          store_credit_amount?: number
         }
       }
       purchases: {

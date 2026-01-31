@@ -78,6 +78,8 @@ type SaleItem = {
   }
   is_delivered?: boolean
   delivered_quantity?: number
+  store_credit_qty?: number
+  store_credit_amount?: number
 }
 
 type Sale = {
@@ -619,8 +621,17 @@ export default function SalesPage() {
       return
     }
 
+    // 計算剩餘可轉換數量
+    const alreadyConverted = item.store_credit_qty || 0
+    const remainingConvertible = item.quantity - alreadyConverted
+
+    if (remainingConvertible <= 0) {
+      alert('此品項已全部轉換為購物金')
+      return
+    }
+
     // 步驟 1：先輸入數量
-    const quantityInput = prompt(`將「${item.snapshot_name}」轉為購物金\n\n步驟 1/2：請輸入轉換數量\n（原數量：${item.quantity} 件）`, item.quantity.toString())
+    const quantityInput = prompt(`將「${item.snapshot_name}」轉為購物金\n\n步驟 1/2：請輸入轉換數量\n（原數量：${item.quantity} 件，已轉：${alreadyConverted} 件，剩餘可轉：${remainingConvertible} 件）`, remainingConvertible.toString())
 
     if (quantityInput === null) {
       return // 用戶取消
@@ -632,8 +643,8 @@ export default function SalesPage() {
       return
     }
 
-    if (quantity > item.quantity) {
-      alert(`轉換數量不能超過原數量（${item.quantity}）`)
+    if (quantity > remainingConvertible) {
+      alert(`轉換數量不能超過剩餘可轉數量（${remainingConvertible}）`)
       return
     }
 
@@ -1078,15 +1089,36 @@ export default function SalesPage() {
                                                         {delivering === item.id ? '處理中...' : '出貨'}
                                                       </button>
                                                     )}
-                                                    {sale.customer_code && item.price === 0 && (
-                                                      <button
-                                                        onClick={() => handleItemToStoreCredit(item, sale)}
-                                                        disabled={convertingItemId === item.id}
-                                                        className="rounded px-2 py-0.5 text-xs text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30 disabled:opacity-50"
-                                                      >
-                                                        {convertingItemId === item.id ? '處理中...' : '💰'}
-                                                      </button>
-                                                    )}
+                                                    {sale.customer_code && item.price === 0 && (() => {
+                                                      const alreadyConverted = item.store_credit_qty || 0
+                                                      const isFullyConverted = alreadyConverted >= item.quantity
+                                                      const isPartiallyConverted = alreadyConverted > 0 && !isFullyConverted
+
+                                                      if (isFullyConverted) {
+                                                        return (
+                                                          <span className="rounded bg-green-100 dark:bg-green-900/30 px-2 py-0.5 text-xs text-green-600 dark:text-green-400">
+                                                            已轉購物金
+                                                          </span>
+                                                        )
+                                                      }
+
+                                                      return (
+                                                        <>
+                                                          {isPartiallyConverted && (
+                                                            <span className="text-xs text-amber-600 dark:text-amber-400 mr-1">
+                                                              已轉 {alreadyConverted}/{item.quantity}
+                                                            </span>
+                                                          )}
+                                                          <button
+                                                            onClick={() => handleItemToStoreCredit(item, sale)}
+                                                            disabled={convertingItemId === item.id}
+                                                            className="rounded px-2 py-0.5 text-xs text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30 disabled:opacity-50"
+                                                          >
+                                                            {convertingItemId === item.id ? '處理中...' : '💰'}
+                                                          </button>
+                                                        </>
+                                                      )
+                                                    })()}
                                                   </div>
                                                 </td>
                                               </tr>
@@ -1319,15 +1351,36 @@ export default function SalesPage() {
                                                     {delivering === item.id ? '處理中...' : '出貨'}
                                                   </button>
                                                 )}
-                                                {sale.customer_code && item.price === 0 && (
-                                                  <button
-                                                    onClick={() => handleItemToStoreCredit(item, sale)}
-                                                    disabled={convertingItemId === item.id}
-                                                    className="rounded px-2 py-1 text-xs text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30 disabled:opacity-50"
-                                                  >
-                                                    {convertingItemId === item.id ? '處理中...' : '💰'}
-                                                  </button>
-                                                )}
+                                                {sale.customer_code && item.price === 0 && (() => {
+                                                  const alreadyConverted = item.store_credit_qty || 0
+                                                  const isFullyConverted = alreadyConverted >= item.quantity
+                                                  const isPartiallyConverted = alreadyConverted > 0 && !isFullyConverted
+
+                                                  if (isFullyConverted) {
+                                                    return (
+                                                      <span className="rounded bg-green-100 dark:bg-green-900/30 px-2 py-1 text-xs text-green-600 dark:text-green-400">
+                                                        已轉購物金
+                                                      </span>
+                                                    )
+                                                  }
+
+                                                  return (
+                                                    <>
+                                                      {isPartiallyConverted && (
+                                                        <span className="text-xs text-amber-600 dark:text-amber-400 mr-1">
+                                                          已轉 {alreadyConverted}/{item.quantity}
+                                                        </span>
+                                                      )}
+                                                      <button
+                                                        onClick={() => handleItemToStoreCredit(item, sale)}
+                                                        disabled={convertingItemId === item.id}
+                                                        className="rounded px-2 py-1 text-xs text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30 disabled:opacity-50"
+                                                      >
+                                                        {convertingItemId === item.id ? '處理中...' : '💰'}
+                                                      </button>
+                                                    </>
+                                                  )
+                                                })()}
                                               </div>
                                             </td>
                                           </tr>
