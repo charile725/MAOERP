@@ -167,8 +167,8 @@ export default function NewPurchasePage() {
     setItems(
       items.map((item, i) => {
         if (i === index) {
-          // 小計 ÷ 數量 = 單位成本
-          const cost = item.quantity > 0 ? subtotal / item.quantity : 0
+          // 小計 ÷ 數量 = 單位成本（四捨五入到兩位小數避免精度問題）
+          const cost = item.quantity > 0 ? Math.round((subtotal / item.quantity) * 100) / 100 : 0
           return { ...item, cost }
         }
         return item
