@@ -112,6 +112,8 @@ type MobilePOSProps = {
     fetchClosingStats: () => Promise<void>
     handleClosing: () => Promise<void>
     setBusinessDate: (date: string) => Promise<void>
+    // 新增客戶功能
+    fetchCustomers: () => void
 }
 
 export default function MobilePOS({
@@ -152,6 +154,7 @@ export default function MobilePOS({
     fetchClosingStats,
     handleClosing,
     setBusinessDate,
+    fetchCustomers,
 }: MobilePOSProps) {
     const [showCameraScanner, setShowCameraScanner] = useState(false)
     const [showCustomerPicker, setShowCustomerPicker] = useState(false)
@@ -161,6 +164,12 @@ export default function MobilePOS({
     const [closingInProgress, setClosingInProgress] = useState(false)
     const [customerSearchQuery, setCustomerSearchQuery] = useState('')
     const scanTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+    // 快速新增客戶
+    const [showQuickAddCustomer, setShowQuickAddCustomer] = useState(false)
+    const [newCustomerName, setNewCustomerName] = useState('')
+    const [newCustomerPhone, setNewCustomerPhone] = useState('')
+    const [addingCustomer, setAddingCustomer] = useState(false)
 
     // 搜尋結果 - 不限制數量，讓使用者可以捲動查看所有結果
     const searchResults = searchQuery.trim()
@@ -222,6 +231,62 @@ export default function MobilePOS({
         c.customer_name.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
         c.customer_code.toLowerCase().includes(customerSearchQuery.toLowerCase())
     )
+
+    // 快速新增客戶
+    const handleQuickAddCustomer = async () => {
+        if (!newCustomerName.trim()) {
+            alert('請輸入客戶名稱')
+            return
+        }
+
+        if (!newCustomerPhone.trim()) {
+            alert('請輸入客戶電話')
+            return
+        }
+
+        setAddingCustomer(true)
+
+        try {
+            const res = await fetch('/api/customers', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    customer_name: newCustomerName.trim(),
+                    phone: newCustomerPhone.trim(),
+                }),
+            })
+
+            const data = await res.json()
+
+            if (data.ok) {
+                const newCustomer: Customer = {
+                    id: data.data.id,
+                    customer_code: data.data.customer_code,
+                    customer_name: data.data.customer_name,
+                    phone: data.data.phone,
+                    is_active: true,
+                    store_credit: 0,
+                    credit_limit: 0,
+                }
+
+                setSelectedCustomer(newCustomer)
+                fetchCustomers()
+
+                setNewCustomerName('')
+                setNewCustomerPhone('')
+                setShowQuickAddCustomer(false)
+                setShowCustomerPicker(false)
+
+                alert(`客戶 ${data.data.customer_name} 已建立並自動選擇`)
+            } else {
+                alert(`建立失敗：${data.error}`)
+            }
+        } catch (err) {
+            alert('建立失敗')
+        } finally {
+            setAddingCustomer(false)
+        }
+    }
 
     // 從帳戶動態生成付款方式選項
     const paymentMethods = paymentAccounts.map(acc => ({
@@ -555,6 +620,74 @@ export default function MobilePOS({
                                     </div>
                                 </button>
                             ))}
+                        </div>
+                        {/* 新增客戶按鈕 */}
+                        <div className="p-3 border-t border-slate-700">
+                            <button
+                                onClick={() => setShowQuickAddCustomer(true)}
+                                className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg transition-all"
+                            >
+                                + 新增客戶
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* 快速新增客戶 Modal */}
+            {showQuickAddCustomer && (
+                <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+                    <div className="w-full max-w-md bg-slate-800 rounded-xl">
+                        <div className="bg-green-600 text-white px-4 py-3 rounded-t-xl flex items-center justify-between">
+                            <h3 className="text-lg font-bold">快速建立客戶</h3>
+                            <button onClick={() => setShowQuickAddCustomer(false)} className="text-2xl hover:text-gray-200">×</button>
+                        </div>
+                        <div className="p-4 space-y-4">
+                            <div>
+                                <label className="block font-medium mb-2 text-white">
+                                    客戶名稱 <span className="text-red-400">*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    value={newCustomerName}
+                                    onChange={(e) => setNewCustomerName(e.target.value)}
+                                    placeholder="請輸入客戶名稱"
+                                    className="w-full rounded-lg px-4 py-3 text-white bg-slate-700 border border-slate-600 focus:border-green-500 focus:outline-none"
+                                    autoFocus
+                                />
+                            </div>
+                            <div>
+                                <label className="block font-medium mb-2 text-white">
+                                    客戶電話 <span className="text-red-400">*</span>
+                                </label>
+                                <input
+                                    type="tel"
+                                    value={newCustomerPhone}
+                                    onChange={(e) => setNewCustomerPhone(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && !addingCustomer) {
+                                            handleQuickAddCustomer()
+                                        }
+                                    }}
+                                    placeholder="請輸入客戶電話"
+                                    className="w-full rounded-lg px-4 py-3 text-white bg-slate-700 border border-slate-600 focus:border-green-500 focus:outline-none"
+                                />
+                            </div>
+                            <div className="flex gap-3 pt-2">
+                                <button
+                                    onClick={handleQuickAddCustomer}
+                                    disabled={addingCustomer}
+                                    className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-500 text-white font-bold py-3 rounded-lg transition-all"
+                                >
+                                    {addingCustomer ? '建立中...' : '建立客戶'}
+                                </button>
+                                <button
+                                    onClick={() => setShowQuickAddCustomer(false)}
+                                    className="flex-1 bg-slate-600 hover:bg-slate-500 text-white font-bold py-3 rounded-lg transition-all"
+                                >
+                                    取消
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
