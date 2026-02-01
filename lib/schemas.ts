@@ -87,6 +87,7 @@ export const saleDraftSchema = z.object({
       price: z.number().min(0, 'Price must be positive'),
       ichiban_kuji_prize_id: z.string().uuid().optional(), // 如果是從一番賞售出
       ichiban_kuji_id: z.string().uuid().optional(), // 所屬一番賞ID
+      isNotDelivered: z.boolean().optional(), // 是否未出貨（支援部分出貨）
     })
   ).min(1, 'At least one item is required'),
 })

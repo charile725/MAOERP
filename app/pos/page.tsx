@@ -76,8 +76,7 @@ export default function POSPage() {
   const [cart, setCart] = useState<CartItem[]>([])
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
   const [isPaid, setIsPaid] = useState(true)
-  const [isDelivered, setIsDelivered] = useState(true) // 新增：已出貨狀態
-  const [deliveryMethod, setDeliveryMethod] = useState('') // 新增：交貨方式
+  const [deliveryMethod, setDeliveryMethod] = useState('') // 交貨方式
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState('') // 新增：預計出貨日
   const [deliveryNote, setDeliveryNote] = useState('') // 新增：出貨備註
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
@@ -795,9 +794,8 @@ export default function POSPage() {
       // Use combo price adjusted cart for checkout
       const checkoutCart = applyComboPrice()
 
-      // 檢查購物車中是否有未出貨的商品
+      // 檢查購物車中是否有未出貨的商品（用於決定是否顯示出貨資訊）
       const hasNotDeliveredItems = cart.some(item => item.isNotDelivered)
-      const finalIsDelivered = !hasNotDeliveredItems
 
       const res = await fetch('/api/sales', {
         method: 'POST',
@@ -807,10 +805,10 @@ export default function POSPage() {
           source: salesMode,
           payment_method: paymentMethod,
           is_paid: isPaid,
-          is_delivered: finalIsDelivered,
-          delivery_method: !finalIsDelivered ? deliveryMethod : undefined,
-          expected_delivery_date: !finalIsDelivered ? expectedDeliveryDate : undefined,
-          delivery_note: !finalIsDelivered ? deliveryNote : undefined,
+          is_delivered: !hasNotDeliveredItems, // 保留向後兼容
+          delivery_method: hasNotDeliveredItems ? deliveryMethod : undefined,
+          expected_delivery_date: hasNotDeliveredItems ? expectedDeliveryDate : undefined,
+          delivery_note: hasNotDeliveredItems ? deliveryNote : undefined,
           note: note || undefined,
           discount_type: discountType,
           discount_value: discountValue,
@@ -820,12 +818,14 @@ export default function POSPage() {
               .filter(p => parseFloat(p.amount) > 0)
               .map(p => ({ method: p.method, amount: parseFloat(p.amount) }))
             : undefined,
+          // 傳送每個品項的出貨狀態
           items: checkoutCart.map((item) => ({
             product_id: item.product_id,
             quantity: item.quantity,
             price: item.price,
             ichiban_kuji_prize_id: item.ichiban_kuji_prize_id,
             ichiban_kuji_id: item.ichiban_kuji_id,
+            isNotDelivered: item.isNotDelivered || false,
           })),
         }),
       })
@@ -838,7 +838,6 @@ export default function POSPage() {
         setCustomerSearchQuery('')
         setPaymentMethod('cash')
         setIsPaid(true)
-        setIsDelivered(true) // 重置為已出貨
         setDeliveryMethod('') // 清空交貨方式
         setExpectedDeliveryDate('') // 清空預計出貨日
         setDeliveryNote('') // 清空出貨備註

@@ -129,6 +129,68 @@ type ProductStats = {
   }[]
 }
 
+// 計算品項的實際處理狀態
+// 已處理 = 已出貨 OR 已轉購物金
+const getItemResolvedStatus = (item: SaleItem) => {
+  const deliveredQty = item.delivered_quantity || 0
+  const storeCreditQty = item.store_credit_qty || 0
+  const resolvedQty = deliveredQty + storeCreditQty
+  return {
+    isFullyResolved: resolvedQty >= item.quantity,
+    isPartiallyResolved: resolvedQty > 0 && resolvedQty < item.quantity,
+    resolvedQty,
+    deliveredQty,
+    storeCreditQty,
+  }
+}
+
+// 計算訂單的實際處理狀態（考慮出貨和購物金轉換）
+const getActualFulfillmentStatus = (sale: Sale): 'completed' | 'partial' | 'none' => {
+  const items = sale.sale_items || []
+  if (items.length === 0) return sale.fulfillment_status as any || 'none'
+
+  let fullyResolvedCount = 0
+  let partiallyResolvedCount = 0
+
+  items.forEach(item => {
+    const status = getItemResolvedStatus(item)
+    if (status.isFullyResolved) {
+      fullyResolvedCount++
+    } else if (status.isPartiallyResolved) {
+      partiallyResolvedCount++
+    }
+  })
+
+  if (fullyResolvedCount === items.length) {
+    return 'completed'
+  } else if (fullyResolvedCount > 0 || partiallyResolvedCount > 0) {
+    return 'partial'
+  }
+  return 'none'
+}
+
+// 取得處理狀態的顯示文字
+const getFulfillmentLabel = (sale: Sale): { text: string, className: string } => {
+  const status = getActualFulfillmentStatus(sale)
+  const items = sale.sale_items || []
+
+  // 檢查是否有轉購物金的品項
+  const hasStoreCredit = items.some(item => (item.store_credit_qty || 0) > 0)
+
+  if (status === 'completed') {
+    if (hasStoreCredit) {
+      return { text: '✓ 已全部處理', className: 'text-green-600 dark:text-green-400' }
+    }
+    return { text: '🚚 已出貨', className: 'text-blue-600 dark:text-blue-400' }
+  } else if (status === 'partial') {
+    if (hasStoreCredit) {
+      return { text: '⚡ 部分處理', className: 'text-amber-600 dark:text-amber-400' }
+    }
+    return { text: '⚡ 部分出貨', className: 'text-amber-600 dark:text-amber-400' }
+  }
+  return { text: '• 待處理', className: 'text-gray-500 dark:text-gray-400' }
+}
+
 export default function SalesPage() {
   const [customerGroups, setCustomerGroups] = useState<CustomerGroup[]>([])
   const [loading, setLoading] = useState(true)
@@ -256,9 +318,9 @@ export default function SalesPage() {
           const groups: { [key: string]: CustomerGroup } = {}
 
           allSales.forEach((sale: Sale) => {
-            // 根据showUndeliveredOnly过滤
-            if (showUndeliveredOnly && sale.fulfillment_status === 'completed') {
-              return // 只显示未出货的
+            // 根据showUndeliveredOnly过滤（考慮出貨和購物金轉換）
+            if (showUndeliveredOnly && getActualFulfillmentStatus(sale) === 'completed') {
+              return // 只显示未處理完的
             }
 
             // 計算這筆銷售的毛利
@@ -287,8 +349,8 @@ export default function SalesPage() {
             groups[key].total_revenue += sale.total
             groups[key].total_profit += saleProfit
 
-            // 统计待出货
-            if (sale.fulfillment_status !== 'completed') {
+            // 统计待處理（考慮出貨和購物金轉換）
+            if (getActualFulfillmentStatus(sale) !== 'completed') {
               groups[key].total_pending += sale.total
               groups[key].pending_count += 1
             }
@@ -296,9 +358,9 @@ export default function SalesPage() {
 
           setCustomerGroups(Object.values(groups))
         } else {
-          // 不分组，直接显示列表，但根据showUndeliveredOnly过滤
+          // 不分组，直接显示列表，但根据showUndeliveredOnly过滤（考慮出貨和購物金轉換）
           const filteredSales = showUndeliveredOnly
-            ? allSales.filter((s: Sale) => s.fulfillment_status !== 'completed')
+            ? allSales.filter((s: Sale) => getActualFulfillmentStatus(s) !== 'completed')
             : allSales
 
           // 不分组情況，計算每筆銷售的毛利
@@ -960,24 +1022,14 @@ export default function SalesPage() {
                                     </span>
                                   </td>
                                   <td className="py-2 text-center text-sm">
-                                    <span
-                                      className={`inline-flex items-center gap-1 text-xs ${sale.fulfillment_status === 'completed'
-                                        ? 'text-blue-600 dark:text-blue-400'
-                                        : sale.fulfillment_status === 'partial'
-                                          ? 'text-amber-600 dark:text-amber-400'
-                                          : sale.fulfillment_status === 'none'
-                                            ? 'text-gray-500 dark:text-gray-400'
-                                            : 'text-gray-400'
-                                        }`}
-                                    >
-                                      {sale.fulfillment_status === 'completed'
-                                        ? '🚚 已出貨'
-                                        : sale.fulfillment_status === 'partial'
-                                          ? '⚡ 部分出貨'
-                                          : sale.fulfillment_status === 'none'
-                                            ? '• 未出貨'
-                                            : '? 舊資料'}
-                                    </span>
+                                    {(() => {
+                                      const label = getFulfillmentLabel(sale)
+                                      return (
+                                        <span className={`inline-flex items-center gap-1 text-xs ${label.className}`}>
+                                          {label.text}
+                                        </span>
+                                      )
+                                    })()}
                                   </td>
                                   <td className="py-2 text-center text-sm" onClick={(e) => e.stopPropagation()}>
                                     <PortalDropdown
@@ -1224,24 +1276,14 @@ export default function SalesPage() {
                               </span>
                             </td>
                             <td className="px-6 py-4 text-center text-sm">
-                              <span
-                                className={`inline-flex items-center gap-1 text-xs ${sale.fulfillment_status === 'completed'
-                                  ? 'text-blue-600 dark:text-blue-400'
-                                  : sale.fulfillment_status === 'partial'
-                                    ? 'text-amber-600 dark:text-amber-400'
-                                    : sale.fulfillment_status === 'none'
-                                      ? 'text-gray-500 dark:text-gray-400'
-                                      : 'text-gray-400'
-                                  }`}
-                              >
-                                {sale.fulfillment_status === 'completed'
-                                  ? '🚚 已出貨'
-                                  : sale.fulfillment_status === 'partial'
-                                    ? '⚡ 部分出貨'
-                                    : sale.fulfillment_status === 'none'
-                                      ? '• 未出貨'
-                                      : '? 舊資料'}
-                              </span>
+                              {(() => {
+                                const label = getFulfillmentLabel(sale)
+                                return (
+                                  <span className={`inline-flex items-center gap-1 text-xs ${label.className}`}>
+                                    {label.text}
+                                  </span>
+                                )
+                              })()}
                             </td>
                             <td className="px-6 py-4 text-center text-sm" onClick={(e) => e.stopPropagation()}>
                               <PortalDropdown
