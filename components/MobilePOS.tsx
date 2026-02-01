@@ -97,6 +97,9 @@ type MobilePOSProps = {
     toggleNotDelivered: (index: number) => void
     searchQuery: string
     setSearchQuery: (q: string) => void
+    // 備註
+    note: string
+    setNote: (note: string) => void
     // 暫存功能
     drafts: SaleDraft[]
     handleSaveDraft: () => void
@@ -136,6 +139,8 @@ export default function MobilePOS({
     toggleNotDelivered,
     searchQuery,
     setSearchQuery,
+    note,
+    setNote,
     drafts,
     handleSaveDraft,
     handleLoadDraft,
@@ -446,6 +451,17 @@ export default function MobilePOS({
                         )}
                     </div>
                 )}
+
+                {/* 備註輸入框 */}
+                <div>
+                    <input
+                        type="text"
+                        value={note}
+                        onChange={(e) => setNote(e.target.value)}
+                        placeholder="📝 輸入備註..."
+                        className="w-full border border-slate-600 rounded-lg px-3 py-2 text-sm text-white bg-slate-700 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none"
+                    />
+                </div>
 
                 {/* 總計 + 暫存/結帳 */}
                 <div className="flex items-center gap-2">

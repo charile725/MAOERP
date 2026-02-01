@@ -1119,6 +1119,14 @@ export default function SalesPage() {
                                 {expandedSales.has(sale.id) && sale.sale_items && (
                                   <tr key={`${sale.id}-items`}>
                                     <td colSpan={7} className="bg-white dark:bg-gray-800 py-2 px-4">
+                                      {/* 備註顯示 */}
+                                      {sale.note && sale.note.trim() !== '' && (
+                                        <div className="mb-3 p-2 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg">
+                                          <div className="text-xs font-medium text-blue-800 dark:text-blue-200">
+                                            📝 備註：{sale.note}
+                                          </div>
+                                        </div>
+                                      )}
                                       <div className="flex items-center justify-between mb-2">
                                         <div className="text-xs font-semibold text-gray-700 dark:text-gray-300">商品明細</div>
                                       </div>
@@ -1369,6 +1377,14 @@ export default function SalesPage() {
                             <tr key={`${sale.id}-details`}>
                               <td colSpan={9} className="bg-gray-50 dark:bg-gray-900 px-6 py-4">
                                 <div className="ml-8 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+                                  {/* 備註顯示 */}
+                                  {sale.note && sale.note.trim() !== '' && (
+                                    <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg">
+                                      <div className="text-sm text-blue-800 dark:text-blue-200">
+                                        📝 <span className="font-medium">備註：</span>{sale.note}
+                                      </div>
+                                    </div>
+                                  )}
                                   <div className="flex items-center justify-between mb-3">
                                     <h4 className="font-semibold text-gray-900 dark:text-gray-100">銷售明細</h4>
                                   </div>

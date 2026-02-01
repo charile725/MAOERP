@@ -1094,6 +1094,8 @@ export default function POSPage() {
         toggleNotDelivered={toggleNotDelivered}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
+        note={note}
+        setNote={setNote}
         drafts={drafts}
         handleSaveDraft={handleSaveDraft}
         handleLoadDraft={handleLoadDraft}
@@ -1894,9 +1896,17 @@ export default function POSPage() {
               </div>
             )}
 
-
-
-
+            {/* 備註輸入框 */}
+            <div className="px-3 py-2">
+              <label className="block text-xs font-medium text-slate-400 mb-1">📝 備註</label>
+              <input
+                type="text"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="輸入訂單備註..."
+                className="w-full border-2 border-slate-600 rounded-lg px-3 py-2 text-sm text-white bg-slate-700 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none"
+              />
+            </div>
 
             {/* Checkout Button - Fixed at bottom - 放大結帳按鈕 */}
             <div className="p-3 border-t border-slate-700 bg-slate-800">
