@@ -91,7 +91,10 @@ type Sale = {
   payment_method: string
   is_paid: boolean
   note: string | null
-  total: number
+  subtotal?: number // 原始銷售額 (Gross Sales)
+  discount_amount?: number // 折扣金額
+  store_credit_used?: number // 使用的購物金
+  total: number // 實收金額 (Net Collected)
   status: string
   fulfillment_status?: string | null
   created_at: string

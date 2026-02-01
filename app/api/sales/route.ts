@@ -518,7 +518,10 @@ export async function POST(request: NextRequest) {
     const { data: confirmedSale, error: confirmError } = await (supabaseServer
       .from('sales') as any)
       .update({
-        total: finalTotal,  // 使用抵扣购物金后的最终金额
+        subtotal: subtotal,  // 原始銷售額 (Gross Sales)
+        discount_amount: discountAmount,  // 折扣金額
+        store_credit_used: storeCreditUsed,  // 使用的購物金
+        total: finalTotal,  // 實收金額 (Net Collected) = subtotal - discount - store_credit
         status: 'confirmed',
         updated_at: taiwanTime.toISOString(), // 使用台灣時間
       })

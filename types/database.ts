@@ -166,7 +166,10 @@ export interface Database {
           payment_method: string
           account_id: string | null
           is_paid: boolean
-          total: number
+          subtotal: number // 原始銷售額 (Gross Sales)
+          discount_amount: number // 折扣金額
+          store_credit_used: number // 使用的購物金
+          total: number // 實收金額 (Net Collected)
           status: string
           note: string | null
           created_by: string | null
@@ -182,6 +185,9 @@ export interface Database {
           payment_method?: string
           account_id?: string | null
           is_paid?: boolean
+          subtotal?: number
+          discount_amount?: number
+          store_credit_used?: number
           total?: number
           status?: string
           note?: string | null
@@ -198,6 +204,9 @@ export interface Database {
           payment_method?: string
           account_id?: string | null
           is_paid?: boolean
+          subtotal?: number
+          discount_amount?: number
+          store_credit_used?: number
           total?: number
           status?: string
           note?: string | null
