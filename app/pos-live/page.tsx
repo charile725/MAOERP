@@ -417,7 +417,41 @@ export default function POSPage() {
     const quantity = typeof quantityOrInfo === 'number' ? quantityOrInfo : 1
 
     setCart((prev) => {
-      // 每次加入都建立新項目，不再堆疊，方便獨立設定贈品/未出貨狀態
+      // 一番賞商品不堆疊，每個都是獨立項目
+      if (ichibanInfo) {
+        return [
+          ...prev,
+          {
+            product_id: product.id,
+            quantity,
+            price: product.price,
+            product,
+            ichiban_kuji_id: ichibanInfo.kuji_id,
+            ichiban_kuji_prize_id: ichibanInfo.prize_id,
+            isFreeGift: false,
+            isNotDelivered: false,
+          },
+        ]
+      }
+
+      // 一般商品：尋找狀態完全相同的項目（同商品 + 非贈品 + 已出貨）
+      // 新加入的商品預設是非贈品且已出貨
+      const existingIndex = prev.findIndex(
+        (item) =>
+          item.product_id === product.id &&
+          !item.ichiban_kuji_prize_id &&
+          item.isFreeGift === false &&
+          item.isNotDelivered === false
+      )
+
+      if (existingIndex !== -1) {
+        // 找到相同狀態的項目，增加數量
+        return prev.map((item, i) =>
+          i === existingIndex ? { ...item, quantity: item.quantity + quantity } : item
+        )
+      }
+
+      // 沒有相同狀態的項目，新增一筆
       return [
         ...prev,
         {
@@ -425,8 +459,6 @@ export default function POSPage() {
           quantity,
           price: product.price,
           product,
-          ichiban_kuji_id: ichibanInfo?.kuji_id,
-          ichiban_kuji_prize_id: ichibanInfo?.prize_id,
           isFreeGift: false,
           isNotDelivered: false,
         },
