@@ -1042,230 +1042,141 @@ export default function SalesPage() {
                             </div>
                           </div>
                         )}
-                        <table className="w-full">
+                        {/* 商品明細列表 - 直接顯示所有商品 */}
+                        <table className="w-full text-sm">
                           <thead className="border-b">
                             <tr>
-                              <th className="pb-2 text-left text-xs font-semibold text-gray-900 dark:text-gray-100">銷售單號</th>
-                              <th className="pb-2 text-left text-xs font-semibold text-gray-900 dark:text-gray-100">付款方式</th>
-                              <th className="pb-2 text-left text-xs font-semibold text-gray-900 dark:text-gray-100">銷售日期</th>
-                              <th className="pb-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">總金額</th>
-                              <th className="pb-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">毛利</th>
-                              <th className="pb-2 text-center text-xs font-semibold text-gray-900 dark:text-gray-100">付款</th>
-                              <th className="pb-2 text-center text-xs font-semibold text-gray-900 dark:text-gray-100">出貨</th>
+                              <th className="pb-2 text-left text-xs font-semibold text-gray-900 dark:text-gray-100 w-8">
+                                <input
+                                  type="checkbox"
+                                  checked={group.sales.every(sale =>
+                                    sale.sale_items?.every(item => {
+                                      const deliveredQty = item.delivered_quantity || 0
+                                      const storeCreditQty = item.store_credit_qty || 0
+                                      const pendingQty = item.quantity - deliveredQty - storeCreditQty
+                                      return pendingQty <= 0 || selectedItemIds.has(item.id)
+                                    })
+                                  )}
+                                  onChange={(e) => {
+                                    const newSelected = new Set(selectedItemIds)
+                                    group.sales.forEach(sale => {
+                                      sale.sale_items?.forEach(item => {
+                                        const deliveredQty = item.delivered_quantity || 0
+                                        const storeCreditQty = item.store_credit_qty || 0
+                                        const pendingQty = item.quantity - deliveredQty - storeCreditQty
+                                        if (pendingQty > 0) {
+                                          if (e.target.checked) {
+                                            newSelected.add(item.id)
+                                          } else {
+                                            newSelected.delete(item.id)
+                                          }
+                                        }
+                                      })
+                                    })
+                                    setSelectedItemIds(newSelected)
+                                  }}
+                                  className="w-4 h-4 rounded"
+                                />
+                              </th>
+                              <th className="pb-2 text-left text-xs font-semibold text-gray-900 dark:text-gray-100">單號</th>
+                              <th className="pb-2 text-left text-xs font-semibold text-gray-900 dark:text-gray-100">商品名稱</th>
+                              <th className="pb-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">數量</th>
+                              <th className="pb-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">已出貨</th>
+                              <th className="pb-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">單價</th>
+                              <th className="pb-2 text-center text-xs font-semibold text-gray-900 dark:text-gray-100">狀態</th>
                               <th className="pb-2 text-center text-xs font-semibold text-gray-900 dark:text-gray-100">操作</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y">
-                            {group.sales.map((sale) => (
-                              <React.Fragment key={sale.id}>
-                                <tr className="hover:bg-white dark:hover:bg-gray-800">
-                                  <td className="py-2 text-sm text-gray-900 dark:text-gray-100">
-                                    <div className="flex items-center gap-2 cursor-pointer" onClick={() => toggleSale(sale.id)}>
-                                      <span className="text-blue-600">
-                                        {expandedSales.has(sale.id) ? '▼' : '▶'}
-                                      </span>
-                                      {sale.sale_no}
-                                      {sale.note && sale.note.trim() !== '' && (
-                                        <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded" title={sale.note}>
-                                          備註
-                                        </span>
-                                      )}
-                                    </div>
-                                  </td>
-                                  <td className="py-2 text-sm text-gray-900 dark:text-gray-100">
-                                    {formatPaymentMethod(sale.payment_method)}
-                                  </td>
-                                  <td className="py-2 text-sm text-gray-900 dark:text-gray-100">
-                                    {formatDateTime(sale.created_at)}
-                                  </td>
-                                  <td className="py-2 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">
-                                    {formatCurrency(sale.total)}
-                                  </td>
-                                  <td className={`py-2 text-right text-sm font-semibold ${(sale.profit || 0) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                                    {(sale.profit || 0) >= 0 ? '+' : ''}{formatCurrency(sale.profit || 0)}
-                                  </td>
-                                  <td className="py-2 text-center text-sm">
-                                    <span
-                                      className={`inline-flex items-center gap-1 text-xs ${sale.status === 'store_credit'
-                                        ? 'text-purple-600 dark:text-purple-400'
-                                        : sale.is_paid
-                                          ? 'text-green-600 dark:text-green-400'
-                                          : 'text-gray-500 dark:text-gray-400'
-                                        }`}
-                                    >
-                                      {sale.status === 'store_credit' ? '💰 轉購物金' : sale.is_paid ? '✓ 已收' : '○ 未收'}
-                                    </span>
-                                  </td>
-                                  <td className="py-2 text-center text-sm">
-                                    {(() => {
-                                      const label = getFulfillmentLabel(sale)
-                                      return (
-                                        <span className={`inline-flex items-center gap-1 text-xs ${label.className}`}>
-                                          {label.text}
-                                        </span>
-                                      )
-                                    })()}
-                                  </td>
-                                  <td className="py-2 text-center text-sm" onClick={(e) => e.stopPropagation()}>
-                                    <PortalDropdown
-                                      isOpen={openDropdownId === sale.id}
-                                      onClose={() => setOpenDropdownId(null)}
-                                      trigger={
-                                        <button
-                                          onClick={() => setOpenDropdownId(openDropdownId === sale.id ? null : sale.id)}
-                                          className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-lg font-bold"
-                                          title="更多操作"
-                                        >
-                                          ⋯
-                                        </button>
-                                      }
-                                    >
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          setOpenDropdownId(null)
-                                          openCorrectionModal(sale)
-                                        }}
-                                        className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-t-lg"
-                                      >
-                                        ✏️ 更正
-                                      </button>
-                                      {sale.customer_code && (
-                                        <button
-                                          onClick={(e) => {
-                                            e.stopPropagation()
-                                            setOpenDropdownId(null)
-                                            openStoreCreditModal(sale)
+                          <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                            {group.sales.flatMap((sale) =>
+                              (sale.sale_items || []).map((item) => {
+                                const deliveredQty = item.delivered_quantity || 0
+                                const storeCreditQty = item.store_credit_qty || 0
+                                const pendingQty = item.quantity - deliveredQty - storeCreditQty
+                                const isFullyResolved = pendingQty <= 0
+
+                                return (
+                                  <tr key={item.id} className={`hover:bg-white dark:hover:bg-gray-800 ${isFullyResolved ? 'opacity-50' : ''}`}>
+                                    <td className="py-2">
+                                      {!isFullyResolved && (
+                                        <input
+                                          type="checkbox"
+                                          checked={selectedItemIds.has(item.id)}
+                                          onChange={(e) => {
+                                            const newSelected = new Set(selectedItemIds)
+                                            if (e.target.checked) {
+                                              newSelected.add(item.id)
+                                            } else {
+                                              newSelected.delete(item.id)
+                                            }
+                                            setSelectedItemIds(newSelected)
                                           }}
-                                          className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                                        >
-                                          💰 轉購物金
-                                        </button>
+                                          className="w-4 h-4 rounded"
+                                        />
                                       )}
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          setOpenDropdownId(null)
-                                          if (confirm(`確定要作廢銷售單 ${sale.sale_no} 嗎？\n\n此操作將會回補庫存，且無法復原。`)) {
-                                            handleDelete(sale.id, sale.sale_no)
-                                          }
-                                        }}
-                                        disabled={deleting === sale.id}
-                                        className="w-full px-4 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-b-lg disabled:opacity-50"
-                                      >
-                                        {deleting === sale.id ? '處理中...' : '🗑️ 刪除'}
-                                      </button>
-                                    </PortalDropdown>
-                                  </td>
-                                </tr>
-                                {expandedSales.has(sale.id) && sale.sale_items && (
-                                  <tr key={`${sale.id}-items`}>
-                                    <td colSpan={7} className="bg-white dark:bg-gray-800 py-2 px-4">
-                                      {/* 備註顯示 */}
-                                      {sale.note && sale.note.trim() !== '' && (
-                                        <div className="mb-3 p-2 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg">
-                                          <div className="text-xs font-medium text-blue-800 dark:text-blue-200">
-                                            📝 備註：{sale.note}
-                                          </div>
-                                        </div>
+                                    </td>
+                                    <td className="py-2 text-xs text-gray-500 dark:text-gray-400">
+                                      {sale.sale_no}
+                                    </td>
+                                    <td className="py-2 text-gray-900 dark:text-gray-100">
+                                      {item.snapshot_name}
+                                    </td>
+                                    <td className="py-2 text-right text-gray-900 dark:text-gray-100">
+                                      {item.quantity} {item.products.unit}
+                                    </td>
+                                    <td className="py-2 text-right">
+                                      <span className={`font-medium ${
+                                        isFullyResolved
+                                          ? 'text-green-600 dark:text-green-400'
+                                          : deliveredQty > 0
+                                            ? 'text-yellow-600 dark:text-yellow-400'
+                                            : 'text-gray-600 dark:text-gray-400'
+                                      }`}>
+                                        {deliveredQty}/{item.quantity}
+                                      </span>
+                                    </td>
+                                    <td className="py-2 text-right text-gray-700 dark:text-gray-300">
+                                      {formatCurrency(item.price)}
+                                    </td>
+                                    <td className="py-2 text-center">
+                                      {storeCreditQty > 0 ? (
+                                        <span className="text-xs text-purple-600 dark:text-purple-400">
+                                          💰 {storeCreditQty}轉購物金
+                                        </span>
+                                      ) : isFullyResolved ? (
+                                        <span className="text-xs text-green-600 dark:text-green-400">✓ 已出貨</span>
+                                      ) : deliveredQty > 0 ? (
+                                        <span className="text-xs text-yellow-600 dark:text-yellow-400">⚡ 部分出貨</span>
+                                      ) : (
+                                        <span className="text-xs text-gray-500 dark:text-gray-400">• 待處理</span>
                                       )}
-                                      <div className="flex items-center justify-between mb-2">
-                                        <div className="text-xs font-semibold text-gray-700 dark:text-gray-300">商品明細</div>
+                                    </td>
+                                    <td className="py-2 text-center">
+                                      <div className="flex items-center justify-center gap-1">
+                                        {!isFullyResolved && (
+                                          <button
+                                            onClick={() => handleDeliverItem(item)}
+                                            disabled={delivering === item.id}
+                                            className="rounded bg-blue-600 px-2 py-0.5 text-xs text-white hover:bg-blue-700 disabled:bg-gray-400"
+                                          >
+                                            {delivering === item.id ? '...' : '出貨'}
+                                          </button>
+                                        )}
+                                        {sale.customer_code && item.price === 0 && !isFullyResolved && (
+                                          <button
+                                            onClick={() => handleItemToStoreCredit(item, sale)}
+                                            disabled={convertingItemId === item.id}
+                                            className="rounded px-2 py-0.5 text-xs text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30 disabled:opacity-50"
+                                          >
+                                            {convertingItemId === item.id ? '...' : '💰'}
+                                          </button>
+                                        )}
                                       </div>
-                                      <table className="w-full text-xs">
-                                        <thead className="border-b">
-                                          <tr>
-                                            <th className="pb-1 text-left text-gray-600 dark:text-gray-400">品號</th>
-                                            <th className="pb-1 text-left text-gray-600 dark:text-gray-400">商品名稱</th>
-                                            <th className="pb-1 text-right text-gray-600 dark:text-gray-400">訂單數量</th>
-                                            <th className="pb-1 text-right text-gray-600 dark:text-gray-400">已出貨</th>
-                                            <th className="pb-1 text-right text-gray-600 dark:text-gray-400">單價</th>
-                                            <th className="pb-1 text-right text-gray-600 dark:text-gray-400">小計</th>
-                                            <th className="pb-1 text-center text-gray-600 dark:text-gray-400">操作</th>
-                                          </tr>
-                                        </thead>
-                                        <tbody>
-                                          {sale.sale_items.map((item) => {
-                                            const deliveredQty = item.delivered_quantity || 0
-                                            const remainingQty = item.quantity - deliveredQty
-                                            return (
-                                              <tr key={item.id}>
-                                                <td className="py-1 text-gray-700 dark:text-gray-300">{item.products.item_code}</td>
-                                                <td className="py-1 text-gray-700 dark:text-gray-300">{item.snapshot_name}</td>
-                                                <td className="py-1 text-right text-gray-700 dark:text-gray-300">
-                                                  {item.quantity} {item.products.unit}
-                                                </td>
-                                                <td className="py-1 text-right">
-                                                  <span
-                                                    className={`font-medium ${item.is_delivered
-                                                      ? 'text-green-600 dark:text-green-400'
-                                                      : deliveredQty > 0
-                                                        ? 'text-yellow-600 dark:text-yellow-400'
-                                                        : 'text-gray-600 dark:text-gray-400'
-                                                      }`}
-                                                  >
-                                                    {deliveredQty} / {item.quantity}
-                                                  </span>
-                                                </td>
-                                                <td className="py-1 text-right text-gray-700 dark:text-gray-300">
-                                                  {formatCurrency(item.price)}
-                                                </td>
-                                                <td className="py-1 text-right text-gray-700 dark:text-gray-300">
-                                                  {formatCurrency(item.price * item.quantity)}
-                                                </td>
-                                                <td className="py-1 text-center">
-                                                  <div className="flex items-center justify-center gap-1">
-                                                    {!item.is_delivered && (
-                                                      <button
-                                                        onClick={() => handleDeliverItem(item)}
-                                                        disabled={delivering === item.id}
-                                                        className="rounded bg-blue-600 px-2 py-0.5 text-xs text-white hover:bg-blue-700 disabled:bg-gray-400"
-                                                      >
-                                                        {delivering === item.id ? '處理中...' : '出貨'}
-                                                      </button>
-                                                    )}
-                                                    {sale.customer_code && item.price === 0 && (() => {
-                                                      const alreadyConverted = item.store_credit_qty || 0
-                                                      const isFullyConverted = alreadyConverted >= item.quantity
-                                                      const isPartiallyConverted = alreadyConverted > 0 && !isFullyConverted
-
-                                                      if (isFullyConverted) {
-                                                        return (
-                                                          <span className="rounded bg-green-100 dark:bg-green-900/30 px-2 py-0.5 text-xs text-green-600 dark:text-green-400">
-                                                            已轉購物金
-                                                          </span>
-                                                        )
-                                                      }
-
-                                                      return (
-                                                        <>
-                                                          {isPartiallyConverted && (
-                                                            <span className="text-xs text-amber-600 dark:text-amber-400 mr-1">
-                                                              已轉 {alreadyConverted}/{item.quantity}
-                                                            </span>
-                                                          )}
-                                                          <button
-                                                            onClick={() => handleItemToStoreCredit(item, sale)}
-                                                            disabled={convertingItemId === item.id}
-                                                            className="rounded px-2 py-0.5 text-xs text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30 disabled:opacity-50"
-                                                          >
-                                                            {convertingItemId === item.id ? '處理中...' : '💰'}
-                                                          </button>
-                                                        </>
-                                                      )
-                                                    })()}
-                                                  </div>
-                                                </td>
-                                              </tr>
-                                            )
-                                          })}
-                                        </tbody>
-                                      </table>
                                     </td>
                                   </tr>
-                                )}
-                              </React.Fragment>
-                            ))}
+                                )
+                              })
+                            )}
                           </tbody>
                         </table>
                       </div>
