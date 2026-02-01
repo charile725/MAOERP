@@ -43,6 +43,15 @@ type VendorGroup = {
   unpaid_count: number
 }
 
+type PaymentAccount = {
+  id: string
+  account_name: string
+  display_name: string
+  payment_method_code: string
+  balance: number
+  sort_order: number
+}
+
 export default function APPageV2() {
   const router = useRouter()
   const [accessDenied, setAccessDenied] = useState(false)
@@ -52,7 +61,8 @@ export default function APPageV2() {
   const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set())
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [paymentAmount, setPaymentAmount] = useState('')
-  const [paymentMethod, setPaymentMethod] = useState('transfer_cathay')
+  const [paymentAccountId, setPaymentAccountId] = useState('')
+  const [paymentAccounts, setPaymentAccounts] = useState<PaymentAccount[]>([])
   const [processing, setProcessing] = useState(false)
   const [error, setError] = useState('')
   const [keyword, setKeyword] = useState('')
@@ -73,6 +83,27 @@ export default function APPageV2() {
         setTimeout(() => router.push('/'), 2000)
       })
   }, [router])
+
+  // 載入付款帳戶列表
+  const fetchPaymentAccounts = async () => {
+    try {
+      const res = await fetch('/api/accounts?active_only=true')
+      const data = await res.json()
+      if (data.ok) {
+        // 過濾出可用於付款的帳戶（排除 pending）
+        const accounts = (data.data as PaymentAccount[])
+          .filter(a => a.payment_method_code && a.payment_method_code !== 'pending')
+          .sort((a, b) => a.sort_order - b.sort_order)
+        setPaymentAccounts(accounts)
+        // 預設選擇第一個帳戶
+        if (accounts.length > 0 && !paymentAccountId) {
+          setPaymentAccountId(accounts[0].id)
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch payment accounts:', err)
+    }
+  }
 
   const fetchAccounts = async () => {
     setLoading(true)
@@ -122,6 +153,7 @@ export default function APPageV2() {
 
   useEffect(() => {
     fetchAccounts()
+    fetchPaymentAccounts()
   }, [])
 
   const handleSearch = (e: React.FormEvent) => {
@@ -205,6 +237,18 @@ export default function APPageV2() {
       return
     }
 
+    if (!paymentAccountId) {
+      setError('請選擇付款帳戶')
+      return
+    }
+
+    // 取得選擇的帳戶資訊
+    const selectedPaymentAccount = paymentAccounts.find(a => a.id === paymentAccountId)
+    if (!selectedPaymentAccount) {
+      setError('找不到選擇的付款帳戶')
+      return
+    }
+
     setProcessing(true)
     setError('')
 
@@ -234,7 +278,8 @@ export default function APPageV2() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           partner_code: currentVendor,
-          method: paymentMethod,
+          method: selectedPaymentAccount.payment_method_code,
+          account_id: paymentAccountId,
           amount,
           allocations
         })
@@ -243,12 +288,13 @@ export default function APPageV2() {
       const data = await res.json()
 
       if (data.ok) {
-        alert('付款成功！')
+        alert('付款成功！帳戶餘額已更新')
         setShowPaymentModal(false)
         setSelectedAccounts(new Set())
         setPaymentAmount('')
         setCurrentVendor(null)
         fetchAccounts()
+        fetchPaymentAccounts() // 重新載入帳戶餘額
       } else {
         setError(data.error || '付款失敗')
       }
@@ -546,23 +592,22 @@ export default function APPageV2() {
 
             <div className="mb-6">
               <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">
-                付款方式
+                付款帳戶 *
               </label>
               <select
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
+                value={paymentAccountId}
+                onChange={(e) => setPaymentAccountId(e.target.value)}
                 className="w-full rounded border border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-gray-100 dark:bg-gray-700"
               >
-                <option value="cash">現金</option>
-                <option value="card">刷卡</option>
-                <optgroup label="轉帳">
-                  <option value="transfer_cathay">轉帳 - 國泰</option>
-                  <option value="transfer_fubon">轉帳 - 富邦</option>
-                  <option value="transfer_esun">轉帳 - 玉山</option>
-                  <option value="transfer_union">轉帳 - 聯邦</option>
-                  <option value="transfer_linepay">轉帳 - LINE Pay</option>
-                </optgroup>
-                <option value="cod">貨到付款</option>
+                {paymentAccounts.length === 0 ? (
+                  <option value="">載入中...</option>
+                ) : (
+                  paymentAccounts.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.display_name || account.account_name} (餘額: {formatCurrency(account.balance)})
+                    </option>
+                  ))
+                )}
               </select>
             </div>
 
