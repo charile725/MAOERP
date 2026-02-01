@@ -141,6 +141,41 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // 檢查並更新進貨單的付款狀態
+    // 找出這次付款涉及的所有進貨單
+    const { data: paidAccounts } = await (supabaseServer
+      .from('partner_accounts') as any)
+      .select('ref_id, ref_type, status')
+      .in('id', draft.allocations.map(a => a.partner_account_id))
+
+    if (paidAccounts) {
+      // 找出所有相關的進貨單 ID
+      const purchaseIds = [...new Set(
+        paidAccounts
+          .filter((a: any) => a.ref_type === 'purchase')
+          .map((a: any) => a.ref_id)
+      )]
+
+      // 對每個進貨單，檢查是否所有 AP 都已付清
+      for (const purchaseId of purchaseIds) {
+        const { data: remainingAP } = await (supabaseServer
+          .from('partner_accounts') as any)
+          .select('id, status')
+          .eq('ref_type', 'purchase')
+          .eq('ref_id', purchaseId)
+          .neq('status', 'paid')
+
+        // 如果沒有未付的 AP，更新進貨單為已付款
+        if (!remainingAP || remainingAP.length === 0) {
+          await (supabaseServer
+            .from('purchases') as any)
+            .update({ is_paid: true })
+            .eq('id', purchaseId)
+          console.log(`[Payment] Updated purchase ${purchaseId} to is_paid=true`)
+        }
+      }
+    }
+
     return NextResponse.json({ ok: true, data: settlement }, { status: 201 })
   } catch (error) {
     return NextResponse.json(

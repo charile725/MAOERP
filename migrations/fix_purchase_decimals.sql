@@ -46,6 +46,26 @@ WHERE direction = 'AP'
   AND amount != ROUND(amount);
 
 -- ============================================================
+-- 步驟 4：修復進貨單的付款狀態
+-- ============================================================
+
+-- 找出所有 AP 都已付清但 is_paid=false 的進貨單，更新為 is_paid=true
+UPDATE public.purchases p
+SET is_paid = true
+WHERE is_paid = false
+  AND NOT EXISTS (
+    SELECT 1 FROM public.partner_accounts pa
+    WHERE pa.ref_type = 'purchase'
+      AND pa.ref_id = p.id
+      AND pa.status != 'paid'
+  )
+  AND EXISTS (
+    SELECT 1 FROM public.partner_accounts pa
+    WHERE pa.ref_type = 'purchase'
+      AND pa.ref_id = p.id
+  );
+
+-- ============================================================
 -- 驗證結果
 -- ============================================================
 
