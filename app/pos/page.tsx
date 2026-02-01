@@ -1159,6 +1159,7 @@ export default function POSPage() {
           setBusinessDate(date)
           await fetchClosingStats(date)
         }}
+        fetchCustomers={fetchCustomers}
       />
     )
   }
