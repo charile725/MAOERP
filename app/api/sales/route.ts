@@ -20,6 +20,11 @@ export async function GET(request: NextRequest) {
     const keyword = searchParams.get('keyword')
     const productKeyword = searchParams.get('product_keyword')
 
+    // 分頁參數
+    const page = parseInt(searchParams.get('page') || '1')
+    const limit = parseInt(searchParams.get('limit') || '50')
+    const offset = (page - 1) * limit
+
     let query = (supabaseServer
       .from('sales') as any)
       .select(`
@@ -41,7 +46,7 @@ export async function GET(request: NextRequest) {
             unit
           )
         )
-      `)
+      `, { count: 'exact' })
       .order('created_at', { ascending: false })
 
     if (businessDate) {
@@ -91,7 +96,13 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const { data, error } = await query
+    // 只有在沒有 productKeyword 時才使用服務器端分頁
+    // 因為 productKeyword 需要在後端過濾 sale_items
+    if (!productKeyword) {
+      query = query.range(offset, offset + limit - 1)
+    }
+
+    const { data, error, count } = await query
 
     if (error) {
       console.error('[Sales API] Query error:', {
@@ -192,7 +203,19 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    return NextResponse.json({ ok: true, data: salesWithSummary })
+    // 當有 productKeyword 時，使用過濾後的數據長度作為 total
+    const actualTotal = productKeyword ? (salesWithSummary?.length || 0) : (count || salesWithSummary?.length || 0)
+
+    return NextResponse.json({
+      ok: true,
+      data: salesWithSummary,
+      pagination: {
+        page: productKeyword ? 1 : page, // productKeyword 時不分頁，固定為第一頁
+        limit,
+        total: actualTotal,
+        totalPages: productKeyword ? 1 : (count ? Math.ceil(count / limit) : 1)
+      }
+    })
   } catch (error) {
     return NextResponse.json(
       { ok: false, error: 'Internal server error' },
