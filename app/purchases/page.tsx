@@ -8,6 +8,7 @@ type PurchaseItem = {
   id: string
   quantity: number
   cost: number
+  subtotal?: number  // 小計（優先使用，避免小數點問題）
   product_id: string
   received_quantity: number
   is_received: boolean
@@ -63,6 +64,7 @@ type FlattenedItem = {
   received_quantity: number
   is_received: boolean
   cost: number
+  subtotal?: number  // 小計（優先使用，避免小數點問題）
 }
 
 type VendorItemGroup = {
@@ -192,9 +194,10 @@ export default function PurchasesPage() {
             quantity: item.quantity,
             received_quantity: item.received_quantity || 0,
             is_received: item.is_received,
-            cost: item.cost
+            cost: item.cost,
+            subtotal: item.subtotal
           })
-          groups[key].total_amount += item.quantity * item.cost
+          groups[key].total_amount += item.subtotal || Math.round(item.quantity * item.cost)
           groups[key].total_quantity += item.quantity
         })
       }
@@ -547,7 +550,7 @@ export default function PurchasesPage() {
                                           {formatCurrency(item.cost)}
                                         </td>
                                         <td className="py-3 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">
-                                          {formatCurrency(item.quantity * item.cost)}
+                                          {formatCurrency(item.subtotal || Math.round(item.quantity * item.cost))}
                                         </td>
                                       </>
                                     )}
@@ -792,7 +795,7 @@ export default function PurchasesPage() {
                                                   {formatCurrency(item.cost)}
                                                 </td>
                                                 <td className="py-2 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">
-                                                  {formatCurrency(item.quantity * item.cost)}
+                                                  {formatCurrency(item.subtotal || Math.round(item.quantity * item.cost))}
                                                 </td>
                                               </>
                                             )}

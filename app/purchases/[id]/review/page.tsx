@@ -58,7 +58,7 @@ export default function ReviewPurchasePage() {
           product: item.products, // Supabase returns 'products' (plural)
           quantity: item.quantity,
           cost: item.cost,
-          subtotal: item.subtotal || (item.quantity * item.cost),
+          subtotal: item.subtotal || Math.round(item.quantity * item.cost),
         }))
         setItems(mappedItems)
       } else {

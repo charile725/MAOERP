@@ -274,7 +274,7 @@ export default function NewPurchasePage() {
 
   // 取得品項小計（優先使用用戶輸入的 subtotal）
   const getItemSubtotal = (item: PurchaseItem) => {
-    return item.subtotal !== undefined ? item.subtotal : item.quantity * item.cost
+    return item.subtotal !== undefined ? item.subtotal : Math.round(item.quantity * item.cost)
   }
 
   const total = items.reduce((sum, item) => sum + getItemSubtotal(item), 0)

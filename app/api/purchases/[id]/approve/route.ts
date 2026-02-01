@@ -15,6 +15,7 @@ const approvePurchaseSchema = z.object({
       product_id: z.string().uuid(),
       quantity: z.number().int().positive('Quantity must be positive'),
       cost: z.number().min(0, 'Cost must be positive'),
+      subtotal: z.number().int().optional(), // Optional subtotal (takes priority over quantity * cost)
     })
   ).min(1, 'At least one item is required'),
 })
@@ -122,8 +123,8 @@ export async function POST(
       )
     }
 
-    // 4. Calculate total
-    const total = items.reduce((sum, item) => sum + (item.quantity * item.cost), 0)
+    // 4. Calculate total（使用 subtotal 小計，避免小數點問題）
+    const total = items.reduce((sum, item) => sum + (item.subtotal || Math.round(item.quantity * item.cost)), 0)
 
     // 取得進貨單號
     const { data: purchaseData } = await (supabaseServer
@@ -163,7 +164,7 @@ export async function POST(
       ref_type: 'purchase',
       ref_id: id,
       purchase_item_id: item.id,
-      amount: item.subtotal || (item.quantity * item.cost),
+      amount: item.subtotal || Math.round(item.quantity * item.cost),
       received_paid: 0,
       due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days from now
       status: 'unpaid',
