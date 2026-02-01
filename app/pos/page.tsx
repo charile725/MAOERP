@@ -169,6 +169,14 @@ export default function POSPage() {
   const [quantityInput, setQuantityInput] = useState('1')
   const quantityInputRef = useRef<HTMLInputElement>(null)
 
+  // Quick add product
+  const [showQuickAddProduct, setShowQuickAddProduct] = useState(false)
+  const [quickProductName, setQuickProductName] = useState('')
+  const [quickProductBarcode, setQuickProductBarcode] = useState('')
+  const [quickProductPrice, setQuickProductPrice] = useState('')
+  const [addingProduct, setAddingProduct] = useState(false)
+  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null)
+
   // Business day closing (日結)
   const [businessDate, setBusinessDateState] = useState<string>(() => {
     const now = new Date()
@@ -1079,6 +1087,88 @@ export default function POSPage() {
     }
   }
 
+  // Quick add product
+  const openQuickAddProduct = () => {
+    setQuickProductName(searchQuery)
+    setQuickProductBarcode('')
+    setQuickProductPrice('')
+    setDuplicateWarning(null)
+    setShowQuickAddProduct(true)
+  }
+
+  const checkDuplicateProductName = (name: string) => {
+    if (!name.trim()) {
+      setDuplicateWarning(null)
+      return
+    }
+    const duplicate = products.find(p =>
+      p.name.toLowerCase() === name.trim().toLowerCase()
+    )
+    if (duplicate) {
+      setDuplicateWarning(`已存在同名商品「${duplicate.name}」(${duplicate.item_code})`)
+    } else {
+      setDuplicateWarning(null)
+    }
+  }
+
+  const handleQuickAddProduct = async () => {
+    if (!quickProductName.trim()) {
+      alert('請輸入商品名稱')
+      return
+    }
+
+    // 再次確認重複
+    const duplicate = products.find(p =>
+      p.name.toLowerCase() === quickProductName.trim().toLowerCase()
+    )
+    if (duplicate) {
+      if (!confirm(`已存在同名商品「${duplicate.name}」(${duplicate.item_code})，確定要繼續建立嗎？`)) {
+        return
+      }
+    }
+
+    setAddingProduct(true)
+
+    try {
+      const res = await fetch('/api/products/quick', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: quickProductName.trim(),
+          barcode: quickProductBarcode.trim() || null,
+          price: parseFloat(quickProductPrice) || 0,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (data.ok) {
+        const newProduct: Product = data.data
+
+        // 加入購物車
+        addToCart(newProduct, 1)
+
+        // 重新載入商品列表
+        fetchProducts()
+
+        // 清空並關閉
+        setQuickProductName('')
+        setQuickProductBarcode('')
+        setQuickProductPrice('')
+        setShowQuickAddProduct(false)
+        setSearchQuery('')
+
+        alert(`商品「${newProduct.name}」已建立並加入購物車`)
+      } else {
+        alert(`建立失敗：${data.error}`)
+      }
+    } catch (err) {
+      alert('建立失敗')
+    } finally {
+      setAddingProduct(false)
+    }
+  }
+
   // Toggle pin/unpin product
   const togglePinProduct = (productId: string) => {
     setPinnedProductIds(prev => {
@@ -1317,6 +1407,19 @@ export default function POSPage() {
                         </button>
                       )
                     })}
+
+                    {/* 找不到商品時顯示建立選項 */}
+                    {searchQuery.trim() && filteredProducts.length === 0 && (
+                      <div className="col-span-3 flex flex-col items-center justify-center py-8">
+                        <div className="text-slate-400 mb-3">找不到「{searchQuery}」</div>
+                        <button
+                          onClick={openQuickAddProduct}
+                          className="bg-green-600 hover:bg-green-700 text-white font-bold px-6 py-3 rounded-lg transition-all"
+                        >
+                          + 快速建立商品
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </>
@@ -2317,6 +2420,86 @@ export default function POSPage() {
                   </button>
                   <button
                     onClick={() => setShowQuickAddCustomer(false)}
+                    className="flex-1 bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500 text-black dark:text-gray-100 font-bold py-3 rounded-lg transition-all"
+                  >
+                    取消
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Quick Add Product Modal */}
+        {showQuickAddProduct && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center" onClick={() => setShowQuickAddProduct(false)}>
+            <div className="bg-white dark:bg-gray-800 w-[500px] rounded-lg shadow-xl" onClick={(e) => e.stopPropagation()}>
+              <div className="bg-indigo-600 text-white px-6 py-4 rounded-t-lg flex items-center justify-between">
+                <h2 className="text-xl font-bold">快速建立商品</h2>
+                <button onClick={() => setShowQuickAddProduct(false)} className="text-2xl hover:text-gray-200">×</button>
+              </div>
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block font-bold mb-2 text-black dark:text-gray-100">
+                    商品名稱 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={quickProductName}
+                    onChange={(e) => {
+                      setQuickProductName(e.target.value)
+                      checkDuplicateProductName(e.target.value)
+                    }}
+                    placeholder="請輸入商品名稱"
+                    className="w-full border-2 border-gray-400 dark:border-gray-600 rounded-lg px-4 py-3 text-lg text-black dark:text-gray-100 bg-white dark:bg-gray-700 focus:border-indigo-500 focus:outline-none"
+                    autoFocus
+                  />
+                  {duplicateWarning && (
+                    <div className="mt-2 text-amber-600 dark:text-amber-400 text-sm font-medium">
+                      ⚠️ {duplicateWarning}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="block font-bold mb-2 text-black dark:text-gray-100">
+                    條碼（選填）
+                  </label>
+                  <input
+                    type="text"
+                    value={quickProductBarcode}
+                    onChange={(e) => setQuickProductBarcode(e.target.value)}
+                    placeholder="請輸入條碼"
+                    className="w-full border-2 border-gray-400 dark:border-gray-600 rounded-lg px-4 py-3 text-lg text-black dark:text-gray-100 bg-white dark:bg-gray-700 focus:border-indigo-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold mb-2 text-black dark:text-gray-100">
+                    售價（選填）
+                  </label>
+                  <input
+                    type="number"
+                    value={quickProductPrice}
+                    onChange={(e) => setQuickProductPrice(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !addingProduct) {
+                        handleQuickAddProduct()
+                      }
+                    }}
+                    placeholder="0"
+                    min="0"
+                    className="w-full border-2 border-gray-400 dark:border-gray-600 rounded-lg px-4 py-3 text-lg text-black dark:text-gray-100 bg-white dark:bg-gray-700 focus:border-indigo-500 focus:outline-none"
+                  />
+                </div>
+                <div className="flex gap-3 pt-4">
+                  <button
+                    onClick={handleQuickAddProduct}
+                    disabled={addingProduct}
+                    className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white font-bold py-3 rounded-lg transition-all"
+                  >
+                    {addingProduct ? '建立中...' : '建立並加入購物車'}
+                  </button>
+                  <button
+                    onClick={() => setShowQuickAddProduct(false)}
                     className="flex-1 bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500 text-black dark:text-gray-100 font-bold py-3 rounded-lg transition-all"
                   >
                     取消

@@ -171,6 +171,14 @@ export default function MobilePOS({
     const [newCustomerPhone, setNewCustomerPhone] = useState('')
     const [addingCustomer, setAddingCustomer] = useState(false)
 
+    // 快速新增商品
+    const [showQuickAddProduct, setShowQuickAddProduct] = useState(false)
+    const [quickProductName, setQuickProductName] = useState('')
+    const [quickProductBarcode, setQuickProductBarcode] = useState('')
+    const [quickProductPrice, setQuickProductPrice] = useState('')
+    const [addingProduct, setAddingProduct] = useState(false)
+    const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null)
+
     // 搜尋結果 - 不限制數量，讓使用者可以捲動查看所有結果
     const searchResults = searchQuery.trim()
         ? products.filter(p =>
@@ -288,6 +296,89 @@ export default function MobilePOS({
         }
     }
 
+    // 檢查商品名稱是否重複
+    const checkDuplicateProductName = async (name: string): Promise<string | null> => {
+        try {
+            const res = await fetch(`/api/products?search=${encodeURIComponent(name)}&limit=5`)
+            const data = await res.json()
+            if (data.ok && data.data.length > 0) {
+                const exactMatch = data.data.find((p: Product) => p.product_name === name)
+                if (exactMatch) {
+                    return `已存在相同名稱的商品「${exactMatch.product_name}」(編號: ${exactMatch.product_code})`
+                }
+                const similarProducts = data.data.slice(0, 3)
+                if (similarProducts.length > 0) {
+                    return `找到類似商品: ${similarProducts.map((p: Product) => p.product_name).join('、')}`
+                }
+            }
+        } catch (e) {
+            console.error('檢查重複商品名稱失敗', e)
+        }
+        return null
+    }
+
+    // 快速新增商品
+    const handleQuickAddProduct = async () => {
+        if (!quickProductName.trim()) {
+            alert('請輸入商品名稱')
+            return
+        }
+
+        // 檢查是否有重複名稱
+        const duplicate = await checkDuplicateProductName(quickProductName.trim())
+        if (duplicate && !duplicateWarning) {
+            setDuplicateWarning(duplicate)
+            return
+        }
+
+        setAddingProduct(true)
+
+        try {
+            const res = await fetch('/api/products/quick', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: quickProductName.trim(),
+                    barcode: quickProductBarcode.trim() || undefined,
+                    price: quickProductPrice.trim() ? parseInt(quickProductPrice.trim()) : undefined,
+                }),
+            })
+
+            const data = await res.json()
+
+            if (data.ok) {
+                const newProduct: Product = data.product
+                addToCart(newProduct)
+                onRefreshProducts()
+
+                setQuickProductName('')
+                setQuickProductBarcode('')
+                setQuickProductPrice('')
+                setShowQuickAddProduct(false)
+                setDuplicateWarning(null)
+                setSearchQuery('')
+
+                alert(`商品「${newProduct.product_name}」已建立並加入購物車`)
+            } else {
+                alert(`建立失敗：${data.error}`)
+            }
+        } catch (err) {
+            alert('建立失敗')
+        } finally {
+            setAddingProduct(false)
+        }
+    }
+
+    // 開啟快速新增商品 Modal
+    const openQuickAddProduct = (prefillBarcode?: string) => {
+        setQuickProductName('')
+        setQuickProductBarcode(prefillBarcode || searchQuery || '')
+        setQuickProductPrice('')
+        setDuplicateWarning(null)
+        setShowQuickAddProduct(true)
+        setSearchQuery('')
+    }
+
     // 從帳戶動態生成付款方式選項
     const paymentMethods = paymentAccounts.map(acc => ({
         key: acc.payment_method_code || '',
@@ -336,6 +427,18 @@ export default function MobilePOS({
                                         </div>
                                     </button>
                                 ))}
+                            </div>
+                        )}
+                        {/* 找不到商品時顯示建立選項 */}
+                        {searchQuery.trim() && searchResults.length === 0 && (
+                            <div className="absolute z-50 w-full mt-1 bg-slate-800 border border-slate-600 rounded-lg shadow-xl p-4">
+                                <div className="text-slate-400 text-center mb-3">找不到「{searchQuery}」</div>
+                                <button
+                                    onClick={() => openQuickAddProduct()}
+                                    className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg transition-all"
+                                >
+                                    + 快速建立商品
+                                </button>
                             </div>
                         )}
                     </div>
@@ -683,6 +786,83 @@ export default function MobilePOS({
                                 </button>
                                 <button
                                     onClick={() => setShowQuickAddCustomer(false)}
+                                    className="flex-1 bg-slate-600 hover:bg-slate-500 text-white font-bold py-3 rounded-lg transition-all"
+                                >
+                                    取消
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* 快速新增商品 Modal */}
+            {showQuickAddProduct && (
+                <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+                    <div className="w-full max-w-md bg-slate-800 rounded-xl">
+                        <div className="bg-blue-600 text-white px-4 py-3 rounded-t-xl flex items-center justify-between">
+                            <h3 className="text-lg font-bold">快速建立商品</h3>
+                            <button onClick={() => { setShowQuickAddProduct(false); setDuplicateWarning(null) }} className="text-2xl hover:text-gray-200">×</button>
+                        </div>
+                        <div className="p-4 space-y-4">
+                            {duplicateWarning && (
+                                <div className="bg-amber-500/20 border border-amber-500 text-amber-300 rounded-lg p-3 text-sm">
+                                    ⚠️ {duplicateWarning}
+                                    <div className="mt-2 text-xs">再次點擊「建立商品」確認建立</div>
+                                </div>
+                            )}
+                            <div>
+                                <label className="block font-medium mb-2 text-white">
+                                    商品名稱 <span className="text-red-400">*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    value={quickProductName}
+                                    onChange={(e) => { setQuickProductName(e.target.value); setDuplicateWarning(null) }}
+                                    placeholder="請輸入商品名稱"
+                                    className="w-full rounded-lg px-4 py-3 text-white bg-slate-700 border border-slate-600 focus:border-blue-500 focus:outline-none"
+                                    autoFocus
+                                />
+                            </div>
+                            <div>
+                                <label className="block font-medium mb-2 text-white">
+                                    條碼 <span className="text-slate-500">(選填)</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    value={quickProductBarcode}
+                                    onChange={(e) => setQuickProductBarcode(e.target.value)}
+                                    placeholder="請輸入條碼"
+                                    className="w-full rounded-lg px-4 py-3 text-white bg-slate-700 border border-slate-600 focus:border-blue-500 focus:outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block font-medium mb-2 text-white">
+                                    售價 <span className="text-slate-500">(選填，預設 0)</span>
+                                </label>
+                                <input
+                                    type="number"
+                                    value={quickProductPrice}
+                                    onChange={(e) => setQuickProductPrice(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && !addingProduct) {
+                                            handleQuickAddProduct()
+                                        }
+                                    }}
+                                    placeholder="請輸入售價"
+                                    className="w-full rounded-lg px-4 py-3 text-white bg-slate-700 border border-slate-600 focus:border-blue-500 focus:outline-none"
+                                />
+                            </div>
+                            <div className="flex gap-3 pt-2">
+                                <button
+                                    onClick={handleQuickAddProduct}
+                                    disabled={addingProduct}
+                                    className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-500 text-white font-bold py-3 rounded-lg transition-all"
+                                >
+                                    {addingProduct ? '建立中...' : '建立商品'}
+                                </button>
+                                <button
+                                    onClick={() => { setShowQuickAddProduct(false); setDuplicateWarning(null) }}
                                     className="flex-1 bg-slate-600 hover:bg-slate-500 text-white font-bold py-3 rounded-lg transition-all"
                                 >
                                     取消
