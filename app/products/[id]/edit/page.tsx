@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { formatDate } from '@/lib/utils'
 import type { Product } from '@/types'
 
@@ -20,7 +20,9 @@ type StockAdjustment = {
 export default function EditProductPage() {
   const router = useRouter()
   const params = useParams()
+  const searchParams = useSearchParams()
   const productId = params.id as string
+  const returnTo = searchParams.get('returnTo') // 來源頁面，完成後返回
 
   const [product, setProduct] = useState<Product | null>(null)
   const [loading, setLoading] = useState(true)
@@ -132,7 +134,12 @@ export default function EditProductPage() {
       console.log('Update result:', result)
 
       if (result.ok) {
-        router.push('/products')
+        // 根據來源頁面決定返回位置
+        if (returnTo) {
+          router.push(returnTo)
+        } else {
+          router.back()
+        }
         return
       } else {
         setError(result.error || '更新失敗')

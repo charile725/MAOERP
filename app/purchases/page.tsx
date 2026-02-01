@@ -511,7 +511,7 @@ export default function PurchasesPage() {
                                   <tr key={item.id} className="hover:bg-white dark:hover:bg-gray-800">
                                     <td className="py-3 text-sm text-gray-900 dark:text-gray-100">
                                       <Link
-                                        href={`/products/${item.product_id}/edit`}
+                                        href={`/products/${item.product_id}/edit?returnTo=/purchases`}
                                         className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:underline"
                                       >
                                         {item.item_code}
@@ -519,7 +519,7 @@ export default function PurchasesPage() {
                                     </td>
                                     <td className="py-3 text-sm text-gray-900 dark:text-gray-100">
                                       <Link
-                                        href={`/products/${item.product_id}/edit`}
+                                        href={`/products/${item.product_id}/edit?returnTo=/purchases`}
                                         className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:underline"
                                       >
                                         {item.product_name}
@@ -749,7 +749,7 @@ export default function PurchasesPage() {
                                           <tr key={item.id}>
                                             <td className="py-2 text-sm text-gray-900 dark:text-gray-100">
                                               <Link
-                                                href={`/products/${item.product_id}/edit`}
+                                                href={`/products/${item.product_id}/edit?returnTo=/purchases`}
                                                 className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:underline"
                                                 onClick={(e) => e.stopPropagation()}
                                               >
@@ -758,7 +758,7 @@ export default function PurchasesPage() {
                                             </td>
                                             <td className="py-2 text-sm text-gray-900 dark:text-gray-100">
                                               <Link
-                                                href={`/products/${item.product_id}/edit`}
+                                                href={`/products/${item.product_id}/edit?returnTo=/purchases`}
                                                 className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:underline"
                                                 onClick={(e) => e.stopPropagation()}
                                               >
