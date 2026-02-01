@@ -150,80 +150,64 @@ export default function DashboardPage() {
   const fetchDashboardData = async () => {
     setLoading(true)
     try {
-      let salesInRange: any[] = []
-      let expensesInRange: any[] = []
+      // 建立查詢參數
+      let salesUrl = ''
+      let expensesUrl = ''
 
-      // 根據報表模式使用不同的查詢方式
       if (reportMode === 'by_business_day') {
         if (!selectedClosingId || businessDayClosings.length === 0) {
-          // 沒有選擇或沒有日結記錄，顯示空數據
           setLoading(false)
           return
         }
 
-        // 按營業日查詢
         const selectedClosing = businessDayClosings.find(c => c.id === selectedClosingId)
         if (!selectedClosing) {
           setLoading(false)
           return
         }
 
-        // 找到上一個日結記錄（作為起始時間）
         const closingIndex = businessDayClosings.findIndex(c => c.id === selectedClosingId)
         const previousClosing = businessDayClosings[closingIndex + 1]
 
         const createdFrom = previousClosing ? previousClosing.closing_time : '1970-01-01T00:00:00Z'
         const createdTo = selectedClosing.closing_time
-
-        console.log('[營業日報表] 查詢範圍:', { createdFrom, createdTo, source: sourceFilter })
-
-        // 查詢該營業日期間的銷售（使用 created_at），確保 URL 編碼
         const sourceParam = sourceFilter !== 'all' ? `&source=${sourceFilter}` : ''
-        const encodedFrom = encodeURIComponent(createdFrom)
-        const encodedTo = encodeURIComponent(createdTo)
 
-        console.log('[營業日報表] 發起查詢:', {
-          url: `/api/sales?created_from=${encodedFrom}&created_to=${encodedTo}${sourceParam}`,
-          raw: { createdFrom, createdTo, source: sourceFilter }
-        })
-
-        const salesRes = await fetch(`/api/sales?created_from=${encodedFrom}&created_to=${encodedTo}${sourceParam}`)
-        const salesData = await salesRes.json()
-
-        if (!salesData.ok) {
-          console.error('[營業日報表] 查詢銷售失敗:', salesData.error)
-          alert(`查詢銷售失敗: ${salesData.error}`)
-          salesInRange = []
-        } else {
-          salesInRange = salesData.data || []
-          console.log('[營業日報表] 查詢到的銷售記錄:', salesInRange.length, '筆')
-        }
-
-        // 查詢該營業日期間的支出（使用 date）
-        const dateFrom = createdFrom.split('T')[0]
-        const dateTo = createdTo.split('T')[0]
-        const expensesRes = await fetch(`/api/expenses?date_from=${dateFrom}&date_to=${dateTo}`)
-        const expensesData = await expensesRes.json()
-        expensesInRange = expensesData.ok ? expensesData.data : []
+        salesUrl = `/api/sales?created_from=${encodeURIComponent(createdFrom)}&created_to=${encodeURIComponent(createdTo)}${sourceParam}`
+        expensesUrl = `/api/expenses?date_from=${createdFrom.split('T')[0]}&date_to=${createdTo.split('T')[0]}`
       } else {
-        // 按日期查詢（原有邏輯）
         const sourceParam = sourceFilter !== 'all' ? `&source=${sourceFilter}` : ''
-        const salesRes = await fetch(`/api/sales?date_from=${dateFrom}&date_to=${dateTo}${sourceParam}`)
-        const salesData = await salesRes.json()
-        salesInRange = salesData.ok ? salesData.data : []
-
-        // Fetch expenses within date range
-        const expensesRes = await fetch(`/api/expenses?date_from=${dateFrom}&date_to=${dateTo}`)
-        const expensesData = await expensesRes.json()
-        expensesInRange = expensesData.ok ? expensesData.data : []
+        salesUrl = `/api/sales?date_from=${dateFrom}&date_to=${dateTo}${sourceParam}`
+        expensesUrl = `/api/expenses?date_from=${dateFrom}&date_to=${dateTo}`
       }
+
+      // 平行呼叫所有 API
+      const [salesRes, expensesRes, dashboardRes, depRes] = await Promise.all([
+        fetch(salesUrl),
+        fetch(expensesUrl),
+        fetch('/api/finance/dashboard'),
+        fetch('/api/fixed-assets/summary')
+      ])
+
+      const [salesData, expensesData, dashboardData, depData] = await Promise.all([
+        salesRes.json(),
+        expensesRes.json(),
+        dashboardRes.json(),
+        depRes.json()
+      ])
+
+      const salesInRange = salesData.ok ? salesData.data : []
+      const expensesInRange = expensesData.ok ? expensesData.data : []
+      const extendedData = dashboardData.ok ? dashboardData.data : {}
+
+      // 設定最近銷售（直接用已查詢的資料）
+      setRecentSales(salesInRange.slice(0, 10))
 
       // 繼續原有的統計邏輯
       const confirmedSales = salesInRange.filter((s: any) => s.status === 'confirmed')
 
-      // Gross Sales (交易額/原始銷售額) - 用於營收分析、毛利率
+      // Gross Sales (交易額/原始銷售額)
       const grossSales = confirmedSales.reduce((sum: number, s: any) => {
-        // 優先使用 subtotal，若無則從 sale_items 計算
         if (s.subtotal) return sum + s.subtotal
         const itemsSubtotal = (s.sale_items || []).reduce(
           (itemSum: number, item: any) => itemSum + (item.price * item.quantity), 0
@@ -231,39 +215,25 @@ export default function DashboardPage() {
         return sum + itemsSubtotal
       }, 0)
 
-      // 折扣總額
       const totalDiscount = confirmedSales.reduce((sum: number, s: any) => sum + (s.discount_amount || 0), 0)
-
-      // 購物金使用總額
       const totalStoreCreditUsed = confirmedSales.reduce((sum: number, s: any) => sum + (s.store_credit_used || 0), 0)
-
-      // 應收金額 (Amount Due) = subtotal - discount - store_credit
       const amountDue = confirmedSales.reduce((sum: number, s: any) => sum + s.total, 0)
-
-      // 實收金額 (Actual Collected) - 只計算已付款的訂單
       const actualCollected = confirmedSales
         .filter((s: any) => s.is_paid)
         .reduce((sum: number, s: any) => sum + s.total, 0)
-
-      // 未收金額
       const uncollected = amountDue - actualCollected
 
-      // Calculate total cost from sale items and collect breakdown
+      // Calculate total cost
       const costBreakdownMap = new Map<string, { cost: number; quantity: number; name: string }>()
-
       const totalCost = confirmedSales.reduce((sum: number, s: any) => {
         const saleCost = (s.sale_items || []).reduce(
           (itemSum: number, item: any) => {
-            // 扣除已轉購物金的數量
             const effectiveQty = item.quantity - (item.store_credit_qty || 0)
             const itemCost = (item.cost || 0) * effectiveQty
-
-            // Collect cost breakdown (只計算有效數量)
             if (effectiveQty > 0) {
               const key = item.product_id
               if (costBreakdownMap.has(key)) {
-                const existing = costBreakdownMap.get(key)!
-                existing.quantity += effectiveQty
+                costBreakdownMap.get(key)!.quantity += effectiveQty
               } else {
                 costBreakdownMap.set(key, {
                   cost: item.cost || 0,
@@ -272,7 +242,6 @@ export default function DashboardPage() {
                 })
               }
             }
-
             return itemSum + itemCost
           },
           0
@@ -287,23 +256,11 @@ export default function DashboardPage() {
         total_cost: item.cost * item.quantity
       }))
 
-      // Calculate total expenses
-      const totalExpenses = expensesInRange.reduce(
-        (sum: number, e: any) => sum + e.amount,
-        0
-      )
-
-      // Calculate profits (使用 Gross Sales 計算毛利)
+      const totalExpenses = expensesInRange.reduce((sum: number, e: any) => sum + e.amount, 0)
       const grossProfit = grossSales - totalCost
       const netProfit = grossProfit - totalExpenses
 
-      // Fetch extended dashboard data (包含 AR/AP 帳齡分析、庫存、毛利率趨勢)
-      // 優化：只呼叫一個 API，不再分別呼叫 /api/ar 和 /api/ap
-      const dashboardRes = await fetch('/api/finance/dashboard')
-      const dashboardData = await dashboardRes.json()
-      const extendedData = dashboardData.ok ? dashboardData.data : {}
-
-      // 從帳齡分析數據中取得 AR/AP 總額和逾期金額
+      // AR/AP 數據
       const totalAR = extendedData.arAging?.total || 0
       const overdueAR = (extendedData.arAging?.days31_60 || 0) +
         (extendedData.arAging?.days61_90 || 0) +
@@ -313,31 +270,21 @@ export default function DashboardPage() {
         (extendedData.apAging?.days61_90 || 0) +
         (extendedData.apAging?.over90 || 0)
 
-      // Fetch fixed asset depreciation summary
-      let depreciation = { total_monthly: 0, total_assets: 0, total_remaining: 0 }
-      try {
-        const depRes = await fetch('/api/fixed-assets/summary')
-        const depData = await depRes.json()
-        if (depData.ok) {
-          depreciation = {
-            total_monthly: depData.data.summary.total_monthly_depreciation,
-            total_assets: depData.data.summary.total_assets,
-            total_remaining: depData.data.summary.total_remaining_value
-          }
-        }
-      } catch (err) {
-        console.error('Failed to fetch depreciation:', err)
-      }
+      // 折舊數據
+      const depreciation = depData.ok ? {
+        total_monthly: depData.data.summary.total_monthly_depreciation,
+        total_assets: depData.data.summary.total_assets,
+        total_remaining: depData.data.summary.total_remaining_value
+      } : { total_monthly: 0, total_assets: 0, total_remaining: 0 }
 
       setStats({
-        // 營收口徑
         grossSales,
         totalDiscount,
         totalStoreCreditUsed,
         amountDue,
         actualCollected,
         uncollected,
-        todaySales: grossSales, // 向後兼容
+        todaySales: grossSales,
         todayOrders: salesInRange.length,
         totalCost,
         totalExpenses,
@@ -348,7 +295,6 @@ export default function DashboardPage() {
         overdueAR,
         overdueAP,
         costBreakdown,
-        // 新增數據
         arAging: extendedData.arAging,
         apAging: extendedData.apAging,
         arOverdueList: extendedData.arOverdueList,
@@ -357,13 +303,6 @@ export default function DashboardPage() {
         profitTrend: extendedData.profitTrend,
         depreciation,
       })
-
-      // Fetch recent sales
-      const recentSalesRes = await fetch('/api/sales')
-      const recentSalesData = await recentSalesRes.json()
-      setRecentSales(
-        recentSalesData.ok ? recentSalesData.data.slice(0, 10) : []
-      )
     } catch (err) {
       console.error('Failed to fetch dashboard data:', err)
     } finally {
@@ -546,9 +485,12 @@ export default function DashboardPage() {
                 </span>
               )}
             </div>
+            <div className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+              應收 = 交易額 - 折扣 - 購物金
+            </div>
             <div className="mt-2 grid grid-cols-3 gap-2 text-sm border-t pt-2">
-              <div title="應收 = 交易額 - 折扣 - 購物金">
-                <span className="text-gray-500 dark:text-gray-400">應收 <span className="cursor-help">ⓘ</span></span>
+              <div>
+                <span className="text-gray-500 dark:text-gray-400">應收</span>
                 <div className="font-semibold text-blue-600">{formatCurrency(stats.amountDue)}</div>
               </div>
               <div>
