@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
     const source = searchParams.get('source')
     const keyword = searchParams.get('keyword')
     const productKeyword = searchParams.get('product_keyword')
+    const groupByCustomer = searchParams.get('group_by_customer') === 'true' // 按客戶分組時不分頁
 
     // 分頁參數
     const page = parseInt(searchParams.get('page') || '1')
@@ -96,9 +97,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 只有在沒有 productKeyword 時才使用服務器端分頁
+    // 只有在沒有 productKeyword 且沒有 groupByCustomer 時才使用服務器端分頁
     // 因為 productKeyword 需要在後端過濾 sale_items
-    if (!productKeyword) {
+    // groupByCustomer 需要所有資料才能正確分組統計
+    if (!productKeyword && !groupByCustomer) {
       query = query.range(offset, offset + limit - 1)
     }
 
@@ -203,17 +205,17 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    // 當有 productKeyword 時，使用過濾後的數據長度作為 total
-    const actualTotal = productKeyword ? (salesWithSummary?.length || 0) : (count || salesWithSummary?.length || 0)
+    // 當有 productKeyword 或 groupByCustomer 時，使用過濾後的數據長度作為 total
+    const actualTotal = (productKeyword || groupByCustomer) ? (salesWithSummary?.length || 0) : (count || salesWithSummary?.length || 0)
 
     return NextResponse.json({
       ok: true,
       data: salesWithSummary,
       pagination: {
-        page: productKeyword ? 1 : page, // productKeyword 時不分頁，固定為第一頁
+        page: (productKeyword || groupByCustomer) ? 1 : page, // productKeyword 或 groupByCustomer 時不分頁，固定為第一頁
         limit,
         total: actualTotal,
-        totalPages: productKeyword ? 1 : (count ? Math.ceil(count / limit) : 1)
+        totalPages: (productKeyword || groupByCustomer) ? 1 : (count ? Math.ceil(count / limit) : 1)
       }
     })
   } catch (error) {

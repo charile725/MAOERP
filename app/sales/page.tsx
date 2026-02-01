@@ -255,6 +255,7 @@ export default function SalesPage() {
       if (keyword) params.set('keyword', keyword)
       if (productKeyword) params.set('product_keyword', productKeyword)
       if (sourceFilter !== 'all') params.set('source', sourceFilter)
+      if (groupByCustomer) params.set('group_by_customer', 'true') // 按客戶分組時不分頁
       params.set('page', page.toString())
       params.set('limit', itemsPerPage.toString())
 
