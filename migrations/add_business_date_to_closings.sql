@@ -5,9 +5,11 @@
 ALTER TABLE business_day_closings
 ADD COLUMN IF NOT EXISTS business_date DATE;
 
--- 2. Backfill existing records: extract date from closing_time (already stored in Taiwan time)
+-- 2. Backfill existing records
+--    closing_time 是按日結當下的台灣時間，但通常跨日才按日結，
+--    所以實際營業日 = closing_time 的台灣日期 - 1 天
 UPDATE business_day_closings
-SET business_date = (closing_time::timestamp AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Taipei')::date
+SET business_date = (closing_time::timestamp AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Taipei')::date - INTERVAL '1 day'
 WHERE business_date IS NULL;
 
 -- 3. Deduplicate: keep only the latest closing per (source, business_date)
