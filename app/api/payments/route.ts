@@ -79,6 +79,7 @@ export async function POST(request: NextRequest) {
         method: draft.method || 'cash',
         amount: draft.amount,
         note: draft.note || null,
+        account_id: draft.account_id || null,  // 儲存用戶選擇的帳戶
       })
       .select()
       .single()

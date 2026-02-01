@@ -300,7 +300,24 @@ export async function DELETE(
               .eq('id', settlementId)
               .single()
 
-            if (settlement && settlement.account_id) {
+            let accountIdToRefund = settlement?.account_id
+
+            // 如果 settlement 沒有 account_id，嘗試從 account_transactions 找
+            if (!accountIdToRefund && settlement) {
+              const { data: transaction } = await (supabaseServer
+                .from('account_transactions') as any)
+                .select('account_id')
+                .eq('ref_type', 'settlement')
+                .eq('ref_id', settlementId)
+                .single()
+              
+              if (transaction) {
+                accountIdToRefund = transaction.account_id
+                console.log(`[Delete Purchase ${id}] Found account_id ${accountIdToRefund} from account_transactions for settlement ${settlementId}`)
+              }
+            }
+
+            if (accountIdToRefund) {
               // 只回補這張進貨單相關的金額（不是整個 settlement 的金額）
               const refundAmount = refundInfo.amount
 
@@ -308,7 +325,7 @@ export async function DELETE(
               const { data: account } = await (supabaseServer
                 .from('accounts') as any)
                 .select('balance')
-                .eq('id', settlement.account_id)
+                .eq('id', accountIdToRefund)
                 .single()
 
               if (account && refundAmount > 0) {
@@ -319,9 +336,9 @@ export async function DELETE(
                     balance: newBalance,
                     updated_at: getTaiwanTime()
                   })
-                  .eq('id', settlement.account_id)
+                  .eq('id', accountIdToRefund)
 
-                console.log(`[Delete Purchase ${id}] Restored account ${settlement.account_id}: +${refundAmount} (from settlement ${settlementId})`)
+                console.log(`[Delete Purchase ${id}] Restored account ${accountIdToRefund}: +${refundAmount} (from settlement ${settlementId})`)
               }
 
               // 刪除這些 allocations
