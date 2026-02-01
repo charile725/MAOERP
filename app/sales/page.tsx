@@ -117,6 +117,7 @@ type CustomerGroup = {
   pending_count: number
   total_revenue: number
   total_profit: number
+  pending_items: { name: string; quantity: number }[] // 未出貨商品統計
 }
 
 type ProductStats = {
@@ -362,7 +363,8 @@ export default function SalesPage() {
                 total_pending: 0,
                 pending_count: 0,
                 total_revenue: 0,
-                total_profit: 0
+                total_profit: 0,
+                pending_items: []
               }
             }
 
@@ -375,6 +377,25 @@ export default function SalesPage() {
               groups[key].total_pending += sale.total
               groups[key].pending_count += 1
             }
+          })
+
+          // 計算每個客戶的未出貨商品統計
+          Object.values(groups).forEach(group => {
+            const pendingMap: { [name: string]: number } = {}
+            group.sales.forEach(sale => {
+              sale.sale_items?.forEach(item => {
+                const deliveredQty = item.delivered_quantity || 0
+                const storeCreditQty = item.store_credit_qty || 0
+                const pendingQty = item.quantity - deliveredQty - storeCreditQty
+                if (pendingQty > 0) {
+                  const name = item.snapshot_name
+                  pendingMap[name] = (pendingMap[name] || 0) + pendingQty
+                }
+              })
+            })
+            group.pending_items = Object.entries(pendingMap)
+              .map(([name, quantity]) => ({ name, quantity }))
+              .sort((a, b) => b.quantity - a.quantity) // 數量多的排前面
           })
 
           setCustomerGroups(Object.values(groups))
@@ -410,7 +431,8 @@ export default function SalesPage() {
             total_pending: 0,
             pending_count: 0,
             total_revenue: totalRevenue,
-            total_profit: totalProfit
+            total_profit: totalProfit,
+            pending_items: []
           }])
         }
       }
@@ -977,6 +999,12 @@ export default function SalesPage() {
                             ({group.customer_code})
                           </span>
                         )}
+                        {/* 未出貨商品提示 */}
+                        {group.pending_items.length > 0 && (
+                          <span className="text-xs bg-amber-500 text-white px-2 py-0.5 rounded font-medium">
+                            📦 有未出貨商品
+                          </span>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-4">
@@ -1001,6 +1029,19 @@ export default function SalesPage() {
                     {/* Sales Details */}
                     {isExpanded && (
                       <div className="bg-gray-50 dark:bg-gray-900 px-4 pb-4">
+                        {/* 未出貨商品統計 */}
+                        {group.pending_items.length > 0 && (
+                          <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded-lg">
+                            <div className="text-sm font-semibold text-amber-800 dark:text-amber-200 mb-2">📦 未出貨商品統計</div>
+                            <div className="flex flex-wrap gap-2">
+                              {group.pending_items.map((item, idx) => (
+                                <span key={idx} className="text-sm bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 px-2 py-1 rounded border border-amber-300 dark:border-amber-600">
+                                  {item.name} <span className="font-bold text-amber-600 dark:text-amber-400">×{item.quantity}</span>
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                         <table className="w-full">
                           <thead className="border-b">
                             <tr>
