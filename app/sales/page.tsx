@@ -326,12 +326,16 @@ export default function SalesPage() {
               return // 只显示未處理完的
             }
 
+            // 計算 Gross Sales（優先用 subtotal，否則從 sale_items 計算）
+            const grossSales = sale.subtotal || sale.sale_items?.reduce((sum, item) =>
+              sum + (item.price * item.quantity), 0) || 0
+
             // 計算這筆銷售的毛利（扣除已轉購物金的數量）
             const totalCost = sale.sale_items?.reduce((sum, item) => {
               const effectiveQty = item.quantity - (item.store_credit_qty || 0)
               return sum + (item.cost || 0) * effectiveQty
             }, 0) || 0
-            const saleProfit = sale.total - totalCost
+            const saleProfit = grossSales - totalCost
             sale.profit = saleProfit
             sale.total_cost = totalCost
 
@@ -352,7 +356,7 @@ export default function SalesPage() {
             }
 
             groups[key].sales.push(sale)
-            groups[key].total_revenue += sale.total
+            groups[key].total_revenue += grossSales // 使用 Gross Sales
             groups[key].total_profit += saleProfit
 
             // 统计待處理（考慮出貨和購物金轉換）
@@ -373,12 +377,16 @@ export default function SalesPage() {
           let totalRevenue = 0
           let totalProfit = 0
           const salesWithProfit = filteredSales.map((sale: Sale) => {
+            // 計算 Gross Sales
+            const grossSales = sale.subtotal || sale.sale_items?.reduce((sum: number, item: SaleItem) =>
+              sum + (item.price * item.quantity), 0) || 0
+
             const totalCost = sale.sale_items?.reduce((sum: number, item: SaleItem) => {
               const effectiveQty = item.quantity - (item.store_credit_qty || 0)
               return sum + (item.cost || 0) * effectiveQty
             }, 0) || 0
-            const saleProfit = sale.total - totalCost
-            totalRevenue += sale.total
+            const saleProfit = grossSales - totalCost
+            totalRevenue += grossSales // 使用 Gross Sales
             totalProfit += saleProfit
             return { ...sale, profit: saleProfit, total_cost: totalCost }
           })

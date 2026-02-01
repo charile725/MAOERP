@@ -230,7 +230,7 @@ export async function GET(request: NextRequest) {
 
     const { data: weekSales } = await (supabaseServer
       .from('sales') as any)
-      .select('total, sale_date, sale_items(cost, quantity, store_credit_qty)')
+      .select('total, subtotal, sale_date, sale_items(cost, quantity, price, store_credit_qty)')
       .gte('sale_date', sevenDaysAgoStr)
       .lte('sale_date', today + 'T23:59:59')
       .eq('status', 'confirmed')
@@ -250,7 +250,11 @@ export async function GET(request: NextRequest) {
     ; (weekSales as any[])?.forEach(sale => {
       const saleDate = sale.sale_date.split('T')[0]
       if (dailyStats[saleDate]) {
-        dailyStats[saleDate].revenue += sale.total
+        // 使用 subtotal (Gross Sales) 計算營收，若無則從 sale_items 計算
+        const grossSales = sale.subtotal || (sale.sale_items || []).reduce(
+          (sum: number, item: any) => sum + (item.price * item.quantity), 0
+        )
+        dailyStats[saleDate].revenue += grossSales
         // 扣除已轉購物金的數量
         const saleCost = (sale.sale_items || []).reduce(
           (sum: number, item: any) => {

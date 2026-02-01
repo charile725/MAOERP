@@ -14,9 +14,11 @@ export async function GET(request: NextRequest) {
       .select(`
         customer_code,
         total,
+        subtotal,
         sale_date,
         sale_items (
           quantity,
+          price,
           cost,
           store_credit_qty
         )
@@ -53,7 +55,11 @@ export async function GET(request: NextRequest) {
         customerStats[code] = { total_sales: 0, total_cost: 0, order_count: 0 }
       }
 
-      customerStats[code].total_sales += sale.total || 0
+      // 使用 Gross Sales (subtotal) 計算營收
+      const grossSales = sale.subtotal || (sale.sale_items || []).reduce(
+        (sum: number, item: any) => sum + (item.price || 0) * (item.quantity || 0), 0
+      )
+      customerStats[code].total_sales += grossSales
       customerStats[code].order_count += 1
 
       // 计算成本（扣除已轉購物金的數量）

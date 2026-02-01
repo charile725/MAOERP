@@ -5,7 +5,15 @@ import Link from 'next/link'
 import { formatCurrency } from '@/lib/utils'
 
 type DashboardStats = {
-  todaySales: number
+  // 營收口徑
+  grossSales: number // 交易額 (Gross Sales)
+  totalDiscount: number // 折扣總額
+  totalStoreCreditUsed: number // 購物金使用總額
+  amountDue: number // 應收金額 (= grossSales - discount - store_credit)
+  actualCollected: number // 實收金額 (只計算 is_paid=true)
+  uncollected: number // 未收金額
+  // 舊欄位保留向後兼容
+  todaySales: number // = grossSales，將被棄用
   todayOrders: number
   totalCost: number
   totalExpenses: number
@@ -78,7 +86,13 @@ type BusinessDayClosing = {
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats>({
-    todaySales: 0,
+    grossSales: 0,
+    totalDiscount: 0,
+    totalStoreCreditUsed: 0,
+    amountDue: 0,
+    actualCollected: 0,
+    uncollected: 0,
+    todaySales: 0, // 向後兼容
     todayOrders: 0,
     totalCost: 0,
     totalExpenses: 0,
@@ -205,43 +219,66 @@ export default function DashboardPage() {
       }
 
       // 繼續原有的統計邏輯
-      const totalSales = salesInRange
-        .filter((s: any) => s.status === 'confirmed')
+      const confirmedSales = salesInRange.filter((s: any) => s.status === 'confirmed')
+
+      // Gross Sales (交易額/原始銷售額) - 用於營收分析、毛利率
+      const grossSales = confirmedSales.reduce((sum: number, s: any) => {
+        // 優先使用 subtotal，若無則從 sale_items 計算
+        if (s.subtotal) return sum + s.subtotal
+        const itemsSubtotal = (s.sale_items || []).reduce(
+          (itemSum: number, item: any) => itemSum + (item.price * item.quantity), 0
+        )
+        return sum + itemsSubtotal
+      }, 0)
+
+      // 折扣總額
+      const totalDiscount = confirmedSales.reduce((sum: number, s: any) => sum + (s.discount_amount || 0), 0)
+
+      // 購物金使用總額
+      const totalStoreCreditUsed = confirmedSales.reduce((sum: number, s: any) => sum + (s.store_credit_used || 0), 0)
+
+      // 應收金額 (Amount Due) = subtotal - discount - store_credit
+      const amountDue = confirmedSales.reduce((sum: number, s: any) => sum + s.total, 0)
+
+      // 實收金額 (Actual Collected) - 只計算已付款的訂單
+      const actualCollected = confirmedSales
+        .filter((s: any) => s.is_paid)
         .reduce((sum: number, s: any) => sum + s.total, 0)
+
+      // 未收金額
+      const uncollected = amountDue - actualCollected
 
       // Calculate total cost from sale items and collect breakdown
       const costBreakdownMap = new Map<string, { cost: number; quantity: number; name: string }>()
 
-      const totalCost = salesInRange
-        .filter((s: any) => s.status === 'confirmed')
-        .reduce((sum: number, s: any) => {
-          const saleCost = (s.sale_items || []).reduce(
-            (itemSum: number, item: any) => {
-              // 扣除已轉購物金的數量
-              const effectiveQty = item.quantity - (item.store_credit_qty || 0)
-              const itemCost = (item.cost || 0) * effectiveQty
+      const totalCost = confirmedSales.reduce((sum: number, s: any) => {
+        const saleCost = (s.sale_items || []).reduce(
+          (itemSum: number, item: any) => {
+            // 扣除已轉購物金的數量
+            const effectiveQty = item.quantity - (item.store_credit_qty || 0)
+            const itemCost = (item.cost || 0) * effectiveQty
 
-              // Collect cost breakdown (只計算有效數量)
-              if (effectiveQty > 0) {
-                const key = item.product_id
-                if (costBreakdownMap.has(key)) {
-                  const existing = costBreakdownMap.get(key)!
-                  existing.quantity += effectiveQty
-                } else {
-                  costBreakdownMap.set(key, {
-                    cost: item.cost || 0,
-                    quantity: effectiveQty,
-                    name: item.snapshot_name || '未知商品'
-                  })
-                }
+            // Collect cost breakdown (只計算有效數量)
+            if (effectiveQty > 0) {
+              const key = item.product_id
+              if (costBreakdownMap.has(key)) {
+                const existing = costBreakdownMap.get(key)!
+                existing.quantity += effectiveQty
+              } else {
+                costBreakdownMap.set(key, {
+                  cost: item.cost || 0,
+                  quantity: effectiveQty,
+                  name: item.snapshot_name || '未知商品'
+                })
               }
+            }
 
-              return itemSum + itemCost
-            },
-            0
-          )
-          return sum + saleCost
-        }, 0)
+            return itemSum + itemCost
+          },
+          0
+        )
+        return sum + saleCost
+      }, 0)
 
       const costBreakdown = Array.from(costBreakdownMap.values()).map(item => ({
         product_name: item.name,
@@ -256,8 +293,8 @@ export default function DashboardPage() {
         0
       )
 
-      // Calculate profits
-      const grossProfit = totalSales - totalCost
+      // Calculate profits (使用 Gross Sales 計算毛利)
+      const grossProfit = grossSales - totalCost
       const netProfit = grossProfit - totalExpenses
 
       // Fetch extended dashboard data (包含 AR/AP 帳齡分析、庫存、毛利率趨勢)
@@ -293,7 +330,14 @@ export default function DashboardPage() {
       }
 
       setStats({
-        todaySales: totalSales,
+        // 營收口徑
+        grossSales,
+        totalDiscount,
+        totalStoreCreditUsed,
+        amountDue,
+        actualCollected,
+        uncollected,
+        todaySales: grossSales, // 向後兼容
         todayOrders: salesInRange.length,
         totalCost,
         totalExpenses,
@@ -490,12 +534,33 @@ export default function DashboardPage() {
         {/* KPI Cards - Row 1: Revenue & Profit */}
         <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-lg bg-white dark:bg-gray-800 p-6 shadow">
-            <div className="text-sm font-medium text-gray-900 dark:text-gray-100">期間營收</div>
+            <div className="text-sm font-medium text-gray-900 dark:text-gray-100">交易額 (Gross Sales)</div>
             <div className="mt-2 text-3xl font-bold text-green-600">
-              {formatCurrency(stats.todaySales)}
+              {formatCurrency(stats.grossSales)}
             </div>
-            <div className="mt-1 text-sm text-gray-900 dark:text-gray-100">
+            <div className="mt-1 text-sm text-gray-500 dark:text-gray-400">
               {stats.todayOrders} 筆訂單
+              {(stats.totalDiscount > 0 || stats.totalStoreCreditUsed > 0) && (
+                <span className="ml-2">
+                  (折扣 {formatCurrency(stats.totalDiscount)}, 購物金 {formatCurrency(stats.totalStoreCreditUsed)})
+                </span>
+              )}
+            </div>
+            <div className="mt-2 grid grid-cols-3 gap-2 text-sm border-t pt-2">
+              <div title="應收 = 交易額 - 折扣 - 購物金">
+                <span className="text-gray-500 dark:text-gray-400">應收 <span className="cursor-help">ⓘ</span></span>
+                <div className="font-semibold text-blue-600">{formatCurrency(stats.amountDue)}</div>
+              </div>
+              <div>
+                <span className="text-gray-500 dark:text-gray-400">實收</span>
+                <div className="font-semibold text-green-600">{formatCurrency(stats.actualCollected)}</div>
+              </div>
+              <div>
+                <span className="text-gray-500 dark:text-gray-400">未收</span>
+                <div className={`font-semibold ${stats.uncollected > 0 ? 'text-red-600' : 'text-gray-600'}`}>
+                  {formatCurrency(stats.uncollected)}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -505,7 +570,7 @@ export default function DashboardPage() {
               {formatCurrency(stats.totalCost)}
             </div>
             <div className="mt-1 text-sm text-gray-900 dark:text-gray-100">
-              毛利率: {stats.todaySales > 0 ? ((stats.grossProfit / stats.todaySales) * 100).toFixed(1) : 0}%
+              毛利率: {stats.grossSales > 0 ? ((stats.grossProfit / stats.grossSales) * 100).toFixed(1) : 0}%
             </div>
           </div>
 
@@ -525,7 +590,7 @@ export default function DashboardPage() {
               {formatCurrency(stats.netProfit)}
             </div>
             <div className="mt-1 text-sm text-gray-900 dark:text-gray-100">
-              淨利率: {stats.todaySales > 0 ? ((stats.netProfit / stats.todaySales) * 100).toFixed(1) : 0}%
+              淨利率: {stats.grossSales > 0 ? ((stats.netProfit / stats.grossSales) * 100).toFixed(1) : 0}%
             </div>
           </div>
         </div>
@@ -610,47 +675,7 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* 毛利率趨勢 */}
-        {stats.profitTrend && stats.profitTrend.length > 0 && (
-          <div className="mb-6 rounded-lg bg-white dark:bg-gray-800 p-6 shadow">
-            <h2 className="mb-4 text-xl font-semibold text-gray-900 dark:text-gray-100">📈 近7天毛利率趨勢</h2>
-            <div className="overflow-x-auto">
-              <div className="flex items-end gap-4 min-w-max" style={{ height: '180px' }}>
-                {stats.profitTrend.map((day, index) => {
-                  // 處理負數：取絕對值計算高度，但顏色區分正負
-                  const maxAbsMargin = Math.max(...stats.profitTrend!.map(d => Math.abs(d.grossMargin)), 1)
-                  const absHeight = (Math.abs(day.grossMargin) / maxAbsMargin) * 120
-                  const isNegative = day.grossMargin < 0
-                  const dateLabel = new Date(day.date).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' })
 
-                  return (
-                    <div key={index} className="flex flex-col items-center justify-end flex-1 min-w-[70px] h-full">
-                      <span className={`text-sm font-bold mb-2 ${isNegative ? 'text-red-500' : 'text-gray-700 dark:text-gray-300'}`}>
-                        {day.grossMargin}%
-                      </span>
-                      <div
-                        className={`w-10 rounded-t transition-all ${isNegative ? 'bg-red-500' :
-                          day.grossMargin >= 30 ? 'bg-green-500' :
-                            day.grossMargin >= 20 ? 'bg-yellow-500' :
-                              day.grossMargin >= 10 ? 'bg-orange-500' : 'bg-red-400'
-                          }`}
-                        style={{ height: `${Math.max(absHeight, 8)}px` }}
-                        title={`營收: ${formatCurrency(day.revenue)}\n成本: ${formatCurrency(day.cost)}\n毛利: ${formatCurrency(day.grossProfit)}`}
-                      />
-                      <span className="text-xs text-gray-500 mt-2">{dateLabel}</span>
-                    </div>
-                  )
-                })}
-              </div>
-              <div className="mt-4 flex justify-center gap-6 text-xs text-gray-500">
-                <span>🟢 ≥30%</span>
-                <span>🟡 20-30%</span>
-                <span>🟠 10-20%</span>
-                <span>🔴 &lt;10%</span>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Cost Breakdown - Collapsible */}
         {stats.costBreakdown && stats.costBreakdown.length > 0 && (
