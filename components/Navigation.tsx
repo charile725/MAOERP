@@ -227,7 +227,7 @@ export default function Navigation() {
 
         {/* Mobile Navigation */}
         {isMenuOpen && (
-          <div className="border-t pb-4 pt-3 dark:border-gray-700 lg:hidden bg-gradient-to-b from-gray-50 to-white dark:from-gray-750 dark:to-gray-800">
+          <div className="border-t pb-4 pt-3 dark:border-gray-700 lg:hidden bg-white dark:bg-gray-800">
             {/* Mobile User Info */}
             {user && (
               <div className="flex items-center justify-between px-4 py-3 mb-3 bg-gray-100 dark:bg-gray-700 rounded-xl mx-3 border border-gray-200 dark:border-gray-600">
@@ -288,7 +288,7 @@ export default function Navigation() {
                             onClick={() => setIsMenuOpen(false)}
                             className={`rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-200 ${pathname === subItem.href
                               ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300'
-                              : 'text-gray-600 bg-gray-50 hover:bg-gray-100 dark:text-gray-300 dark:bg-gray-750 dark:hover:bg-gray-700'
+                              : 'text-gray-700 bg-gray-100 hover:bg-gray-200 dark:text-gray-100 dark:bg-gray-700 dark:hover:bg-gray-600'
                               }`}
                           >
                             {subItem.label}
