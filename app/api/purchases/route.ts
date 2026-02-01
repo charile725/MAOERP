@@ -212,32 +212,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 2. Insert purchase items (subtotal 由資料庫自動計算)
+    // 2. Insert purchase items（直接包含 subtotal，避免 trigger 計算小數）
     const purchaseItems = draft.items.map((item) => ({
       purchase_id: purchase.id,
       product_id: item.product_id,
       quantity: item.quantity,
       cost: item.cost,
+      subtotal: item.subtotal !== undefined ? item.subtotal : Math.round(item.quantity * item.cost),
     }))
 
     const { data: insertedItems, error: itemsError } = await (supabaseServer
       .from('purchase_items') as any)
       .insert(purchaseItems)
       .select()
-
-    // 2.5 如果前端有傳入自訂小計，更新 subtotal（覆蓋資料庫計算的值）
-    if (insertedItems && !itemsError) {
-      for (let i = 0; i < draft.items.length; i++) {
-        const draftItem = draft.items[i]
-        const insertedItem = insertedItems[i]
-        if (draftItem.subtotal !== undefined && insertedItem) {
-          await (supabaseServer
-            .from('purchase_items') as any)
-            .update({ subtotal: draftItem.subtotal })
-            .eq('id', insertedItem.id)
-        }
-      }
-    }
 
     if (itemsError) {
       // Rollback: delete the purchase
