@@ -1236,8 +1236,7 @@ export default function POSPage() {
                     {filteredProducts.map((product) => {
                       const isPinned = pinnedProductIds.has(product.id)
                       const isLowStock = product.stock <= 3 && product.stock > 0
-                      // 只有當不允許負庫存時，庫存 0 才禁止銷售
-                      const isOutOfStock = !product.allow_negative && product.stock <= 0
+                      const isNegativeStock = product.stock <= 0
                       return (
                         <button
                           key={product.id}
@@ -1245,17 +1244,12 @@ export default function POSPage() {
                             e.preventDefault()
                             togglePinProduct(product.id)
                           }}
-                          className={`rounded-lg p-2.5 transition-all active:scale-95 flex flex-col min-h-[90px] relative ${isOutOfStock
-                            ? 'bg-slate-800 opacity-40 cursor-not-allowed'
+                          className={`rounded-lg p-2.5 transition-all active:scale-95 flex flex-col min-h-[90px] relative ${isNegativeStock
+                            ? 'bg-slate-700 hover:bg-slate-600 cursor-pointer border border-red-500/50'
                             : 'bg-slate-700 hover:bg-slate-600 cursor-pointer'
                             }`}
-                          title={isOutOfStock ? '庫存不足' : isPinned ? '右鍵取消固定' : '右鍵固定到最上面'}
-                          disabled={isOutOfStock}
-                          onClick={(e) => {
-                            if (isOutOfStock) {
-                              e.preventDefault()
-                              return
-                            }
+                          title={isPinned ? '右鍵取消固定' : '右鍵固定到最上面'}
+                          onClick={() => {
                             addToCart(product, 1)
                           }}
                         >

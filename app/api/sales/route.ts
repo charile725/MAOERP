@@ -381,17 +381,18 @@ export async function POST(request: NextRequest) {
           )
         }
 
-        if (!product.allow_negative && product.stock < item.quantity) {
-          // Rollback: delete the sale
-          await (supabaseServer.from('sales') as any).delete().eq('id', sale.id)
-          return NextResponse.json(
-            {
-              ok: false,
-              error: `${product.name} 庫存不足。剩餘: ${product.stock}, 需要: ${item.quantity}`,
-            },
-            { status: 400 }
-          )
-        }
+        // 移除庫存檢查，允許所有商品負庫存銷售
+        // if (!product.allow_negative && product.stock < item.quantity) {
+        //   // Rollback: delete the sale
+        //   await (supabaseServer.from('sales') as any).delete().eq('id', sale.id)
+        //   return NextResponse.json(
+        //     {
+        //       ok: false,
+        //       error: `${product.name} 庫存不足。剩餘: ${product.stock}, 需要: ${item.quantity}`,
+        //     },
+        //     { status: 400 }
+        //   )
+        // }
       }
     }
 
