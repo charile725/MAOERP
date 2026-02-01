@@ -157,13 +157,13 @@ export default function MobilePOS({
     const [customerSearchQuery, setCustomerSearchQuery] = useState('')
     const scanTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-    // 搜尋結果
+    // 搜尋結果 - 不限制數量，讓使用者可以捲動查看所有結果
     const searchResults = searchQuery.trim()
         ? products.filter(p =>
             p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
             p.item_code.toLowerCase().includes(searchQuery.toLowerCase()) ||
             p.barcode?.toLowerCase().includes(searchQuery.toLowerCase())
-        ).slice(0, 8)
+        )
         : []
 
     // 處理掃描或搜尋
@@ -245,7 +245,11 @@ export default function MobilePOS({
                         />
                         {/* 搜尋結果下拉 */}
                         {searchResults.length > 0 && (
-                            <div className="absolute z-50 w-full mt-1 bg-slate-800 border border-slate-600 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                            <div className="absolute z-50 w-full mt-1 bg-slate-800 border border-slate-600 rounded-lg shadow-xl max-h-80 overflow-y-auto">
+                                {/* 顯示搜尋結果數量 */}
+                                <div className="sticky top-0 bg-slate-700 px-4 py-1 text-xs text-slate-400 border-b border-slate-600">
+                                    找到 {searchResults.length} 筆結果
+                                </div>
                                 {searchResults.map((product) => (
                                     <button
                                         key={product.id}
