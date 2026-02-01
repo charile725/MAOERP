@@ -287,10 +287,19 @@ export async function POST(request: NextRequest) {
     const taiwanTime = new Date(now.getTime() + 8 * 60 * 60 * 1000)
     const createdAt = taiwanTime.toISOString() // 完整的台灣時間戳記
 
-    // 直接使用當前台灣日期作為 sale_date（營業日）
-    // 修正：之前的邏輯是「日結日期+1天」，這會導致15號日結後，15號的銷售變成16號
-    // 正確做法：使用銷售當下的台灣日期
-    const saleDate = taiwanTime.toISOString().split('T')[0]
+    // 從 business_day_settings 取得當前營業日
+    // 這樣即使跨日（凌晨）營業，在日結前的銷售仍會記錄到正確的營業日
+    let saleDate = taiwanTime.toISOString().split('T')[0] // 預設使用當前日期
+
+    const { data: businessDaySetting } = await (supabaseServer
+      .from('business_day_settings') as any)
+      .select('current_business_date')
+      .eq('source', draft.source)
+      .single()
+
+    if (businessDaySetting?.current_business_date) {
+      saleDate = businessDaySetting.current_business_date
+    }
 
     // Start transaction-like operations
     // 1. Create sale (draft)

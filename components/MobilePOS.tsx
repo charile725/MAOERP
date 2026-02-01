@@ -281,6 +281,12 @@ export default function MobilePOS({
                         日結
                     </button>
                 </div>
+                {/* 當前營業日提示 */}
+                <div className="mt-2 text-center">
+                    <span className="text-amber-400 text-xs font-medium">
+                        營業日：{businessDate}
+                    </span>
+                </div>
             </div>
 
             {/* 購物車列表 */}

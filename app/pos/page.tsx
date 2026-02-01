@@ -170,7 +170,7 @@ export default function POSPage() {
   const quantityInputRef = useRef<HTMLInputElement>(null)
 
   // Business day closing (日結)
-  const [businessDate, setBusinessDate] = useState<string>(() => {
+  const [businessDate, setBusinessDateState] = useState<string>(() => {
     const now = new Date()
     const tw = new Date(now.getTime() + 8 * 60 * 60 * 1000)
     return tw.toISOString().split('T')[0]
@@ -179,6 +179,7 @@ export default function POSPage() {
   const [closingStats, setClosingStats] = useState<any>(null)
   const [showClosingModal, setShowClosingModal] = useState(false)
   const [closingNote, setClosingNote] = useState('')
+  const [businessDateLoaded, setBusinessDateLoaded] = useState(false)
 
   // 收款與找零
   const [receivedAmount, setReceivedAmount] = useState<string>('')
@@ -209,14 +210,41 @@ export default function POSPage() {
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
 
+  // 獲取當前營業日
+  const fetchCurrentBusinessDate = async () => {
+    try {
+      const res = await fetch(`/api/business-day-settings?source=${salesMode}`)
+      const data = await res.json()
+      if (data.ok && data.data?.current_business_date) {
+        setBusinessDateState(data.data.current_business_date)
+      }
+      setBusinessDateLoaded(true)
+    } catch (err) {
+      console.error('Failed to fetch current business date:', err)
+      setBusinessDateLoaded(true)
+    }
+  }
+
+  // 包裝 setBusinessDate 讓外部可以設定
+  const setBusinessDate = async (date: string) => {
+    setBusinessDateState(date)
+  }
+
   useEffect(() => {
+    fetchCurrentBusinessDate() // 先獲取當前營業日
     fetchCustomers()
     fetchProducts()
     fetchIchibanKujis()
     fetchDrafts()
-    fetchClosingStats() // 獲取當日結帳統計
     fetchPaymentAccounts() // 載入付款帳戶選項
   }, [])
+
+  // 營業日載入完成後，再獲取日結統計
+  useEffect(() => {
+    if (businessDateLoaded) {
+      fetchClosingStats()
+    }
+  }, [businessDateLoaded, salesMode])
 
   // Save pinned products to localStorage whenever it changes
   useEffect(() => {
@@ -225,9 +253,11 @@ export default function POSPage() {
     }
   }, [pinnedProductIds])
 
-  // Refetch today's sales and closing stats when sales mode changes
+  // Refetch business date and stats when sales mode changes
   useEffect(() => {
-    fetchClosingStats() // 重新獲取日結統計（會自動獲取今日銷售）
+    if (businessDateLoaded) {
+      fetchCurrentBusinessDate() // 重新獲取當前營業日（pos/live 可能不同）
+    }
   }, [salesMode])
 
   // Close customer dropdown when clicking outside
@@ -374,7 +404,7 @@ export default function POSPage() {
       alert(`${businessDate} 已經日結過了，無法重複日結`)
       return
     }
-    if (!confirm(`確定要對 ${businessDate} 執行日結嗎？`)) {
+    if (!confirm(`確定要對 ${businessDate} 執行日結嗎？\n\n日結後，新的銷售將記錄到下一個營業日。`)) {
       return
     }
 
@@ -389,7 +419,13 @@ export default function POSPage() {
       const data = await res.json()
 
       if (data.ok) {
-        alert('日結完成！')
+        // 日結成功，更新營業日為下一天
+        if (data.next_business_date) {
+          setBusinessDateState(data.next_business_date)
+          alert(`日結完成！\n\n下一個營業日：${data.next_business_date}`)
+        } else {
+          alert('日結完成！')
+        }
         setShowClosingModal(false)
         setClosingNote('')
         await fetchClosingStats()
@@ -1157,8 +1193,14 @@ export default function POSPage() {
             >
               日結
             </button>
-            <div className="text-sm text-slate-400 ml-2">
-              {new Date().toLocaleString('zh-TW')}
+            <div className="text-sm ml-2 flex items-center gap-3">
+              <span className="text-amber-400 font-medium" title="當前營業日（日結前的銷售都會記錄到這一天）">
+                營業日：{businessDate}
+              </span>
+              <span className="text-slate-500">|</span>
+              <span className="text-slate-400">
+                {new Date().toLocaleString('zh-TW')}
+              </span>
             </div>
           </div>
         </div>

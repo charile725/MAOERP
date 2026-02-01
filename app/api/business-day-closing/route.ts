@@ -351,8 +351,32 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // 5. 日結成功後，更新當前營業日為下一天
+    const nextBusinessDate = new Date(businessDate)
+    nextBusinessDate.setDate(nextBusinessDate.getDate() + 1)
+    const nextDateStr = nextBusinessDate.toISOString().split('T')[0]
+
+    const { error: updateError } = await (supabaseServer
+      .from('business_day_settings') as any)
+      .upsert({
+        source: source,
+        current_business_date: nextDateStr,
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: 'source'
+      })
+
+    if (updateError) {
+      console.warn('[日結] 更新營業日設定失敗:', updateError.message)
+      // 不影響日結結果，只記錄警告
+    }
+
     return NextResponse.json(
-      { ok: true, data: closing },
+      {
+        ok: true,
+        data: closing,
+        next_business_date: nextDateStr
+      },
       { status: 201 }
     )
   } catch (error) {
