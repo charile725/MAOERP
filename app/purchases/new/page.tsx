@@ -439,13 +439,14 @@ export default function NewPurchasePage() {
                         <td className="px-4 py-3 text-right">
                           <input
                             type="number"
-                            value={item.cost}
+                            value={Math.round(item.cost * 100) / 100}
                             onChange={(e) =>
                               updateItem(index, 'cost', parseFloat(e.target.value) || 0)
                             }
                             min="0"
                             step="0.01"
                             className="w-28 rounded border border-gray-300 bg-white px-2 py-1 text-right text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                            title="單價（參考值）"
                           />
                         </td>
                         <td className="px-4 py-3 text-right">
