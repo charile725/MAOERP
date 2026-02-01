@@ -469,7 +469,7 @@ export default function SalesPage() {
 
       if (data.ok) {
         alert('刪除成功，庫存已回補')
-        fetchSales()
+        fetchSales(currentPage) // 保持在當前頁面
       } else {
         alert(`刪除失敗：${data.error}`)
       }
@@ -524,7 +524,7 @@ export default function SalesPage() {
 
       if (data.ok) {
         alert(data.message || '出貨成功！')
-        fetchSales()
+        fetchSales(currentPage) // 保持在當前頁面
       } else {
         alert(`出貨失敗：${data.error}`)
       }
@@ -595,7 +595,7 @@ export default function SalesPage() {
         setSelectedItemIds(new Set())
         setItemQuantities(new Map())
         setShowQuantityModal(false)
-        fetchSales()
+        fetchSales(currentPage) // 保持在當前頁面
       } else {
         alert(`批量出貨失敗：${data.error}`)
       }
@@ -662,7 +662,7 @@ export default function SalesPage() {
         alert(`銷貨更正成功！\n\n原金額：${formatCurrency(data.data.original_total)}\n更正後：${formatCurrency(data.data.corrected_total)}\n差額：${formatCurrency(data.data.adjustment_amount)}\n回補庫存：${data.data.inventory_restored} 件`)
         setShowCorrectionModal(false)
         setSelectedSale(null)
-        fetchSales()
+        fetchSales(currentPage) // 保持在當前頁面
       } else {
         alert(`更正失敗：${data.error}`)
       }
@@ -715,7 +715,7 @@ export default function SalesPage() {
         alert(`轉購物金成功！\n\n客戶：${data.data.customer_name}\n轉換金額：${formatCurrency(data.data.conversion_amount)}\n購物金餘額：${formatCurrency(data.data.store_credit_before)} → ${formatCurrency(data.data.store_credit_after)}\n回補庫存：${data.data.inventory_restored} 件`)
         setShowStoreCreditModal(false)
         setSelectedSale(null)
-        fetchSales()
+        fetchSales(currentPage) // 保持在當前頁面
       } else {
         alert(`轉換失敗：${data.error}`)
       }
@@ -800,7 +800,7 @@ export default function SalesPage() {
 
       if (data.ok) {
         alert(`轉購物金成功！\n\n客戶：${data.data.customer_name}\n商品：${data.data.product_name}\n轉換數量：${data.data.converted_quantity} / ${data.data.original_quantity} 件\n購物金：${formatCurrency(data.data.store_credit_before)} → ${formatCurrency(data.data.store_credit_after)}\n回補庫存：${data.data.inventory_restored} 件\n新平均成本：${formatCurrency(data.data.new_avg_cost)}`)
-        fetchSales()
+        fetchSales(currentPage) // 保持在當前頁面
       } else {
         alert(`轉換失敗：${data.error}`)
       }
