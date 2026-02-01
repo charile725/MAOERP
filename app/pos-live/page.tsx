@@ -417,31 +417,7 @@ export default function POSPage() {
     const quantity = typeof quantityOrInfo === 'number' ? quantityOrInfo : 1
 
     setCart((prev) => {
-      // For ichiban kuji, don't stack quantities
-      if (ichibanInfo) {
-        return [
-          ...prev,
-          {
-            product_id: product.id,
-            quantity,
-            price: product.price,
-            product,
-            ichiban_kuji_id: ichibanInfo.kuji_id,
-            ichiban_kuji_prize_id: ichibanInfo.prize_id,
-            isFreeGift: false,
-          },
-        ]
-      }
-
-      // For regular products, stack quantities
-      const existing = prev.find((item) => item.product_id === product.id && !item.ichiban_kuji_prize_id)
-      if (existing) {
-        return prev.map((item) =>
-          item.product_id === product.id && !item.ichiban_kuji_prize_id
-            ? { ...item, quantity: item.quantity + quantity }
-            : item
-        )
-      }
+      // 每次加入都建立新項目，不再堆疊，方便獨立設定贈品/未出貨狀態
       return [
         ...prev,
         {
@@ -449,7 +425,10 @@ export default function POSPage() {
           quantity,
           price: product.price,
           product,
+          ichiban_kuji_id: ichibanInfo?.kuji_id,
+          ichiban_kuji_prize_id: ichibanInfo?.prize_id,
           isFreeGift: false,
+          isNotDelivered: false,
         },
       ]
     })
@@ -525,15 +504,13 @@ export default function POSPage() {
     addToCart(product, { kuji_id: kuji.id, prize_id: prize.id })
   }
 
-  const updateQuantity = (productId: string, quantity: number) => {
+  const updateQuantity = (index: number, quantity: number) => {
     if (quantity < 1) {
-      removeFromCart(productId)
+      removeFromCart('', index)
       return
     }
     setCart((prev) =>
-      prev.map((item) =>
-        item.product_id === productId && !item.ichiban_kuji_prize_id ? { ...item, quantity } : item
-      )
+      prev.map((item, i) => (i === index ? { ...item, quantity } : item))
     )
   }
 
@@ -1546,7 +1523,7 @@ export default function POSPage() {
                         {!item.ichiban_kuji_id ? (
                           <div className="flex items-center gap-1">
                             <button
-                              onClick={() => updateQuantity(item.product_id, item.quantity - 1)}
+                              onClick={() => updateQuantity(item.indices![0], item.quantity - 1)}
                               className="w-7 h-7 bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500 rounded font-bold text-sm text-black dark:text-gray-100"
                             >
                               −
@@ -1558,13 +1535,13 @@ export default function POSPage() {
                               onChange={(e) => {
                                 const newQty = parseInt(e.target.value) || 1
                                 if (newQty > 0) {
-                                  updateQuantity(item.product_id, newQty)
+                                  updateQuantity(item.indices![0], newQty)
                                 }
                               }}
                               className="w-14 h-7 text-center font-bold text-sm text-black dark:text-gray-100 bg-gray-100 dark:bg-gray-700 border-2 border-gray-300 dark:border-gray-600 rounded focus:border-blue-500 dark:focus:border-blue-400 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             />
                             <button
-                              onClick={() => updateQuantity(item.product_id, item.quantity + 1)}
+                              onClick={() => updateQuantity(item.indices![0], item.quantity + 1)}
                               className="w-7 h-7 bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500 rounded font-bold text-sm text-black dark:text-gray-100"
                             >
                               +

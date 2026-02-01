@@ -489,6 +489,7 @@ export default function StaffPurchasePage() {
       {/* 相機掃描 Modal */}
       {showCameraScanner && (
         <CameraScanner
+          isOpen={showCameraScanner}
           onScan={handleCameraScan}
           onClose={() => setShowCameraScanner(false)}
         />

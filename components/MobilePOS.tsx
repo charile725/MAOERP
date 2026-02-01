@@ -92,7 +92,7 @@ type MobilePOSProps = {
     handleCheckout: () => void
     addToCart: (product: Product, quantity?: number) => void
     removeFromCart: (productId: string, index?: number) => void
-    updateQuantity: (productId: string, quantity: number) => void
+    updateQuantity: (index: number, quantity: number) => void
     toggleFreeGift: (index: number) => void
     toggleNotDelivered: (index: number) => void
     searchQuery: string
@@ -319,7 +319,7 @@ export default function MobilePOS({
                                 <div className="flex items-center gap-2">
                                     <div className="flex items-center bg-slate-700 rounded-lg">
                                         <button
-                                            onClick={() => updateQuantity(item.product_id, item.quantity - 1)}
+                                            onClick={() => updateQuantity(index, item.quantity - 1)}
                                             className="px-3 py-1 text-white hover:bg-slate-600 rounded-l-lg"
                                         >
                                             −
@@ -334,7 +334,7 @@ export default function MobilePOS({
                                             onBlur={(e) => {
                                                 const newQty = parseInt(e.target.value) || 1
                                                 if (newQty > 0 && newQty !== item.quantity) {
-                                                    updateQuantity(item.product_id, newQty)
+                                                    updateQuantity(index, newQty)
                                                 } else if (newQty <= 0) {
                                                     e.target.value = String(item.quantity)
                                                 }
@@ -347,7 +347,7 @@ export default function MobilePOS({
                                             className="w-12 py-1 text-white text-center bg-transparent border-0 focus:outline-none focus:ring-0 focus:bg-slate-600 rounded"
                                         />
                                         <button
-                                            onClick={() => updateQuantity(item.product_id, item.quantity + 1)}
+                                            onClick={() => updateQuantity(index, item.quantity + 1)}
                                             className="px-3 py-1 text-white hover:bg-slate-600 rounded-r-lg"
                                         >
                                             +

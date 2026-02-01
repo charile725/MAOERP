@@ -630,6 +630,7 @@ export default function NewPurchasePage() {
       {/* 相機掃描 Modal */}
       {showCameraScanner && (
         <CameraScanner
+          isOpen={showCameraScanner}
           onScan={handleCameraScan}
           onClose={() => setShowCameraScanner(false)}
         />
