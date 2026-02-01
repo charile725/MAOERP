@@ -433,14 +433,35 @@ export async function DELETE(
             .eq('id', settlementId)
             .single()
 
-          if (settlement && settlement.account_id) {
+          if (settlement) {
             const refundAmount = refundInfo.amount
+
+            // 如果 settlement.account_id 為空，嘗試從 account_transactions 找
+            let accountIdToRefund = settlement.account_id
+            if (!accountIdToRefund) {
+              const { data: txn } = await (supabaseServer
+                .from('account_transactions') as any)
+                .select('account_id')
+                .eq('ref_type', 'settlement')
+                .eq('ref_id', settlementId)
+                .single()
+              
+              if (txn) {
+                accountIdToRefund = txn.account_id
+                console.log(`[Delete Purchase ${id}] Found account_id ${accountIdToRefund} from account_transactions for old-style settlement ${settlementId}`)
+              }
+            }
+
+            if (!accountIdToRefund) {
+              console.log(`[Delete Purchase ${id}] No account_id found for old-style settlement ${settlementId}, skipping refund`)
+              continue
+            }
 
             // 回補帳戶餘額
             const { data: account } = await (supabaseServer
               .from('accounts') as any)
               .select('balance')
-              .eq('id', settlement.account_id)
+              .eq('id', accountIdToRefund)
               .single()
 
             if (account && refundAmount > 0) {
@@ -451,9 +472,9 @@ export async function DELETE(
                   balance: newBalance,
                   updated_at: getTaiwanTime()
                 })
-                .eq('id', settlement.account_id)
+                .eq('id', accountIdToRefund)
 
-              console.log(`[Delete Purchase ${id}] Restored account ${settlement.account_id}: +${refundAmount} (from old-style settlement ${settlementId})`)
+              console.log(`[Delete Purchase ${id}] Restored account ${accountIdToRefund}: +${refundAmount} (from old-style settlement ${settlementId})`)
             }
 
             // 刪除這些 allocations
