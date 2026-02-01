@@ -212,12 +212,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 2. Insert purchase items (subtotal is auto-calculated by database)
+    // 2. Insert purchase items
     const purchaseItems = draft.items.map((item) => ({
       purchase_id: purchase.id,
       product_id: item.product_id,
       quantity: item.quantity,
       cost: item.cost,
+      subtotal: item.subtotal || (item.quantity * item.cost), // 使用傳入的小計或計算
     }))
 
     const { data: insertedItems, error: itemsError } = await (supabaseServer
@@ -234,8 +235,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 3. Calculate total
-    const total = draft.items.reduce((sum, item) => sum + (item.quantity * item.cost), 0)
+    // 3. Calculate total（使用傳入的小計）
+    const total = draft.items.reduce((sum, item) => sum + (item.subtotal || (item.quantity * item.cost)), 0)
 
     // 4. Update purchase to approved (老板创建的进货单直接审核通过，不需要审核)
     // 库存不在这里增加，等收货时再增加

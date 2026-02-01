@@ -16,6 +16,7 @@ type PurchaseItem = {
   product?: Product
   quantity: number
   cost: number
+  subtotal?: number // 用戶輸入的總額（優先使用）
 }
 
 export default function NewPurchasePage() {
@@ -162,14 +163,14 @@ export default function NewPurchasePage() {
     )
   }
 
-  // 更新小計並自動計算單位成本
+  // 更新小計（保存用戶輸入的總額，單價只作為參考）
   const updateItemSubtotal = (index: number, subtotal: number) => {
     setItems(
       items.map((item, i) => {
         if (i === index) {
-          // 小計 ÷ 數量 = 單位成本（四捨五入到兩位小數避免精度問題）
-          const cost = item.quantity > 0 ? Math.round((subtotal / item.quantity) * 100) / 100 : 0
-          return { ...item, cost }
+          // 保存用戶輸入的總額，單價只作為參考顯示
+          const cost = item.quantity > 0 ? subtotal / item.quantity : 0
+          return { ...item, cost, subtotal }
         }
         return item
       })
@@ -242,7 +243,12 @@ export default function NewPurchasePage() {
     }
   }
 
-  const total = items.reduce((sum, item) => sum + item.quantity * item.cost, 0)
+  // 取得品項小計（優先使用用戶輸入的 subtotal）
+  const getItemSubtotal = (item: PurchaseItem) => {
+    return item.subtotal !== undefined ? item.subtotal : item.quantity * item.cost
+  }
+
+  const total = items.reduce((sum, item) => sum + getItemSubtotal(item), 0)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -271,6 +277,7 @@ export default function NewPurchasePage() {
             product_id: item.product_id,
             quantity: item.quantity,
             cost: item.cost,
+            subtotal: getItemSubtotal(item), // 傳送實際小計
           })),
         }),
       })
@@ -444,7 +451,7 @@ export default function NewPurchasePage() {
                         <td className="px-4 py-3 text-right">
                           <input
                             type="number"
-                            value={Math.round(item.quantity * item.cost)}
+                            value={getItemSubtotal(item)}
                             onChange={(e) =>
                               updateItemSubtotal(index, parseFloat(e.target.value) || 0)
                             }

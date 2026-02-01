@@ -106,6 +106,7 @@ export const purchaseDraftSchema = z.object({
       product_id: z.string().uuid(),
       quantity: z.number().int().positive('Quantity must be positive'),
       cost: z.number().min(0, 'Cost must be positive'),
+      subtotal: z.number().min(0).optional(), // 用戶輸入的小計（優先使用）
     })
   ).min(1, 'At least one item is required'),
 })
