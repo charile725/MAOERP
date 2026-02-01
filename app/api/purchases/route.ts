@@ -83,6 +83,26 @@ export async function GET(request: NextRequest) {
     }
 
     // Calculate summary for each purchase
+    // 收集所有 purchase_item IDs 來查詢付款狀態
+    const allItemIds = filteredData?.flatMap((p: any) => 
+      (p.purchase_items || []).map((item: any) => item.id)
+    ) || []
+
+    // 查詢每個品項的付款狀態
+    let paymentStatusMap: Map<string, string> = new Map()
+    if (allItemIds.length > 0) {
+      const { data: apRecords } = await supabaseServer
+        .from('partner_accounts')
+        .select('purchase_item_id, status')
+        .in('purchase_item_id', allItemIds)
+
+      if (apRecords) {
+        apRecords.forEach((ap: any) => {
+          paymentStatusMap.set(ap.purchase_item_id, ap.status)
+        })
+      }
+    }
+
     const purchasesWithSummary = filteredData?.map((purchase: any) => {
       const items = purchase.purchase_items || []
       const totalQuantity = items.reduce((sum: number, item: any) => sum + item.quantity, 0)
@@ -90,12 +110,18 @@ export async function GET(request: NextRequest) {
         ? items.reduce((sum: number, item: any) => sum + item.cost, 0) / items.length
         : 0
 
+      // 為每個品項加入付款狀態
+      const itemsWithPaymentStatus = items.map((item: any) => ({
+        ...item,
+        payment_status: paymentStatusMap.get(item.id) || (purchase.is_paid ? 'paid' : null)
+      }))
+
       return {
         ...purchase,
         item_count: items.length,
         total_quantity: totalQuantity,
         avg_cost: avgCost,
-        purchase_items: items // Keep items for detailed view
+        purchase_items: itemsWithPaymentStatus
       }
     })
 

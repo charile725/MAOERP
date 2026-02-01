@@ -264,23 +264,30 @@ export async function DELETE(
     if (itemIds.length > 0) {
       const { data: apRecords } = await (supabaseServer
         .from('partner_accounts') as any)
-        .select('id')
+        .select('id, status, received_paid')
         .in('purchase_item_id', itemIds)
 
       if (apRecords && apRecords.length > 0) {
         const apIds = apRecords.map((ap: any) => ap.id)
 
-        // 查詢關聯的 settlement_allocations
+        // 查詢關聯的 settlement_allocations（這些是針對此進貨單品項的付款）
         const { data: allocations } = await (supabaseServer
           .from('settlement_allocations') as any)
-          .select('settlement_id, amount')
+          .select('id, settlement_id, partner_account_id, amount')
           .in('partner_account_id', apIds)
 
         if (allocations && allocations.length > 0) {
-          // 找出所有關聯的 settlements
-          const settlementIds = [...new Set(allocations.map((a: any) => a.settlement_id))]
+          // 按 settlement_id 分組，計算每個 settlement 要回補的金額
+          const settlementRefunds: Map<string, { amount: number, allocationIds: string[] }> = new Map()
+          
+          for (const allocation of allocations) {
+            const existing = settlementRefunds.get(allocation.settlement_id) || { amount: 0, allocationIds: [] }
+            existing.amount += allocation.amount
+            existing.allocationIds.push(allocation.id)
+            settlementRefunds.set(allocation.settlement_id, existing)
+          }
 
-          for (const settlementId of settlementIds) {
+          for (const [settlementId, refundInfo] of settlementRefunds) {
             // 查詢 settlement 資訊
             const { data: settlement } = await (supabaseServer
               .from('settlements') as any)
@@ -289,22 +296,18 @@ export async function DELETE(
               .single()
 
             if (settlement && settlement.account_id) {
-              // 刪除 account_transactions 記錄
-              await (supabaseServer
-                .from('account_transactions') as any)
-                .delete()
-                .eq('ref_type', 'settlement')
-                .eq('ref_id', settlementId)
+              // 只回補這張進貨單相關的金額（不是整個 settlement 的金額）
+              const refundAmount = refundInfo.amount
 
-              // 回補帳戶餘額（刪除場景：直接還原，不創建反向記錄）
+              // 回補帳戶餘額
               const { data: account } = await (supabaseServer
                 .from('accounts') as any)
                 .select('balance')
                 .eq('id', settlement.account_id)
                 .single()
 
-              if (account) {
-                const newBalance = Number(account.balance) + settlement.amount
+              if (account && refundAmount > 0) {
+                const newBalance = Number(account.balance) + refundAmount
                 await (supabaseServer
                   .from('accounts') as any)
                   .update({
@@ -313,21 +316,47 @@ export async function DELETE(
                   })
                   .eq('id', settlement.account_id)
 
-                console.log(`[Delete Purchase ${id}] Restored account ${settlement.account_id}: +${settlement.amount}`)
+                console.log(`[Delete Purchase ${id}] Restored account ${settlement.account_id}: +${refundAmount} (from settlement ${settlementId})`)
+              }
+
+              // 刪除這些 allocations
+              await (supabaseServer
+                .from('settlement_allocations') as any)
+                .delete()
+                .in('id', refundInfo.allocationIds)
+
+              // 檢查這個 settlement 是否還有其他 allocations，如果沒有就刪除
+              const { data: remainingAllocations } = await (supabaseServer
+                .from('settlement_allocations') as any)
+                .select('id')
+                .eq('settlement_id', settlementId)
+
+              if (!remainingAllocations || remainingAllocations.length === 0) {
+                // 刪除 account_transactions 記錄
+                await (supabaseServer
+                  .from('account_transactions') as any)
+                  .delete()
+                  .eq('ref_type', 'settlement')
+                  .eq('ref_id', settlementId)
+
+                // 刪除 settlement
+                await (supabaseServer
+                  .from('settlements') as any)
+                  .delete()
+                  .eq('id', settlementId)
+                
+                console.log(`[Delete Purchase ${id}] Deleted empty settlement ${settlementId}`)
+              } else {
+                // 更新 settlement 的 amount
+                const newSettlementAmount = settlement.amount - refundAmount
+                await (supabaseServer
+                  .from('settlements') as any)
+                  .update({ amount: newSettlementAmount })
+                  .eq('id', settlementId)
+                
+                console.log(`[Delete Purchase ${id}] Updated settlement ${settlementId} amount: ${settlement.amount} -> ${newSettlementAmount}`)
               }
             }
-
-            // 刪除 settlement_allocations
-            await (supabaseServer
-              .from('settlement_allocations') as any)
-              .delete()
-              .eq('settlement_id', settlementId)
-
-            // 刪除 settlement
-            await (supabaseServer
-              .from('settlements') as any)
-              .delete()
-              .eq('id', settlementId)
           }
         }
       }

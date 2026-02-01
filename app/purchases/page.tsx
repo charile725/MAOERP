@@ -12,6 +12,7 @@ type PurchaseItem = {
   product_id: string
   received_quantity: number
   is_received: boolean
+  payment_status?: 'unpaid' | 'partial' | 'paid'  // 付款狀態
   products: {
     name: string
     item_code: string
@@ -65,6 +66,7 @@ type FlattenedItem = {
   is_received: boolean
   cost: number
   subtotal?: number  // 小計（優先使用，避免小數點問題）
+  payment_status?: 'unpaid' | 'partial' | 'paid'  // 品項付款狀態
 }
 
 type VendorItemGroup = {
@@ -195,7 +197,8 @@ export default function PurchasesPage() {
             received_quantity: item.received_quantity || 0,
             is_received: item.is_received,
             cost: item.cost,
-            subtotal: item.subtotal
+            subtotal: item.subtotal,
+            payment_status: item.payment_status
           })
           groups[key].total_amount += item.subtotal || Math.round(item.quantity * item.cost)
           groups[key].total_quantity += item.quantity
@@ -501,6 +504,7 @@ export default function PurchasesPage() {
                                   <>
                                     <th className="py-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">成本</th>
                                     <th className="py-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">小計</th>
+                                    <th className="py-2 text-center text-xs font-semibold text-gray-900 dark:text-gray-100">付款</th>
                                   </>
                                 )}
                                 <th className="py-2 text-left text-xs font-semibold text-gray-900 dark:text-gray-100">進貨單</th>
@@ -551,6 +555,21 @@ export default function PurchasesPage() {
                                         </td>
                                         <td className="py-3 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">
                                           {formatCurrency(item.subtotal || Math.round(item.quantity * item.cost))}
+                                        </td>
+                                        <td className="py-3 text-center text-sm">
+                                          <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${
+                                            item.payment_status === 'paid'
+                                              ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                                              : item.payment_status === 'partial'
+                                              ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                                              : item.payment_status === 'unpaid'
+                                              ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                                              : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
+                                          }`}>
+                                            {item.payment_status === 'paid' ? '已付' :
+                                             item.payment_status === 'partial' ? '部分' :
+                                             item.payment_status === 'unpaid' ? '未付' : '-'}
+                                          </span>
                                         </td>
                                       </>
                                     )}
@@ -744,6 +763,7 @@ export default function PurchasesPage() {
                                           <>
                                             <th className="pb-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">成本</th>
                                             <th className="pb-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">小計</th>
+                                            <th className="pb-2 text-center text-xs font-semibold text-gray-900 dark:text-gray-100">付款</th>
                                           </>
                                         )}
                                         {(isAdmin || purchase.status === 'approved') && (
@@ -796,6 +816,21 @@ export default function PurchasesPage() {
                                                 </td>
                                                 <td className="py-2 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">
                                                   {formatCurrency(item.subtotal || Math.round(item.quantity * item.cost))}
+                                                </td>
+                                                <td className="py-2 text-center text-sm">
+                                                  <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${
+                                                    item.payment_status === 'paid'
+                                                      ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                                                      : item.payment_status === 'partial'
+                                                      ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                                                      : item.payment_status === 'unpaid'
+                                                      ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                                                      : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
+                                                  }`}>
+                                                    {item.payment_status === 'paid' ? '已付' :
+                                                     item.payment_status === 'partial' ? '部分' :
+                                                     item.payment_status === 'unpaid' ? '未付' : '-'}
+                                                  </span>
                                                 </td>
                                               </>
                                             )}
