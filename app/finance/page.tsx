@@ -41,7 +41,8 @@ const ACCOUNT_TYPE_LABELS = {
 }
 
 type ClosingStats = {
-  last_closing_time: string
+  business_date: string
+  already_closed: boolean
   current_stats: {
     sales_count: number
     total_sales: number
@@ -60,6 +61,11 @@ export default function FinanceDashboardPage() {
   const [closingStats, setClosingStats] = useState<ClosingStats | null>(null)
   const [closingNote, setClosingNote] = useState('')
   const [isClosing, setIsClosing] = useState(false)
+  const [closingBusinessDate, setClosingBusinessDate] = useState<string>(() => {
+    const now = new Date()
+    const tw = new Date(now.getTime() + 8 * 60 * 60 * 1000)
+    return tw.toISOString().split('T')[0]
+  })
   const [userRole, setUserRole] = useState<UserRole | null>(null)
 
   const isAdmin = userRole === 'admin'
@@ -91,12 +97,11 @@ export default function FinanceDashboardPage() {
     }
   }
 
-  const fetchClosingStats = async (source: 'pos' | 'live') => {
+  const fetchClosingStats = async (source: 'pos' | 'live', date?: string) => {
     try {
-      console.log('Fetching closing stats for source:', source)
-      const res = await fetch(`/api/business-day-closing?source=${source}`)
+      const dateParam = date || closingBusinessDate
+      const res = await fetch(`/api/business-day-closing?source=${source}&business_date=${dateParam}`)
       const result = await res.json()
-      console.log('Closing stats result:', result)
       if (result.ok) {
         setClosingStats(result.data)
       }
@@ -116,7 +121,11 @@ export default function FinanceDashboardPage() {
   }, [closingSource])
 
   const handleClosing = async () => {
-    if (!confirm(`確定要執行${closingSource === 'pos' ? '店裡' : '直播'}日結嗎？`)) {
+    if (closingStats?.already_closed) {
+      alert(`${closingBusinessDate} 已經日結過了，無法重複日結`)
+      return
+    }
+    if (!confirm(`確定要對 ${closingBusinessDate} 執行${closingSource === 'pos' ? '店裡' : '直播'}日結嗎？`)) {
       return
     }
 
@@ -128,6 +137,7 @@ export default function FinanceDashboardPage() {
         body: JSON.stringify({
           source: closingSource,
           note: closingNote,
+          business_date: closingBusinessDate,
         }),
       })
 
@@ -305,12 +315,33 @@ export default function FinanceDashboardPage() {
             </button>
           </div>
 
+          {/* 日期選擇 */}
+          <div className="mb-4">
+            <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              營業日期
+            </label>
+            <input
+              type="date"
+              value={closingBusinessDate}
+              onChange={(e) => {
+                setClosingBusinessDate(e.target.value)
+                fetchClosingStats(closingSource, e.target.value)
+              }}
+              className="w-full rounded-lg border border-gray-300 px-4 py-2 text-gray-900 focus:border-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+            />
+          </div>
+
+          {/* 已日結警告 */}
+          {closingStats?.already_closed && (
+            <div className="mb-4 rounded-lg border-2 border-red-300 bg-red-50 p-3 dark:border-red-700 dark:bg-red-900/20">
+              <div className="font-semibold text-red-800 dark:text-red-300">
+                {closingBusinessDate} 已經日結過了，無法重複日結
+              </div>
+            </div>
+          )}
+
           {closingStats && (
             <div className="mb-4 space-y-3">
-              <div className="text-sm text-gray-600 dark:text-gray-400">
-                上次結帳時間：{new Date(closingStats.last_closing_time).toLocaleString('zh-TW', { timeZone: 'UTC' })}
-              </div>
-
               <div className="grid gap-3 md:grid-cols-3">
                 <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-700">
                   <div className="text-xs text-gray-600 dark:text-gray-400">銷售筆數</div>
@@ -370,10 +401,10 @@ export default function FinanceDashboardPage() {
 
           <button
             onClick={handleClosing}
-            disabled={isClosing || !closingStats}
+            disabled={isClosing || !closingStats || closingStats.already_closed}
             className="w-full rounded-lg bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
-            {isClosing ? '處理中...' : `執行${closingSource === 'pos' ? '店裡' : '直播'}日結`}
+            {isClosing ? '處理中...' : closingStats?.already_closed ? '已日結' : `執行${closingSource === 'pos' ? '店裡' : '直播'}日結`}
           </button>
         </div>
         )}

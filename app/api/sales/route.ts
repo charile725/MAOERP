@@ -12,6 +12,7 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams
     const dateFrom = searchParams.get('date_from')
     const dateTo = searchParams.get('date_to')
+    const businessDate = searchParams.get('business_date') // 用於日結：查詢特定營業日的訂單
     const createdFrom = searchParams.get('created_from') // 用於日結：從某時間點之後創建的訂單
     const createdTo = searchParams.get('created_to') // 用於營業日報表：到某時間點之前創建的訂單
     const customerCode = searchParams.get('customer_code')
@@ -42,6 +43,10 @@ export async function GET(request: NextRequest) {
         )
       `)
       .order('created_at', { ascending: false })
+
+    if (businessDate) {
+      query = query.eq('sale_date', businessDate)
+    }
 
     if (dateFrom) {
       query = query.gte('sale_date', dateFrom)

@@ -30,7 +30,8 @@
       "Bash(cd:*)",
       "Bash(npx tsc:*)",
       "Bash(npx eslint:*)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(npx next build)"
     ]
   }
 }

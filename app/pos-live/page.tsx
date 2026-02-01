@@ -170,7 +170,12 @@ export default function POSPage() {
   const quantityInputRef = useRef<HTMLInputElement>(null)
 
   // Business day closing (日結)
-  const [lastClosingTime, setLastClosingTime] = useState<string>('')
+  const [businessDate, setBusinessDate] = useState<string>(() => {
+    const now = new Date()
+    const tw = new Date(now.getTime() + 8 * 60 * 60 * 1000)
+    return tw.toISOString().split('T')[0]
+  })
+  const [alreadyClosed, setAlreadyClosed] = useState(false)
   const [closingStats, setClosingStats] = useState<any>(null)
   const [showClosingModal, setShowClosingModal] = useState(false)
   const [closingNote, setClosingNote] = useState('')
@@ -190,7 +195,7 @@ export default function POSPage() {
     fetchProducts()
     fetchIchibanKujis()
     fetchDrafts()
-    fetchClosingStats() // 先獲取結帳統計，包含 lastClosingTime
+    fetchClosingStats() // 獲取當日結帳統計
     fetchPaymentAccounts() // 載入付款帳戶選項
   }, [])
 
@@ -303,47 +308,31 @@ export default function POSPage() {
     }
   }
 
-  const fetchClosingStats = async () => {
+  const fetchClosingStats = async (dateOverride?: string) => {
     try {
-      console.log('[fetchClosingStats] 開始獲取日結統計，source:', salesMode)
-      const res = await fetch(`/api/business-day-closing?source=${salesMode}`)
+      const date = dateOverride || businessDate
+      const res = await fetch(`/api/business-day-closing?source=${salesMode}&business_date=${date}`)
       const data = await res.json()
-      console.log('[fetchClosingStats] API 響應:', data)
 
       if (data.ok) {
-        console.log('[fetchClosingStats] last_closing_time:', data.data.last_closing_time)
-        console.log('[fetchClosingStats] current_stats:', data.data.current_stats)
-
-        setLastClosingTime(data.data.last_closing_time)
         setClosingStats(data.data.current_stats)
+        setAlreadyClosed(data.data.already_closed)
+        if (dateOverride) setBusinessDate(dateOverride)
 
-        // 獲取結帳時間後，再獲取當日銷售
-        await fetchTodaySales(data.data.last_closing_time)
+        await fetchTodaySales(date)
       }
     } catch (err) {
       console.error('Failed to fetch closing stats:', err)
     }
   }
 
-  const fetchTodaySales = async (closingTime?: string) => {
+  const fetchTodaySales = async (date?: string) => {
     try {
-      const timeParam = closingTime || lastClosingTime
-      if (!timeParam) {
-        console.log('[fetchTodaySales] 沒有 closing time，跳過')
-        return
-      }
-
-      console.log('[fetchTodaySales] 查詢當日銷售，created_from:', timeParam, 'source:', salesMode)
-
-      // 使用 encodeURIComponent 避免 + 符號被轉換為空格
-      const encodedTime = encodeURIComponent(timeParam)
-      const res = await fetch(`/api/sales?created_from=${encodedTime}&source=${salesMode}`)
+      const dateParam = date || businessDate
+      const res = await fetch(`/api/sales?business_date=${dateParam}&source=${salesMode}`)
       const data = await res.json()
 
-      if (!data.ok) {
-        console.error('[fetchTodaySales] 查詢失敗:', data.error)
-      } else {
-        console.log('[fetchTodaySales] 返回的銷售記錄:', data.data?.length, '筆')
+      if (data.ok) {
         setTodaySales(data.data || [])
       }
     } catch (err) {
@@ -352,33 +341,28 @@ export default function POSPage() {
   }
 
   const handleClosing = async () => {
-    if (!confirm('確定要執行日結嗎？\n\n日結後將結算當日營業額，並開始新的營業日。')) {
+    if (alreadyClosed) {
+      alert(`${businessDate} 已經日結過了，無法重複日結`)
+      return
+    }
+    if (!confirm(`確定要對 ${businessDate} 執行日結嗎？`)) {
       return
     }
 
     setClosingInProgress(true)
     try {
-      console.log('[日結] 開始執行日結，source:', salesMode)
       const res = await fetch('/api/business-day-closing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ note: closingNote, source: salesMode }),
+        body: JSON.stringify({ note: closingNote, source: salesMode, business_date: businessDate }),
       })
 
       const data = await res.json()
-      console.log('[日結] API 響應:', data)
 
       if (data.ok) {
-        console.log('[日結] 日結成功，新的 closing_time:', data.data?.closing_time)
         alert('日結完成！')
         setShowClosingModal(false)
         setClosingNote('')
-
-        // 稍微延遲後重新獲取，確保數據庫已更新
-        await new Promise(resolve => setTimeout(resolve, 500))
-
-        // 重新獲取結帳統計
-        console.log('[日結] 重新獲取日結統計...')
         await fetchClosingStats()
       } else {
         alert(`日結失敗：${data.error}`)
@@ -1069,10 +1053,15 @@ export default function POSPage() {
         handleSaveDraft={handleSaveDraft}
         handleLoadDraft={handleLoadDraft}
         handleDeleteDraft={handleDeleteDraft}
-        lastClosingTime={lastClosingTime}
+        businessDate={businessDate}
+        alreadyClosed={alreadyClosed}
         closingStats={closingStats}
         fetchClosingStats={fetchClosingStats}
         handleClosing={handleClosing}
+        setBusinessDate={async (date: string) => {
+          setBusinessDate(date)
+          await fetchClosingStats(date)
+        }}
       />
     )
   }
@@ -1088,7 +1077,7 @@ export default function POSPage() {
           }`}>
           <div className="flex items-center gap-4">
             <h1 className="text-xl font-bold text-white">
-              🏪 收銀系統
+              收銀系統
             </h1>
           </div>
           <div className="flex items-center gap-2">
@@ -1176,7 +1165,7 @@ export default function POSPage() {
                         }
                       }, 100)
                     }}
-                    placeholder="🔍 掃描或搜尋商品..."
+                    placeholder="掃描或搜尋商品..."
                     className="flex-1 rounded-lg px-3 py-2.5 text-sm text-white bg-slate-700 border border-slate-600 focus:border-indigo-500 focus:outline-none placeholder-slate-400"
                   />
                   <button
@@ -1184,7 +1173,7 @@ export default function POSPage() {
                     className="px-3 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors flex items-center gap-1"
                     title="相機掃描"
                   >
-                    📷
+                    相機
                   </button>
                 </div>
 
@@ -1218,7 +1207,7 @@ export default function POSPage() {
                         >
                           {/* 標籤區 */}
                           <div className="absolute top-1.5 right-1.5 flex gap-1">
-                            {isPinned && <span className="text-xs">⭐</span>}
+                            {isPinned && <span className="text-xs">已固定</span>}
                             {isLowStock && <span className="text-[10px] bg-amber-500 text-white px-1 rounded">低庫存</span>}
                           </div>
                           {/* 商品名 */}
@@ -1314,7 +1303,7 @@ export default function POSPage() {
                             (kuji.barcode && kuji.barcode.toLowerCase().includes(searchLower))
                         }).length === 0 && (
                             <div className="col-span-3 text-center text-gray-500 dark:text-gray-400 py-10">
-                              <div className="text-4xl mb-2">🎁</div>
+                              <div className="text-4xl mb-2"></div>
                               <div>{searchQuery ? '找不到相關的一番賞' : '目前沒有一番賞'}</div>
                             </div>
                           )}
@@ -1397,7 +1386,7 @@ export default function POSPage() {
             <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2">
               {cart.length === 0 ? (
                 <div className="text-center text-slate-500 mt-20">
-                  <div className="text-4xl mb-2">🛒</div>
+                  <div className="text-4xl mb-2"></div>
                   <div className="text-slate-400">請點選商品</div>
                 </div>
               ) : (
@@ -1565,7 +1554,7 @@ export default function POSPage() {
                     return (
                       <div key={kuji_id} className="mb-3 p-2 bg-emerald-900/30 border border-emerald-600 rounded-lg">
                         <div className="text-sm font-medium text-emerald-400">
-                          🎉 {info.kuji?.name} 組合優惠
+                          {info.kuji?.name} 組合優惠
                         </div>
                         <div className="text-xs text-emerald-500">
                           {info.applicableCombo.draws} 抽 {formatCurrency(info.applicableCombo.price)} (已購 {info.totalCount} 抽)
@@ -1745,7 +1734,7 @@ export default function POSPage() {
                         : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
                         }`}
                     >
-                      {account.display_name || account.account_name}
+                      {(account.display_name || account.account_name).replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '')}
                     </button>
                   ))}
                 </div>
@@ -1891,7 +1880,7 @@ export default function POSPage() {
               <div className="p-4 overflow-y-auto custom-scrollbar max-h-[calc(80vh-80px)]">
                 {drafts.length === 0 ? (
                   <div className="text-center text-gray-500 dark:text-gray-400 py-10">
-                    <div className="text-4xl mb-2">📋</div>
+                    <div className="text-4xl mb-2"></div>
                     <div>目前沒有暫存訂單</div>
                   </div>
                 ) : (
@@ -1953,14 +1942,14 @@ export default function POSPage() {
               <div className={`text-white px-6 py-4 rounded-t-lg flex items-center justify-between ${salesMode === 'live' ? 'bg-pink-600' : 'bg-blue-500'
                 }`}>
                 <h2 className="text-xl font-bold">
-                  今日交易 - {salesMode === 'live' ? '📱 直播模式' : '🏪 店裡模式'}
+                  今日交易 - {salesMode === 'live' ? '直播模式' : '店裡模式'}
                 </h2>
                 <button onClick={() => setShowTodaySales(false)} className="text-2xl hover:text-gray-200">×</button>
               </div>
               <div className="p-4 overflow-y-auto custom-scrollbar max-h-[calc(80vh-80px)]">
                 {todaySales.length === 0 ? (
                   <div className="text-center text-gray-500 dark:text-gray-400 py-10">
-                    <div className="text-4xl mb-2">📊</div>
+                    <div className="text-4xl mb-2"></div>
                     <div>今天還沒有交易記錄</div>
                   </div>
                 ) : (
@@ -2142,12 +2131,35 @@ export default function POSPage() {
             <div className="bg-white dark:bg-gray-800 w-full max-w-2xl rounded-lg shadow-xl" onClick={(e) => e.stopPropagation()}>
               <div className="bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-4 rounded-t-lg">
                 <h2 className="text-2xl font-bold">營業日結算</h2>
-                <p className="text-sm opacity-90 mt-1">
-                  結算時間：{new Date(lastClosingTime).toLocaleString('zh-TW', { timeZone: 'UTC' })} ~ 現在
-                </p>
               </div>
 
               <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                {/* 日期選擇 */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    營業日期
+                  </label>
+                  <input
+                    type="date"
+                    value={businessDate}
+                    onChange={async (e) => {
+                      const newDate = e.target.value
+                      setBusinessDate(newDate)
+                      await fetchClosingStats(newDate)
+                    }}
+                    className="w-full border dark:border-gray-600 rounded-lg px-4 py-2 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+
+                {/* 已日結警告 */}
+                {alreadyClosed && (
+                  <div className="bg-red-50 dark:bg-red-900/20 border-2 border-red-300 dark:border-red-700 rounded-lg p-4">
+                    <div className="text-red-800 dark:text-red-300 font-semibold">
+                      {businessDate} 已經日結過了，無法重複日結
+                    </div>
+                  </div>
+                )}
+
                 {/* 統計摘要 */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
@@ -2174,7 +2186,7 @@ export default function POSPage() {
                     <div className="flex justify-between items-center">
                       <div>
                         <div className="text-sm font-medium text-purple-800 dark:text-purple-400 mb-1">
-                          🎭 假營業額（轉購物金前）
+                          假營業額（轉購物金前）
                         </div>
                         <div className="text-xs text-purple-600 dark:text-purple-400">
                           含 {closingStats.store_credit_count} 筆已轉購物金
@@ -2197,7 +2209,7 @@ export default function POSPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-lg p-4 border-2 border-emerald-200 dark:border-emerald-700">
                     <div className="text-sm font-medium text-emerald-800 dark:text-emerald-400 mb-1">
-                      ✅ 已收款
+                      已收款
                     </div>
                     <div className="text-xl font-bold text-emerald-600 dark:text-emerald-300">
                       {formatCurrency(closingStats.paid_sales || 0)}
@@ -2208,7 +2220,7 @@ export default function POSPage() {
                   </div>
                   <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-4 border-2 border-orange-200 dark:border-orange-700">
                     <div className="text-sm font-medium text-orange-800 dark:text-orange-400 mb-1">
-                      ⏳ 未收款
+                      未收款
                     </div>
                     <div className="text-xl font-bold text-orange-600 dark:text-orange-300">
                       {formatCurrency(closingStats.unpaid_sales || 0)}
@@ -2221,7 +2233,7 @@ export default function POSPage() {
 
                 {/* 已收款明細 */}
                 <div className="border-t dark:border-gray-700 pt-4">
-                  <h3 className="font-semibold text-lg mb-3 text-gray-900 dark:text-gray-100">✅ 已收款明細</h3>
+                  <h3 className="font-semibold text-lg mb-3 text-gray-900 dark:text-gray-100">已收款明細</h3>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="flex justify-between items-center bg-emerald-50 dark:bg-emerald-900/20 rounded px-4 py-2 border border-emerald-200 dark:border-emerald-700">
                       <span className="text-emerald-700 dark:text-emerald-300">現金</span>
@@ -2268,10 +2280,10 @@ export default function POSPage() {
               <div className="border-t dark:border-gray-700 px-6 py-4 flex gap-3">
                 <button
                   onClick={handleClosing}
-                  disabled={closingInProgress}
+                  disabled={closingInProgress || alreadyClosed}
                   className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-bold py-3 rounded-lg transition-all"
                 >
-                  {closingInProgress ? '結算中...' : '確認日結'}
+                  {closingInProgress ? '結算中...' : alreadyClosed ? '已日結' : '確認日結'}
                 </button>
                 <button
                   onClick={() => setShowClosingModal(false)}

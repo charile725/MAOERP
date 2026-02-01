@@ -474,6 +474,7 @@ export interface Database {
           id: string
           source: 'pos' | 'live'
           closing_time: string
+          business_date: string
           sales_count: number
           total_sales: number
           total_cash: number
@@ -501,6 +502,7 @@ export interface Database {
           id?: string
           source: 'pos' | 'live'
           closing_time?: string
+          business_date: string
           sales_count?: number
           total_sales?: number
           total_cash?: number
@@ -528,6 +530,7 @@ export interface Database {
           id?: string
           source?: 'pos' | 'live'
           closing_time?: string
+          business_date?: string
           sales_count?: number
           total_sales?: number
           total_cash?: number

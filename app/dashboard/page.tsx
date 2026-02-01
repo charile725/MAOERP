@@ -77,6 +77,7 @@ type BusinessDayClosing = {
   id: string
   source: 'pos' | 'live'
   closing_time: string
+  business_date: string
   sales_count: number
   total_sales: number
   paid_sales: number
@@ -121,26 +122,28 @@ export default function DashboardPage() {
   useEffect(() => {
     // 當切換到營業日模式時，獲取日結記錄列表
     if (reportMode === 'by_business_day') {
-      // 營業日模式不支持 'all'，自動切換到 'pos'
-      if (sourceFilter === 'all') {
-        setSourceFilter('pos')
-      } else {
-        fetchBusinessDayClosings()
-      }
+      fetchBusinessDayClosings()
     }
-  }, [reportMode, sourceFilter])
+  }, [reportMode])
 
   const fetchBusinessDayClosings = async () => {
     try {
-      const source = sourceFilter === 'all' ? 'pos' : sourceFilter
-      const res = await fetch(`/api/business-day-closing?source=${source}&list=true`)
-      const data = await res.json()
-      if (data.ok) {
-        setBusinessDayClosings(data.data || [])
-        // 預設選擇最新的一筆
-        if (data.data && data.data.length > 0) {
-          setSelectedClosingId(data.data[0].id)
-        }
+      // 同時獲取兩個通路的日結記錄
+      const [posRes, liveRes] = await Promise.all([
+        fetch('/api/business-day-closing?source=pos&list=true'),
+        fetch('/api/business-day-closing?source=live&list=true')
+      ])
+      const [posData, liveData] = await Promise.all([posRes.json(), liveRes.json()])
+
+      // 合併並按營業日期排序
+      const allClosings = [
+        ...(posData.ok ? posData.data : []),
+        ...(liveData.ok ? liveData.data : [])
+      ].sort((a, b) => b.business_date.localeCompare(a.business_date))
+
+      setBusinessDayClosings(allClosings)
+      if (allClosings.length > 0) {
+        setSelectedClosingId(allClosings[0].id)
       }
     } catch (err) {
       console.error('Failed to fetch business day closings:', err)
@@ -166,15 +169,11 @@ export default function DashboardPage() {
           return
         }
 
-        const closingIndex = businessDayClosings.findIndex(c => c.id === selectedClosingId)
-        const previousClosing = businessDayClosings[closingIndex + 1]
+        // 使用 business_date 和 source 查詢該營業日的銷售
+        const sourceParam = sourceFilter !== 'all' ? `&source=${sourceFilter}` : `&source=${selectedClosing.source}`
 
-        const createdFrom = previousClosing ? previousClosing.closing_time : '1970-01-01T00:00:00Z'
-        const createdTo = selectedClosing.closing_time
-        const sourceParam = sourceFilter !== 'all' ? `&source=${sourceFilter}` : ''
-
-        salesUrl = `/api/sales?created_from=${encodeURIComponent(createdFrom)}&created_to=${encodeURIComponent(createdTo)}${sourceParam}`
-        expensesUrl = `/api/expenses?date_from=${createdFrom.split('T')[0]}&date_to=${createdTo.split('T')[0]}`
+        salesUrl = `/api/sales?business_date=${selectedClosing.business_date}${sourceParam}`
+        expensesUrl = `/api/expenses?date_from=${selectedClosing.business_date}&date_to=${selectedClosing.business_date}`
       } else {
         const sourceParam = sourceFilter !== 'all' ? `&source=${sourceFilter}` : ''
         salesUrl = `/api/sales?date_from=${dateFrom}&date_to=${dateTo}${sourceParam}`
@@ -333,7 +332,7 @@ export default function DashboardPage() {
                 : 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600'
                 }`}
             >
-              📅 按日期查看
+              按日期查看
             </button>
             <button
               onClick={() => setReportMode('by_business_day')}
@@ -342,7 +341,7 @@ export default function DashboardPage() {
                 : 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600'
                 }`}
             >
-              💼 按營業日查看
+              按營業日查看
             </button>
           </div>
         </div>
@@ -394,7 +393,7 @@ export default function DashboardPage() {
                       : 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600'
                       }`}
                   >
-                    🏪 店裡
+                    店裡
                   </button>
                   <button
                     onClick={() => setSourceFilter('live')}
@@ -403,7 +402,7 @@ export default function DashboardPage() {
                       : 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600'
                       }`}
                   >
-                    📱 直播
+                    直播
                   </button>
                 </div>
               </div>
@@ -425,16 +424,11 @@ export default function DashboardPage() {
                     <option>無日結記錄</option>
                   ) : (
                     businessDayClosings.map((closing) => {
-                      const closingIndex = businessDayClosings.findIndex(c => c.id === closing.id)
-                      const previousClosing = businessDayClosings[closingIndex + 1]
-                      const startTime = previousClosing
-                        ? new Date(previousClosing.closing_time).toLocaleString('zh-TW', { timeZone: 'UTC' })
-                        : '開始'
-                      const endTime = new Date(closing.closing_time).toLocaleString('zh-TW', { timeZone: 'UTC' })
+                      const sourceLabel = closing.source === 'pos' ? '店裡' : '直播'
 
                       return (
                         <option key={closing.id} value={closing.id}>
-                          {startTime} → {endTime} (💰 {formatCurrency(closing.total_sales)} | {closing.sales_count} 筆)
+                          {sourceLabel} {closing.business_date} ({formatCurrency(closing.total_sales)} | {closing.sales_count} 筆)
                         </option>
                       )
                     })
@@ -443,9 +437,18 @@ export default function DashboardPage() {
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">
-                  銷售通路
+                  顯示通路
                 </label>
                 <div className="flex gap-2">
+                  <button
+                    onClick={() => setSourceFilter('all')}
+                    className={`flex-1 rounded px-3 py-2 text-sm font-medium transition-colors ${sourceFilter === 'all'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600'
+                      }`}
+                  >
+                    全部
+                  </button>
                   <button
                     onClick={() => setSourceFilter('pos')}
                     className={`flex-1 rounded px-3 py-2 text-sm font-medium transition-colors ${sourceFilter === 'pos'
@@ -453,7 +456,7 @@ export default function DashboardPage() {
                       : 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600'
                       }`}
                   >
-                    🏪 店裡
+                    店裡
                   </button>
                   <button
                     onClick={() => setSourceFilter('live')}
@@ -462,7 +465,7 @@ export default function DashboardPage() {
                       : 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600'
                       }`}
                   >
-                    📱 直播
+                    直播
                   </button>
                 </div>
               </div>
@@ -581,7 +584,7 @@ export default function DashboardPage() {
           {/* AP 即將到期 */}
           {stats.apDueSoon && stats.apDueSoon.length > 0 && (
             <div className="rounded-lg bg-white dark:bg-gray-800 p-6 shadow border-l-4 border-yellow-500">
-              <h2 className="mb-4 text-xl font-semibold text-gray-900 dark:text-gray-100">⏰ 應付帳款即將到期 (7天內)</h2>
+              <h2 className="mb-4 text-xl font-semibold text-gray-900 dark:text-gray-100">應付帳款即將到期 (7天內)</h2>
               <div className="space-y-2 max-h-48 overflow-y-auto">
                 {stats.apDueSoon.map((item, index) => (
                   <div key={index} className="flex justify-between items-center p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded">
@@ -601,7 +604,7 @@ export default function DashboardPage() {
           {/* AP 已逾期 */}
           {stats.apOverdueList && stats.apOverdueList.length > 0 && (
             <div className="rounded-lg bg-white dark:bg-gray-800 p-6 shadow border-l-4 border-red-500">
-              <h2 className="mb-4 text-xl font-semibold text-gray-900 dark:text-gray-100">🚨 應付帳款已逾期</h2>
+              <h2 className="mb-4 text-xl font-semibold text-gray-900 dark:text-gray-100">應付帳款已逾期</h2>
               <div className="space-y-2 max-h-48 overflow-y-auto">
                 {stats.apOverdueList.map((item, index) => (
                   <div key={index} className="flex justify-between items-center p-2 bg-red-50 dark:bg-red-900/20 rounded">

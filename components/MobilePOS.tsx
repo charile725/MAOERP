@@ -103,10 +103,12 @@ type MobilePOSProps = {
     handleLoadDraft: (draft: SaleDraft) => void
     handleDeleteDraft: (draftId: string) => void
     // 日結功能
-    lastClosingTime: string
+    businessDate: string
+    alreadyClosed: boolean
     closingStats: ClosingStats | null
     fetchClosingStats: () => Promise<void>
     handleClosing: () => Promise<void>
+    setBusinessDate: (date: string) => Promise<void>
 }
 
 export default function MobilePOS({
@@ -139,10 +141,12 @@ export default function MobilePOS({
     handleLoadDraft,
     handleDeleteDraft,
     // 日結功能
-    lastClosingTime,
+    businessDate,
+    alreadyClosed,
     closingStats,
     fetchClosingStats,
     handleClosing,
+    setBusinessDate,
 }: MobilePOSProps) {
     const [showCameraScanner, setShowCameraScanner] = useState(false)
     const [showCustomerPicker, setShowCustomerPicker] = useState(false)
@@ -653,13 +657,32 @@ export default function MobilePOS({
                                 <h3 className="text-lg font-bold text-white">營業日結算</h3>
                                 <button onClick={() => setShowClosingModal(false)} className="text-white/80 text-2xl">×</button>
                             </div>
-                            <div className="text-emerald-100 text-xs mt-1">
-                                {new Date(lastClosingTime).toLocaleString('zh-TW', { timeZone: 'UTC' })} ~ 現在
-                            </div>
                         </div>
 
                         {/* 內容 */}
                         <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                            {/* 日期選擇 */}
+                            <div>
+                                <label className="block text-slate-400 text-xs mb-1">營業日期</label>
+                                <input
+                                    type="date"
+                                    value={businessDate}
+                                    onChange={async (e) => {
+                                        await setBusinessDate(e.target.value)
+                                    }}
+                                    className="w-full rounded-lg px-4 py-2 text-white bg-slate-700 border border-slate-600 focus:border-emerald-500 focus:outline-none"
+                                />
+                            </div>
+
+                            {/* 已日結警告 */}
+                            {alreadyClosed && (
+                                <div className="bg-red-900/30 border border-red-700 rounded-lg p-3">
+                                    <div className="text-red-300 font-semibold text-sm">
+                                        {businessDate} 已經日結過了，無法重複日結
+                                    </div>
+                                </div>
+                            )}
+
                             {/* 總覽 */}
                             <div className="grid grid-cols-2 gap-3">
                                 <div className="bg-blue-900/30 rounded-lg p-3">
@@ -677,7 +700,7 @@ export default function MobilePOS({
                                 <div className="bg-purple-900/30 border border-purple-700 rounded-lg p-3">
                                     <div className="flex justify-between items-center">
                                         <div>
-                                            <div className="text-purple-400 text-xs mb-1">🎭 假營業額（轉購物金前）</div>
+                                            <div className="text-purple-400 text-xs mb-1">假營業額（轉購物金前）</div>
                                             <div className="text-purple-300 text-xs">含 {closingStats.store_credit_count} 筆已轉購物金</div>
                                         </div>
                                         <div className="text-white text-xl font-bold">{formatCurrency(closingStats.fake_total_sales)}</div>
@@ -692,12 +715,12 @@ export default function MobilePOS({
                             {/* 已收款 vs 未收款 */}
                             <div className="grid grid-cols-2 gap-3">
                                 <div className="bg-emerald-900/30 border border-emerald-700 rounded-lg p-3">
-                                    <div className="text-emerald-400 text-xs mb-1">✅ 已收款</div>
+                                    <div className="text-emerald-400 text-xs mb-1">已收款</div>
                                     <div className="text-white text-lg font-bold">{formatCurrency(closingStats.paid_sales || 0)}</div>
                                     <div className="text-emerald-400 text-xs">{closingStats.paid_count || 0} 筆</div>
                                 </div>
                                 <div className="bg-orange-900/30 border border-orange-700 rounded-lg p-3">
-                                    <div className="text-orange-400 text-xs mb-1">⏳ 未收款</div>
+                                    <div className="text-orange-400 text-xs mb-1">未收款</div>
                                     <div className="text-white text-lg font-bold">{formatCurrency(closingStats.unpaid_sales || 0)}</div>
                                     <div className="text-orange-400 text-xs">{closingStats.unpaid_count || 0} 筆</div>
                                 </div>
@@ -705,7 +728,7 @@ export default function MobilePOS({
 
                             {/* 已收款明細 */}
                             <div className="border-t border-slate-700 pt-4">
-                                <div className="text-white font-semibold mb-3">✅ 已收款明細</div>
+                                <div className="text-white font-semibold mb-3">已收款明細</div>
                                 <div className="grid grid-cols-2 gap-2">
                                     <div className="bg-slate-700 rounded-lg px-3 py-2 flex justify-between items-center">
                                         <span className="text-slate-300 text-sm">現金</span>
@@ -739,10 +762,10 @@ export default function MobilePOS({
                                         setClosingInProgress(false)
                                     }
                                 }}
-                                disabled={closingInProgress}
+                                disabled={closingInProgress || alreadyClosed}
                                 className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-600 text-white font-bold py-3 rounded-lg"
                             >
-                                {closingInProgress ? '結算中...' : '確認日結'}
+                                {closingInProgress ? '結算中...' : alreadyClosed ? '已日結' : '確認日結'}
                             </button>
                             <button
                                 onClick={() => setShowClosingModal(false)}
