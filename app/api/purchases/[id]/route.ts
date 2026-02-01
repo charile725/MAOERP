@@ -164,6 +164,7 @@ export async function DELETE(
       .from('purchases') as any)
       .select(`
         status,
+        purchase_no,
         purchase_items (
           id,
           product_id,
@@ -329,7 +330,8 @@ export async function DELETE(
                 .single()
 
               if (account && refundAmount > 0) {
-                const newBalance = Number(account.balance) + refundAmount
+                const balanceBefore = Number(account.balance)
+                const newBalance = balanceBefore + refundAmount
                 await (supabaseServer
                   .from('accounts') as any)
                   .update({
@@ -337,6 +339,22 @@ export async function DELETE(
                     updated_at: getTaiwanTime()
                   })
                   .eq('id', accountIdToRefund)
+
+                // 記錄回補交易明細
+                await (supabaseServer
+                  .from('account_transactions') as any)
+                  .insert({
+                    account_id: accountIdToRefund,
+                    transaction_type: 'adjustment',
+                    amount: refundAmount,
+                    balance_before: balanceBefore,
+                    balance_after: newBalance,
+                    ref_type: 'purchase_delete',
+                    ref_id: id,
+                    ref_no: purchase.purchase_no || null,
+                    note: `刪除進貨單回補 (原付款 settlement: ${settlementId})`,
+                    created_at: getTaiwanTime()
+                  })
 
                 console.log(`[Delete Purchase ${id}] Restored account ${accountIdToRefund}: +${refundAmount} (from settlement ${settlementId})`)
               }
@@ -465,7 +483,8 @@ export async function DELETE(
               .single()
 
             if (account && refundAmount > 0) {
-              const newBalance = Number(account.balance) + refundAmount
+              const balanceBefore = Number(account.balance)
+              const newBalance = balanceBefore + refundAmount
               await (supabaseServer
                 .from('accounts') as any)
                 .update({
@@ -473,6 +492,22 @@ export async function DELETE(
                   updated_at: getTaiwanTime()
                 })
                 .eq('id', accountIdToRefund)
+
+              // 記錄回補交易明細
+              await (supabaseServer
+                .from('account_transactions') as any)
+                .insert({
+                  account_id: accountIdToRefund,
+                  transaction_type: 'adjustment',
+                  amount: refundAmount,
+                  balance_before: balanceBefore,
+                  balance_after: newBalance,
+                  ref_type: 'purchase_delete',
+                  ref_id: id,
+                  ref_no: purchase.purchase_no || null,
+                  note: `刪除進貨單回補 (原付款 settlement: ${settlementId})`,
+                  created_at: getTaiwanTime()
+                })
 
               console.log(`[Delete Purchase ${id}] Restored account ${accountIdToRefund}: +${refundAmount} (from old-style settlement ${settlementId})`)
             }
