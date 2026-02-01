@@ -535,33 +535,66 @@ export default function SalesPage() {
     }
   }
 
-  const handleBatchDeliver = () => {
+  const handleBatchDeliver = async () => {
     if (selectedItemIds.size === 0) {
       alert('請先選擇要出貨的商品')
       return
     }
 
-    // 收集所有選中商品的詳細信息
-    const items: SaleItem[] = []
+    // 收集所有選中商品的詳細信息，計算待出貨數量
+    const itemsToDeliver: { sale_item_id: string; quantity: number }[] = []
+    let totalQty = 0
+
     customerGroups.forEach(group => {
       group.sales.forEach(sale => {
         sale.sale_items?.forEach(item => {
           if (selectedItemIds.has(item.id)) {
-            items.push(item)
+            const deliveredQty = item.delivered_quantity || 0
+            const storeCreditQty = item.store_credit_qty || 0
+            const pendingQty = item.quantity - deliveredQty - storeCreditQty
+            if (pendingQty > 0) {
+              itemsToDeliver.push({
+                sale_item_id: item.id,
+                quantity: pendingQty
+              })
+              totalQty += pendingQty
+            }
           }
         })
       })
     })
 
-    // 初始化每個商品的數量為其最大數量
-    const newQuantities = new Map<string, number>()
-    items.forEach(item => {
-      newQuantities.set(item.id, item.quantity)
-    })
+    if (itemsToDeliver.length === 0) {
+      alert('沒有需要出貨的商品')
+      return
+    }
 
-    setSelectedItemsDetails(items)
-    setItemQuantities(newQuantities)
-    setShowQuantityModal(true)
+    if (!confirm(`確定要批量出貨 ${itemsToDeliver.length} 項商品（共 ${totalQty} 件）嗎？\n\n此操作將會扣除庫存。`)) {
+      return
+    }
+
+    setBatchDelivering(true)
+    try {
+      const res = await fetch('/api/sale-items/batch-deliver', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: itemsToDeliver })
+      })
+
+      const data = await res.json()
+
+      if (data.ok) {
+        alert(data.message || '批量出貨成功！')
+        setSelectedItemIds(new Set())
+        fetchSales(currentPage) // 保持在當前頁面
+      } else {
+        alert(`批量出貨失敗：${data.error}`)
+      }
+    } catch (err) {
+      alert('批量出貨失敗')
+    } finally {
+      setBatchDelivering(false)
+    }
   }
 
   const confirmBatchDeliver = async () => {
@@ -1179,6 +1212,21 @@ export default function SalesPage() {
                             )}
                           </tbody>
                         </table>
+                        {/* 批量出貨按鈕 */}
+                        {selectedItemIds.size > 0 && (
+                          <div className="mt-4 flex items-center justify-between bg-blue-50 dark:bg-blue-900/30 p-3 rounded-lg border border-blue-200 dark:border-blue-700">
+                            <span className="text-sm text-blue-800 dark:text-blue-200">
+                              已選擇 <span className="font-bold">{selectedItemIds.size}</span> 項商品
+                            </span>
+                            <button
+                              onClick={handleBatchDeliver}
+                              disabled={batchDelivering}
+                              className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:bg-gray-400"
+                            >
+                              {batchDelivering ? '處理中...' : '📦 批量出貨'}
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
