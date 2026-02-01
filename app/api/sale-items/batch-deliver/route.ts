@@ -97,13 +97,13 @@ export async function POST(request: NextRequest) {
         continue
       }
 
-      // 檢查庫存是否充足
-      if (item.products.stock < requestedQty) {
-        errors.push(
-          `${item.products.name} 庫存不足 (庫存: ${item.products.stock}, 需要: ${requestedQty})`
-        )
-        continue
-      }
+      // 不再檢查庫存，支援負庫存出貨
+      // if (item.products.stock < requestedQty) {
+      //   errors.push(
+      //     `${item.products.name} 庫存不足 (庫存: ${item.products.stock}, 需要: ${requestedQty})`
+      //   )
+      //   continue
+      // }
 
       itemsToDeliver.push({
         ...item,

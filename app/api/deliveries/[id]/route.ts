@@ -130,15 +130,16 @@ export async function PATCH(
         )
       }
 
-      if (!product.allow_negative && product.stock < item.quantity) {
-        return NextResponse.json(
-          {
-            ok: false,
-            error: `${product.name} 庫存不足。剩餘: ${product.stock}, 需要: ${item.quantity}`,
-          },
-          { status: 400 }
-        )
-      }
+      // 不再檢查庫存，支援負庫存出貨
+      // if (!product.allow_negative && product.stock < item.quantity) {
+      //   return NextResponse.json(
+      //     {
+      //       ok: false,
+      //       error: `${product.name} 庫存不足。剩餘: ${product.stock}, 需要: ${item.quantity}`,
+      //     },
+      //     { status: 400 }
+      //   )
+      // }
     }
 
     // 扣庫存並寫入 inventory_logs
