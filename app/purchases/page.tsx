@@ -28,6 +28,7 @@ type Purchase = {
   is_paid: boolean
   receiving_status: string
   created_at: string
+  note?: string
   item_count?: number
   total_quantity?: number
   avg_cost?: number
@@ -723,6 +724,11 @@ export default function PurchasesPage() {
                             <tr key={`${purchase.id}-details`}>
                               <td colSpan={isAdmin ? 9 : 7} className="bg-gray-50 dark:bg-gray-900 px-6 py-4">
                                 <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+                                  {purchase.note && (
+                                    <div className="mb-3 rounded bg-blue-50 px-3 py-2 text-sm text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+                                      📝 {purchase.note}
+                                    </div>
+                                  )}
                                   <h4 className="mb-3 font-semibold text-gray-900 dark:text-gray-100">進貨明細</h4>
                                   <table className="w-full">
                                     <thead className="border-b">
