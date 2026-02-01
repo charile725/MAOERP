@@ -249,7 +249,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. Calculate total（使用傳入的小計）
-    const total = draft.items.reduce((sum, item) => sum + (item.subtotal || (item.quantity * item.cost)), 0)
+    const total = draft.items.reduce((sum, item) => sum + (item.subtotal || Math.round(item.quantity * item.cost)), 0)
 
     // 4. Update purchase to approved (老板创建的进货单直接审核通过，不需要审核)
     // 库存不在这里增加，等收货时再增加
