@@ -132,10 +132,8 @@ export default function EditProductPage() {
       console.log('Update result:', result)
 
       if (result.ok) {
-        setSuccess('商品資訊已更新')
-        setProduct(result.data)
-        // Auto-hide success message after 3 seconds
-        setTimeout(() => setSuccess(''), 3000)
+        router.push('/products')
+        return
       } else {
         setError(result.error || '更新失敗')
       }
