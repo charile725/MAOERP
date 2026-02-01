@@ -217,19 +217,23 @@ export default function DashboardPage() {
         .reduce((sum: number, s: any) => {
           const saleCost = (s.sale_items || []).reduce(
             (itemSum: number, item: any) => {
-              const itemCost = (item.cost || 0) * item.quantity
+              // 扣除已轉購物金的數量
+              const effectiveQty = item.quantity - (item.store_credit_qty || 0)
+              const itemCost = (item.cost || 0) * effectiveQty
 
-              // Collect cost breakdown
-              const key = item.product_id
-              if (costBreakdownMap.has(key)) {
-                const existing = costBreakdownMap.get(key)!
-                existing.quantity += item.quantity
-              } else {
-                costBreakdownMap.set(key, {
-                  cost: item.cost || 0,
-                  quantity: item.quantity,
-                  name: item.snapshot_name || '未知商品'
-                })
+              // Collect cost breakdown (只計算有效數量)
+              if (effectiveQty > 0) {
+                const key = item.product_id
+                if (costBreakdownMap.has(key)) {
+                  const existing = costBreakdownMap.get(key)!
+                  existing.quantity += effectiveQty
+                } else {
+                  costBreakdownMap.set(key, {
+                    cost: item.cost || 0,
+                    quantity: effectiveQty,
+                    name: item.snapshot_name || '未知商品'
+                  })
+                }
               }
 
               return itemSum + itemCost

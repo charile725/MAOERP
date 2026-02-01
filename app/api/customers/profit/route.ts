@@ -17,7 +17,8 @@ export async function GET(request: NextRequest) {
         sale_date,
         sale_items (
           quantity,
-          cost
+          cost,
+          store_credit_qty
         )
       `)
       .not('customer_code', 'is', null)
@@ -55,9 +56,10 @@ export async function GET(request: NextRequest) {
       customerStats[code].total_sales += sale.total || 0
       customerStats[code].order_count += 1
 
-      // 计算成本
+      // 计算成本（扣除已轉購物金的數量）
       for (const item of sale.sale_items || []) {
-        customerStats[code].total_cost += (item.cost || 0) * (item.quantity || 0)
+        const effectiveQty = (item.quantity || 0) - (item.store_credit_qty || 0)
+        customerStats[code].total_cost += (item.cost || 0) * effectiveQty
       }
     }
 
