@@ -7,6 +7,7 @@ import { getCurrentUser } from '@/lib/auth'
 // Simplified schema for staff purchase submission (quantity only, no cost)
 const staffPurchaseSchema = z.object({
   vendor_code: z.string().min(1, 'Vendor is required'),
+  note: z.string().optional(),
   items: z.array(
     z.object({
       product_id: z.string().uuid(),
@@ -87,6 +88,10 @@ export async function POST(request: NextRequest) {
 
       const purchaseNo = `P${nextNum.toString().padStart(4, '0')}`
 
+      // Build note with staff info and user note
+      const staffNote = `員工進貨申請 (by ${user.username})`
+      const fullNote = draft.note ? `${staffNote} - ${draft.note}` : staffNote
+
       // 1. Create purchase (status: pending for staff submission)
       const result = await (supabaseServer
         .from('purchases') as any)
@@ -94,7 +99,7 @@ export async function POST(request: NextRequest) {
           purchase_no: purchaseNo,
           vendor_code: draft.vendor_code,
           is_paid: false,  // Staff doesn't handle payment
-          note: `員工進貨申請 (by ${user.username})`,
+          note: fullNote,
           status: 'pending',  // Pending approval from boss
           total: 0,  // Will be calculated after boss adds cost
           created_by: user.username,

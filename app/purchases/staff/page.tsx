@@ -27,6 +27,7 @@ export default function StaffPurchasePage() {
   const router = useRouter()
   const [vendors, setVendors] = useState<Vendor[]>([])
   const [vendorCode, setVendorCode] = useState('')
+  const [note, setNote] = useState('')
   const [items, setItems] = useState<PurchaseItem[]>([])
   const [searchKeyword, setSearchKeyword] = useState('')
   const [searchResults, setSearchResults] = useState<Product[]>([])
@@ -258,6 +259,7 @@ export default function StaffPurchasePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           vendor_code: vendorCode,
+          note: note.trim() || undefined,
           items: items.map((item) => ({
             product_id: item.product_id,
             quantity: item.quantity,
@@ -312,6 +314,20 @@ export default function StaffPurchasePage() {
                 </option>
               ))}
             </select>
+
+            {/* Note */}
+            <div className="mt-4">
+              <label className="mb-2 block text-sm font-medium text-gray-900 dark:text-gray-100">
+                備註
+              </label>
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="輸入備註（選填）"
+                rows={2}
+                className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-gray-900 placeholder:text-gray-400 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder:text-gray-500"
+              />
+            </div>
           </div>
 
           {/* Product search with quick create */}
