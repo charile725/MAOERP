@@ -2,7 +2,14 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import type { Product } from '@/types'
+
+// 動態載入相機掃描元件（避免 SSR 問題）
+const CameraScanner = dynamic(() => import('@/components/CameraScanner'), {
+  ssr: false,
+  loading: () => null,
+})
 
 type Vendor = {
   id: string
@@ -30,6 +37,9 @@ export default function StaffPurchasePage() {
   const [quickProductName, setQuickProductName] = useState('')
   const [quickBarcode, setQuickBarcode] = useState('')
   const [creatingProduct, setCreatingProduct] = useState(false)
+
+  // 相機掃描
+  const [showCameraScanner, setShowCameraScanner] = useState(false)
 
   // 掃描槍防抖處理
   const scanTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -196,6 +206,24 @@ export default function StaffPurchasePage() {
     setError('')
   }
 
+  // 相機掃描結果處理
+  const handleCameraScan = (code: string) => {
+    if (allProductsLoaded) {
+      const matchedProduct = allProductsRef.current.find(
+        p => p.barcode && p.barcode.toLowerCase() === code.toLowerCase()
+      )
+      if (matchedProduct) {
+        addItem(matchedProduct)
+        setShowCameraScanner(false)
+        return
+      }
+    }
+    // 找不到商品，將條碼填入搜尋框讓用戶手動搜尋
+    setSearchKeyword(code)
+    setShowCameraScanner(false)
+    searchProducts(code)
+  }
+
   const updateQuantity = (index: number, value: number) => {
     setItems(
       items.map((item, i) =>
@@ -289,19 +317,29 @@ export default function StaffPurchasePage() {
           {/* Product search with quick create */}
           <div className="rounded-lg bg-white p-4 shadow dark:bg-gray-800 md:p-6">
             <label className="mb-2 block text-sm font-medium text-gray-900 dark:text-gray-100">搜尋或掃描商品條碼</label>
-            <input
-              type="text"
-              value={searchKeyword}
-              onChange={(e) => handleSearchInput(e.target.value)}
-              onKeyDown={(e) => {
-                // 阻止 Enter 鍵觸發表單提交（掃描槍通常會在條碼後發送 Enter）
-                if (e.key === 'Enter') {
-                  e.preventDefault()
-                }
-              }}
-              placeholder="輸入商品名稱、品號或掃描條碼"
-              className="w-full rounded border border-gray-300 bg-white px-4 py-2 text-gray-900 placeholder:text-gray-400 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder:text-gray-500"
-            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={searchKeyword}
+                onChange={(e) => handleSearchInput(e.target.value)}
+                onKeyDown={(e) => {
+                  // 阻止 Enter 鍵觸發表單提交（掃描槍通常會在條碼後發送 Enter）
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                  }
+                }}
+                placeholder="輸入商品名稱、品號或掃描條碼"
+                className="flex-1 rounded border border-gray-300 bg-white px-4 py-2 text-gray-900 placeholder:text-gray-400 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder:text-gray-500"
+              />
+              <button
+                type="button"
+                onClick={() => setShowCameraScanner(true)}
+                className="rounded bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700 text-xl"
+                title="相機掃碼"
+              >
+                📷
+              </button>
+            </div>
 
             {/* Search status and results */}
             {searching && (
@@ -447,6 +485,14 @@ export default function StaffPurchasePage() {
           </div>
         </form>
       </div>
+
+      {/* 相機掃描 Modal */}
+      {showCameraScanner && (
+        <CameraScanner
+          onScan={handleCameraScan}
+          onClose={() => setShowCameraScanner(false)}
+        />
+      )}
     </div>
   )
 }
