@@ -114,6 +114,8 @@ type MobilePOSProps = {
     setBusinessDate: (date: string) => Promise<void>
     // 新增客戶功能
     fetchCustomers: () => void
+    // 刷新商品
+    fetchProducts: () => void
 }
 
 export default function MobilePOS({
@@ -155,6 +157,7 @@ export default function MobilePOS({
     handleClosing,
     setBusinessDate,
     fetchCustomers,
+    fetchProducts,
 }: MobilePOSProps) {
     const [showCameraScanner, setShowCameraScanner] = useState(false)
     const [showCustomerPicker, setShowCustomerPicker] = useState(false)
@@ -302,13 +305,13 @@ export default function MobilePOS({
             const res = await fetch(`/api/products?search=${encodeURIComponent(name)}&limit=5`)
             const data = await res.json()
             if (data.ok && data.data.length > 0) {
-                const exactMatch = data.data.find((p: Product) => p.product_name === name)
+                const exactMatch = data.data.find((p: Product) => p.name === name)
                 if (exactMatch) {
-                    return `已存在相同名稱的商品「${exactMatch.product_name}」(編號: ${exactMatch.product_code})`
+                    return `已存在相同名稱的商品「${exactMatch.name}」(編號: ${exactMatch.item_code})`
                 }
                 const similarProducts = data.data.slice(0, 3)
                 if (similarProducts.length > 0) {
-                    return `找到類似商品: ${similarProducts.map((p: Product) => p.product_name).join('、')}`
+                    return `找到類似商品: ${similarProducts.map((p: Product) => p.name).join('、')}`
                 }
             }
         } catch (e) {
@@ -349,7 +352,7 @@ export default function MobilePOS({
             if (data.ok) {
                 const newProduct: Product = data.product
                 addToCart(newProduct)
-                onRefreshProducts()
+                fetchProducts()
 
                 setQuickProductName('')
                 setQuickProductBarcode('')
@@ -358,7 +361,7 @@ export default function MobilePOS({
                 setDuplicateWarning(null)
                 setSearchQuery('')
 
-                alert(`商品「${newProduct.product_name}」已建立並加入購物車`)
+                alert(`商品「${newProduct.name}」已建立並加入購物車`)
             } else {
                 alert(`建立失敗：${data.error}`)
             }

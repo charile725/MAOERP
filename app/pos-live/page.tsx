@@ -1200,6 +1200,7 @@ export default function POSPage() {
           await fetchClosingStats(date)
         }}
         fetchCustomers={fetchCustomers}
+        fetchProducts={fetchProducts}
       />
     )
   }
