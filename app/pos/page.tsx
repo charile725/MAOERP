@@ -1149,9 +1149,9 @@ export default function POSPage() {
               交易記錄
             </button>
             <button
-              onClick={async () => {
-                await fetchClosingStats()
+              onClick={() => {
                 setShowClosingModal(true)
+                fetchClosingStats()
               }}
               className="font-medium px-3 py-2 rounded-lg transition-all bg-emerald-600 hover:bg-emerald-500 text-white text-sm"
             >
@@ -2349,12 +2349,16 @@ export default function POSPage() {
         )}
 
         {/* Business Day Closing Modal (日結對話框) */}
-        {showClosingModal && closingStats && (
+        {showClosingModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={() => setShowClosingModal(false)}>
             <div className="bg-white dark:bg-gray-800 w-full max-w-2xl rounded-lg shadow-xl" onClick={(e) => e.stopPropagation()}>
               <div className="bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-4 rounded-t-lg">
                 <h2 className="text-2xl font-bold">營業日結算</h2>
               </div>
+              {!closingStats ? (
+                <div className="p-12 text-center text-gray-500 dark:text-gray-400">載入中...</div>
+              ) : (
+              <>
 
               <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
                 {/* 日期選擇 */}
@@ -2491,6 +2495,8 @@ export default function POSPage() {
                   取消
                 </button>
               </div>
+              </>
+              )}
             </div>
           </div>
         )}

@@ -272,9 +272,9 @@ export default function MobilePOS({
                         📷
                     </button>
                     <button
-                        onClick={async () => {
-                            await fetchClosingStats()
+                        onClick={() => {
                             setShowClosingModal(true)
+                            fetchClosingStats()
                         }}
                         className="px-4 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium"
                     >
@@ -648,7 +648,7 @@ export default function MobilePOS({
             )}
 
             {/* 日結 Modal */}
-            {showClosingModal && closingStats && (
+            {showClosingModal && (
                 <div className="fixed inset-0 bg-black/70 z-50 flex items-end">
                     <div className="w-full bg-slate-800 rounded-t-2xl max-h-[85vh] flex flex-col">
                         {/* Header */}
@@ -659,6 +659,10 @@ export default function MobilePOS({
                             </div>
                         </div>
 
+                        {!closingStats ? (
+                            <div className="p-12 text-center text-slate-400">載入中...</div>
+                        ) : (
+                        <>
                         {/* 內容 */}
                         <div className="flex-1 overflow-y-auto p-4 space-y-4">
                             {/* 日期選擇 */}
@@ -775,6 +779,8 @@ export default function MobilePOS({
                                 取消
                             </button>
                         </div>
+                        </>
+                        )}
                     </div>
                 </div>
             )}
