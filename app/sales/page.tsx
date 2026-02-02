@@ -125,10 +125,12 @@ type ProductStats = {
   item_code: string
   total_quantity: number
   total_sales: number
+  pending_quantity: number  // 未出貨總數量
   customer_purchases: {
     customer_name: string
     customer_code: string | null
     quantity: number
+    pending_quantity: number  // 該客戶未出貨數量
     sales_count: number
   }[]
 }
@@ -275,7 +277,7 @@ export default function SalesPage() {
         // 計算商品統計（只在有商品關鍵字時）
         if (productKeyword && allSales.length > 0) {
           const stats: { [key: string]: ProductStats } = {}
-          const customerMap: { [productKey: string]: { [customerKey: string]: { customer_name: string, customer_code: string | null, quantity: number, sales_count: number } } } = {}
+          const customerMap: { [productKey: string]: { [customerKey: string]: { customer_name: string, customer_code: string | null, quantity: number, pending_quantity: number, sales_count: number } } } = {}
 
           allSales.forEach((sale: Sale) => {
             if (sale.sale_items) {
@@ -284,6 +286,11 @@ export default function SalesPage() {
                 const customerKey = sale.customer_code || 'WALK_IN'
                 const customerName = sale.customer_code ? (sale.customers?.customer_name || sale.customer_code) : '散客'
 
+                // 計算未出貨數量
+                const deliveredQty = item.delivered_quantity || 0
+                const storeCreditQty = item.store_credit_qty || 0
+                const pendingQty = Math.max(0, item.quantity - deliveredQty - storeCreditQty)
+
                 // 初始化商品統計
                 if (!stats[productKey]) {
                   stats[productKey] = {
@@ -291,14 +298,16 @@ export default function SalesPage() {
                     item_code: item.products.item_code,
                     total_quantity: 0,
                     total_sales: 0,
+                    pending_quantity: 0,
                     customer_purchases: []
                   }
                   customerMap[productKey] = {}
                 }
 
-                // 累加總數量和總銷售額
+                // 累加總數量、總銷售額和未出貨數量
                 stats[productKey].total_quantity += item.quantity
                 stats[productKey].total_sales += item.quantity * item.price
+                stats[productKey].pending_quantity += pendingQty
 
                 // 累加客戶購買記錄
                 if (!customerMap[productKey][customerKey]) {
@@ -306,10 +315,12 @@ export default function SalesPage() {
                     customer_name: customerName,
                     customer_code: sale.customer_code,
                     quantity: 0,
+                    pending_quantity: 0,
                     sales_count: 0
                   }
                 }
                 customerMap[productKey][customerKey].quantity += item.quantity
+                customerMap[productKey][customerKey].pending_quantity += pendingQty
                 customerMap[productKey][customerKey].sales_count += 1
               })
             }
@@ -952,11 +963,17 @@ export default function SalesPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 mb-6">
+            <div className="grid grid-cols-3 gap-4 mb-6">
               <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
                 <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">總銷售數量</div>
                 <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">
                   {productStats.total_quantity}
+                </div>
+              </div>
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
+                <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">未出貨數量</div>
+                <div className="text-3xl font-bold text-amber-600 dark:text-amber-400">
+                  {productStats.pending_quantity}
                 </div>
               </div>
               <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
@@ -991,6 +1008,11 @@ export default function SalesPage() {
                       <div className="text-lg font-bold text-gray-900 dark:text-gray-100">
                         {customer.quantity} 個
                       </div>
+                      {customer.pending_quantity > 0 && (
+                        <div className="text-sm font-medium text-amber-600 dark:text-amber-400">
+                          📦 未出貨 {customer.pending_quantity} 個
+                        </div>
+                      )}
                       <div className="text-xs text-gray-500 dark:text-gray-400">
                         {customer.sales_count} 筆訂單
                       </div>
