@@ -145,15 +145,37 @@ export async function POST(
                 created_at: getTaiwanTime(),
             })
 
-        // 6. 回補庫存（使用輸入金額作為成本）
+        // 6. 回補庫存（只有已出貨的部分才回補）
+        // 先查詢該品項的已出貨數量
+        let deliveredQuantity = 0
+        const { data: deliveryItems } = await (supabaseServer
+            .from('delivery_items') as any)
+            .select(`
+                quantity,
+                deliveries!inner (
+                    status
+                )
+            `)
+            .eq('sale_item_id', saleItemId)
+            .eq('deliveries.status', 'confirmed')
+
+        if (deliveryItems) {
+            deliveredQuantity = deliveryItems.reduce((sum: number, di: any) => sum + di.quantity, 0)
+        }
+
+        // 計算已出貨但尚未轉購物金的數量（可以回補的最大數量）
+        const alreadyConvertedToStoreCredit = saleItem.store_credit_qty || 0
+        const maxRestoreQty = Math.max(0, deliveredQuantity - alreadyConvertedToStoreCredit)
+        // 實際回補數量 = min(這次轉換數量, 可回補數量)
+        const restoreQty = Math.min(convertQuantity, maxRestoreQty)
+
         let inventoryRestored = 0
         let newAvgCost = 0
-        if (saleItem.product_id) {
+        if (saleItem.product_id && restoreQty > 0) {
             const product = saleItem.products
             const currentStock = product?.stock || 0
             const currentAvgCost = product?.avg_cost || 0
-            const restoreQty = convertQuantity // 使用指定的轉換數量
-            const unitCost = conversionAmount / restoreQty // 用輸入金額當作成本
+            const unitCost = conversionAmount / convertQuantity // 用輸入金額當作成本
 
             // 計算新的平均成本
             // 新平均成本 = (現有庫存 * 現有平均成本 + 回補數量 * 單位成本) / (現有庫存 + 回補數量)
@@ -177,7 +199,7 @@ export async function POST(
                     ref_id: saleItem.id,
                     qty_change: restoreQty,
                     unit_cost: unitCost,
-                    memo: `轉購物金回補 - ${sale.sale_no} (${restoreQty}/${saleItem.quantity}件, 成本: $${unitCost.toFixed(2)}/件)`,
+                    memo: `轉購物金回補 - ${sale.sale_no} (已出貨${restoreQty}件回補, 成本: $${unitCost.toFixed(2)}/件)`,
                 })
 
             if (!invLogError) {
