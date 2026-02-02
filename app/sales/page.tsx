@@ -204,6 +204,8 @@ export default function SalesPage() {
   const [expandedSales, setExpandedSales] = useState<Set<string>>(new Set())
   const [keyword, setKeyword] = useState('')
   const [productKeyword, setProductKeyword] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [deleting, setDeleting] = useState<string | null>(null)
   const [delivering, setDelivering] = useState<string | null>(null)
   const [showUndeliveredOnly, setShowUndeliveredOnly] = useState(false)
@@ -257,6 +259,8 @@ export default function SalesPage() {
       const params = new URLSearchParams()
       if (keyword) params.set('keyword', keyword)
       if (productKeyword) params.set('product_keyword', productKeyword)
+      if (dateFrom) params.set('date_from', dateFrom)
+      if (dateTo) params.set('date_to', dateTo)
       if (sourceFilter !== 'all') params.set('source', sourceFilter)
       if (groupByCustomer) params.set('group_by_customer', 'true') // 按客戶分組時不分頁
       params.set('page', page.toString())
@@ -895,6 +899,31 @@ export default function SalesPage() {
               >
                 搜尋
               </button>
+            </div>
+            <div className="flex gap-2 items-center">
+              <label className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">日期範圍</label>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="flex-1 rounded border border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-gray-100 dark:bg-gray-700"
+              />
+              <span className="text-gray-500 dark:text-gray-400">至</span>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="flex-1 rounded border border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-gray-100 dark:bg-gray-700"
+              />
+              {(dateFrom || dateTo) && (
+                <button
+                  type="button"
+                  onClick={() => { setDateFrom(''); setDateTo(''); }}
+                  className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                >
+                  清除
+                </button>
+              )}
             </div>
             <div className="space-y-3">
               <div className="flex gap-4 items-center">
