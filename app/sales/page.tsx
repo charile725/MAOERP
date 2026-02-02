@@ -278,10 +278,17 @@ export default function SalesPage() {
         if (productKeyword && allSales.length > 0) {
           const stats: { [key: string]: ProductStats } = {}
           const customerMap: { [productKey: string]: { [customerKey: string]: { customer_name: string, customer_code: string | null, quantity: number, pending_quantity: number, sales_count: number } } } = {}
+          const keyword = productKeyword.toLowerCase()
 
           allSales.forEach((sale: Sale) => {
             if (sale.sale_items) {
               sale.sale_items.forEach((item: SaleItem) => {
+                // 只統計符合關鍵字的商品
+                const matchesKeyword = 
+                  item.snapshot_name?.toLowerCase().includes(keyword) ||
+                  item.products?.item_code?.toLowerCase().includes(keyword)
+                if (!matchesKeyword) return
+
                 const productKey = `${item.product_id}`
                 const customerKey = sale.customer_code || 'WALK_IN'
                 const customerName = sale.customer_code ? (sale.customers?.customer_name || sale.customer_code) : '散客'
