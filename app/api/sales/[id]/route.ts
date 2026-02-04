@@ -383,6 +383,71 @@ export async function DELETE(
       }
     }
 
+    // 1.8. 扣回單品項轉購物金（ref_type='sale_item'）
+    if (sale.customer_code) {
+      // 取得此銷售單的所有品項 ID
+      const { data: saleItemsForSC } = await (supabaseServer
+        .from('sale_items') as any)
+        .select('id')
+        .eq('sale_id', id)
+
+      if (saleItemsForSC && saleItemsForSC.length > 0) {
+        const saleItemIds = saleItemsForSC.map((si: any) => si.id.toString())
+
+        const { data: itemStoreCreditLogs } = await (supabaseServer
+          .from('customer_balance_logs') as any)
+          .select('id, amount, ref_id')
+          .eq('ref_type', 'sale_item')
+          .in('ref_id', saleItemIds)
+          .eq('customer_code', sale.customer_code)
+
+        if (itemStoreCreditLogs && itemStoreCreditLogs.length > 0) {
+          const totalItemStoreCredit = itemStoreCreditLogs.reduce(
+            (sum: number, log: any) => sum + (log.amount || 0), 0
+          )
+
+          if (totalItemStoreCredit > 0) {
+            const { data: customer } = await (supabaseServer
+              .from('customers') as any)
+              .select('store_credit')
+              .eq('customer_code', sale.customer_code)
+              .single()
+
+            if (customer) {
+              const newBalance = customer.store_credit - totalItemStoreCredit
+
+              await (supabaseServer
+                .from('customers') as any)
+                .update({ store_credit: newBalance })
+                .eq('customer_code', sale.customer_code)
+
+              await (supabaseServer
+                .from('customer_balance_logs') as any)
+                .insert({
+                  customer_code: sale.customer_code,
+                  amount: -totalItemStoreCredit,
+                  balance_before: customer.store_credit,
+                  balance_after: newBalance,
+                  type: 'deduct',
+                  ref_type: 'sale_delete',
+                  ref_id: id.toString(),
+                  note: `刪除銷售單 ${sale.sale_no}，扣回單品項轉換的購物金`,
+                })
+
+              // 刪除原單品項轉換記錄
+              const logIds = itemStoreCreditLogs.map((l: any) => l.id)
+              await (supabaseServer
+                .from('customer_balance_logs') as any)
+                .delete()
+                .in('id', logIds)
+
+              console.log(`[Delete Sale ${id}] Deducted item-level store_credit ${totalItemStoreCredit} from customer ${sale.customer_code}`)
+            }
+          }
+        }
+      }
+    }
+
     // 2. 刪除銷貨更正產生的庫存日誌（避免重複回補）
     // 更正時已經回補過的庫存不應該再回補
     const { data: correctionLogs } = await (supabaseServer
