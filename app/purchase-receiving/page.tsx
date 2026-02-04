@@ -53,6 +53,7 @@ export default function PurchaseReceivingStatsPage() {
   const [loading, setLoading] = useState(true)
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
   const [groupByVendor, setGroupByVendor] = useState(false)
+  const [keyword, setKeyword] = useState('')
 
   useEffect(() => {
     fetchReceivingStats()
@@ -84,11 +85,26 @@ export default function PurchaseReceivingStatsPage() {
     setExpandedRows(newExpanded)
   }
 
+  // 根據搜尋關鍵字過濾
+  const filteredStats = useMemo(() => {
+    if (!keyword.trim()) return receivingStats
+    const kw = keyword.trim().toLowerCase()
+    return receivingStats.filter(p =>
+      p.itemCode.toLowerCase().includes(kw) ||
+      p.name.toLowerCase().includes(kw) ||
+      p.vendors.some(v =>
+        v.vendorName.toLowerCase().includes(kw) ||
+        v.vendorCode.toLowerCase().includes(kw) ||
+        v.purchaseNo.toLowerCase().includes(kw)
+      )
+    )
+  }, [receivingStats, keyword])
+
   // 按廠商分組的數據
   const vendorGroups = useMemo(() => {
     const groupMap = new Map<string, VendorGroup>()
 
-    receivingStats.forEach(product => {
+    filteredStats.forEach(product => {
       product.vendors.forEach(vendor => {
         const key = vendor.vendorCode
         const existing = groupMap.get(key)
@@ -136,7 +152,7 @@ export default function PurchaseReceivingStatsPage() {
     })
 
     return Array.from(groupMap.values()).sort((a, b) => b.totalPendingAmount - a.totalPendingAmount)
-  }, [receivingStats])
+  }, [filteredStats])
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
@@ -165,7 +181,14 @@ export default function PurchaseReceivingStatsPage() {
           </div>
         )}
 
-        <div className="mb-4 flex gap-4">
+        <div className="mb-4 flex flex-wrap items-center gap-4">
+          <input
+            type="text"
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            placeholder="搜尋品號、商品名稱、廠商、單號"
+            className="rounded border border-gray-300 dark:border-gray-600 px-4 py-1.5 text-sm text-gray-900 dark:text-gray-100 dark:bg-gray-700 placeholder:text-gray-400 dark:placeholder:text-gray-500 w-64"
+          />
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
@@ -261,7 +284,7 @@ export default function PurchaseReceivingStatsPage() {
                 })}
               </div>
             )
-          ) : receivingStats.length === 0 ? (
+          ) : filteredStats.length === 0 ? (
             <div className="p-8 text-center">
               <div className="text-4xl mb-4">✅</div>
               <div className="text-gray-900 dark:text-gray-100 font-semibold mb-2">
@@ -285,7 +308,7 @@ export default function PurchaseReceivingStatsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                  {receivingStats.map((product) => (
+                  {filteredStats.map((product) => (
                     <React.Fragment key={product.productId}>
                       <tr
                         className="hover:bg-gray-50/50 dark:hover:bg-gray-700/30 cursor-pointer transition-colors"

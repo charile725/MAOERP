@@ -50,6 +50,7 @@ export default function ShortageStatsPage() {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
   const [showOnlyShortage, setShowOnlyShortage] = useState(false)
   const [groupByCustomer, setGroupByCustomer] = useState(false)
+  const [keyword, setKeyword] = useState('')
 
   useEffect(() => {
     fetchShortageStats()
@@ -82,9 +83,24 @@ export default function ShortageStatsPage() {
   }
 
   // 根據篩選條件過濾
-  const filteredStats = showOnlyShortage
-    ? shortageStats.filter(p => p.shortage > 0)
-    : shortageStats
+  const filteredStats = useMemo(() => {
+    let result = shortageStats
+    if (showOnlyShortage) {
+      result = result.filter(p => p.shortage > 0)
+    }
+    if (keyword.trim()) {
+      const kw = keyword.trim().toLowerCase()
+      result = result.filter(p =>
+        p.itemCode.toLowerCase().includes(kw) ||
+        p.name.toLowerCase().includes(kw) ||
+        p.customers.some(c =>
+          c.customerName.toLowerCase().includes(kw) ||
+          c.saleNo.toLowerCase().includes(kw)
+        )
+      )
+    }
+    return result
+  }, [shortageStats, showOnlyShortage, keyword])
 
   // 按客戶分組的數據
   const customerGroups = useMemo(() => {
@@ -166,7 +182,14 @@ export default function ShortageStatsPage() {
           </div>
         )}
 
-        <div className="mb-4 flex gap-4">
+        <div className="mb-4 flex flex-wrap items-center gap-4">
+          <input
+            type="text"
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            placeholder="搜尋品號、商品名稱、客戶、單號"
+            className="rounded border border-gray-300 dark:border-gray-600 px-4 py-1.5 text-sm text-gray-900 dark:text-gray-100 dark:bg-gray-700 placeholder:text-gray-400 dark:placeholder:text-gray-500 w-64"
+          />
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
