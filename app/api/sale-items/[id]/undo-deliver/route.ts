@@ -173,13 +173,10 @@ export async function POST(
 
     const { data: allSaleItems } = await (supabaseServer
       .from('sale_items') as any)
-      .select('id, quantity')
+      .select('id, quantity, store_credit_qty')
       .eq('sale_id', saleId)
 
     const allItemIds = allSaleItems?.map((item: any) => item.id) || []
-    const orderedQuantityMap = new Map<string, number>(
-      allSaleItems?.map((item: any) => [item.id, item.quantity]) || []
-    )
 
     const { data: allConfirmedDeliveryItems } = await (supabaseServer
       .from('delivery_items') as any)
@@ -203,13 +200,14 @@ export async function POST(
     let fullyDeliveredCount = 0
     let partiallyDeliveredCount = 0
 
-    for (const itemId of allItemIds) {
-      const orderedQty = orderedQuantityMap.get(itemId) || 0
-      const deliveredQty = deliveredQuantityMap.get(itemId) || 0
+    for (const si of (allSaleItems || [])) {
+      const deliveredQty = deliveredQuantityMap.get(si.id) || 0
+      const scQty = si.store_credit_qty || 0
+      const resolvedQty = deliveredQty + scQty
 
-      if (deliveredQty >= orderedQty) {
+      if (resolvedQty >= si.quantity) {
         fullyDeliveredCount++
-      } else if (deliveredQty > 0) {
+      } else if (resolvedQty > 0) {
         partiallyDeliveredCount++
       }
     }

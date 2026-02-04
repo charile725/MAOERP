@@ -81,11 +81,12 @@ export async function POST(request: NextRequest) {
     for (const item of saleItems) {
       const requestedQty = quantityMap.get(item.id) || 0
       const deliveredQty = deliveredQuantityMap.get(item.id) || 0
-      const remainingQty = item.quantity - deliveredQty
+      const storeCreditQty = item.store_credit_qty || 0
+      const remainingQty = item.quantity - deliveredQty - storeCreditQty
 
-      // 檢查是否已經全部出貨
+      // 檢查是否已經全部處理（出貨或轉購物金）
       if (remainingQty <= 0) {
-        errors.push(`${item.products.name} 已全部出貨`)
+        errors.push(`${item.products.name} 已全部處理`)
         continue
       }
 
@@ -211,18 +212,13 @@ export async function POST(request: NextRequest) {
             })
         }
 
-        // 更新 sale 的 fulfillment_status（考虑部分出货）
+        // 更新 sale 的 fulfillment_status（考慮出貨和購物金轉換）
         const { data: allSaleItems } = await (supabaseServer
           .from('sale_items') as any)
-          .select('id, quantity')
+          .select('id, quantity, store_credit_qty')
           .eq('sale_id', saleId)
 
         const allItemIds = allSaleItems?.map((item: any) => item.id) || []
-
-        // 创建 sale_item_id -> ordered_quantity 映射
-        const orderedQuantityMap = new Map<string, number>(
-          allSaleItems?.map((item: any) => [item.id, item.quantity]) || []
-        )
 
         const { data: confirmedDeliveryItems } = await (supabaseServer
           .from('delivery_items') as any)
@@ -237,23 +233,24 @@ export async function POST(request: NextRequest) {
           .eq('deliveries.status', 'confirmed')
 
         // 计算每个 sale_item 的已出货总量
-        const deliveredQuantityMap = new Map<string, number>()
+        const confirmedDeliveredMap = new Map<string, number>()
         confirmedDeliveryItems?.forEach((di: any) => {
-          const currentQty = deliveredQuantityMap.get(di.sale_item_id) || 0
-          deliveredQuantityMap.set(di.sale_item_id, currentQty + di.quantity)
+          const currentQty = confirmedDeliveredMap.get(di.sale_item_id) || 0
+          confirmedDeliveredMap.set(di.sale_item_id, currentQty + di.quantity)
         })
 
-        // 计算履行状态
+        // 计算履行状态（考慮出貨和購物金轉換）
         let fullyDeliveredCount = 0
         let partiallyDeliveredCount = 0
 
-        for (const saleItemId of allItemIds) {
-          const orderedQty = orderedQuantityMap.get(saleItemId) || 0
-          const deliveredQty = deliveredQuantityMap.get(saleItemId) || 0
+        for (const si of (allSaleItems || [])) {
+          const deliveredQty = confirmedDeliveredMap.get(si.id) || 0
+          const scQty = si.store_credit_qty || 0
+          const resolvedQty = deliveredQty + scQty
 
-          if (deliveredQty >= orderedQty) {
+          if (resolvedQty >= si.quantity) {
             fullyDeliveredCount++
-          } else if (deliveredQty > 0) {
+          } else if (resolvedQty > 0) {
             partiallyDeliveredCount++
           }
         }

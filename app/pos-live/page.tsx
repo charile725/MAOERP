@@ -76,9 +76,7 @@ export default function POSPage() {
   const [cart, setCart] = useState<CartItem[]>([])
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pending')
   const [isPaid, setIsPaid] = useState(false) // 待定付款方式預設為未收款
-  const [deliveryMethod, setDeliveryMethod] = useState('') // 新增：交貨方式
 
-  const [deliveryNote, setDeliveryNote] = useState('') // 新增：出貨備註
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [customers, setCustomers] = useState<Customer[]>([])
   const [paymentAccounts, setPaymentAccounts] = useState<PaymentAccount[]>([])
@@ -837,9 +835,9 @@ export default function POSPage() {
           payment_method: paymentMethod,
           is_paid: isPaid,
           is_delivered: !hasNotDeliveredItems, // 保留向後兼容
-          delivery_method: hasNotDeliveredItems ? deliveryMethod : undefined,
+          delivery_method: undefined,
           expected_delivery_date: undefined,
-          delivery_note: hasNotDeliveredItems ? deliveryNote : undefined,
+          delivery_note: undefined,
           note: note || undefined,
           discount_type: discountType,
           discount_value: discountValue,
@@ -863,9 +861,7 @@ export default function POSPage() {
         setCustomerSearchQuery('')
         setPaymentMethod('pending') // 直播模式預設待定
         setIsPaid(false) // 待定付款方式預設為未收款
-        setDeliveryMethod('') // 清空交貨方式
 
-        setDeliveryNote('') // 清空出貨備註
         setNote('')
         setDiscountType('none')
         setDiscountValue(0)
@@ -1982,32 +1978,7 @@ export default function POSPage() {
               </div>
             </div>
 
-            {/* Delivery Details - Only when has not delivered items */}
-            {cart.some(item => item.isNotDelivered) && (
-              <div className="space-y-2 border-2 border-orange-400 dark:border-orange-600 rounded-lg p-3 bg-orange-50 dark:bg-orange-900/20">
 
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">交貨方式</label>
-                  <input
-                    type="text"
-                    value={deliveryMethod}
-                    onChange={(e) => setDeliveryMethod(e.target.value)}
-                    placeholder="例：宅配、自取、門市取貨"
-                    className="w-full border-2 border-gray-400 dark:border-gray-600 rounded-lg px-2 py-1 text-sm text-black dark:text-gray-100 bg-white dark:bg-gray-700"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">備註</label>
-                  <textarea
-                    value={deliveryNote}
-                    onChange={(e) => setDeliveryNote(e.target.value)}
-                    placeholder="出貨相關備註"
-                    rows={2}
-                    className="w-full border-2 border-gray-400 dark:border-gray-600 rounded-lg px-2 py-1 text-sm text-black dark:text-gray-100 bg-white dark:bg-gray-700 resize-none"
-                  />
-                </div>
-              </div>
-            )}
 
             {/* 備註輸入框 */}
             <div className="px-3 py-2">

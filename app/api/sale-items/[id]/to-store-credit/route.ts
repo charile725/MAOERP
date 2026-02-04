@@ -255,6 +255,60 @@ export async function POST(
             })
             .eq('id', saleItemId)
 
+        // 10. 更新 sale 的 fulfillment_status（考慮出貨和購物金轉換）
+        const { data: allSaleItems } = await (supabaseServer
+            .from('sale_items') as any)
+            .select('id, quantity, store_credit_qty')
+            .eq('sale_id', sale.id)
+
+        const allItemIds = allSaleItems?.map((item: any) => item.id) || []
+
+        const { data: confirmedDeliveryItems } = await (supabaseServer
+            .from('delivery_items') as any)
+            .select(`
+                sale_item_id,
+                quantity,
+                deliveries!inner (status)
+            `)
+            .in('sale_item_id', allItemIds)
+            .eq('deliveries.status', 'confirmed')
+
+        const deliveredQuantityMap = new Map<string, number>()
+        confirmedDeliveryItems?.forEach((di: any) => {
+            const currentQty = deliveredQuantityMap.get(di.sale_item_id) || 0
+            deliveredQuantityMap.set(di.sale_item_id, currentQty + di.quantity)
+        })
+
+        let fullyResolvedCount = 0
+        let partiallyResolvedCount = 0
+
+        for (const item of (allSaleItems || [])) {
+            const deliveredQty = deliveredQuantityMap.get(item.id) || 0
+            // 用更新後的 store_credit_qty
+            const scQty = item.id === saleItemId
+                ? (saleItem.store_credit_qty || 0) + convertQuantity
+                : (item.store_credit_qty || 0)
+            const resolvedQty = deliveredQty + scQty
+
+            if (resolvedQty >= item.quantity) {
+                fullyResolvedCount++
+            } else if (resolvedQty > 0) {
+                partiallyResolvedCount++
+            }
+        }
+
+        let newFulfillmentStatus = 'none'
+        if (fullyResolvedCount === allItemIds.length) {
+            newFulfillmentStatus = 'completed'
+        } else if (fullyResolvedCount > 0 || partiallyResolvedCount > 0) {
+            newFulfillmentStatus = 'partial'
+        }
+
+        await (supabaseServer
+            .from('sales') as any)
+            .update({ fulfillment_status: newFulfillmentStatus })
+            .eq('id', sale.id)
+
         return NextResponse.json({
             ok: true,
             data: {

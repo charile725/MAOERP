@@ -59,6 +59,15 @@ export async function POST(
       )
     }
 
+    // 檢查是否已轉購物金
+    const storeCreditQty = saleItem.store_credit_qty || 0
+    if (storeCreditQty >= saleItem.quantity) {
+      return NextResponse.json(
+        { ok: false, error: '此商品已全部轉為購物金，無法出貨' },
+        { status: 400 }
+      )
+    }
+
     // 3. 生成delivery_no
     const { data: lastDeliveryArray } = await supabaseServer
       .from('deliveries')
@@ -136,11 +145,10 @@ export async function POST(
       )
     }
 
-    // 7. 更新sale的fulfillment_status
-    // 检查该sale的所有sale_items是否都已出货
+    // 7. 更新sale的fulfillment_status（考慮出貨和購物金轉換）
     const { data: allSaleItems } = await (supabaseServer
       .from('sale_items') as any)
-      .select('id')
+      .select('id, quantity, store_credit_qty')
       .eq('sale_id', saleItem.sales.id)
 
     const allItemIds = allSaleItems?.map((item: any) => item.id) || []
@@ -150,6 +158,7 @@ export async function POST(
       .from('delivery_items') as any)
       .select(`
         sale_item_id,
+        quantity,
         deliveries!inner (
           status
         )
@@ -157,14 +166,31 @@ export async function POST(
       .in('sale_item_id', allItemIds)
       .eq('deliveries.status', 'confirmed')
 
-    const deliveredItemIds = new Set(
-      confirmedDeliveryItems?.map((di: any) => di.sale_item_id) || []
-    )
+    const deliveredQuantityMap = new Map<string, number>()
+    confirmedDeliveryItems?.forEach((di: any) => {
+      const currentQty = deliveredQuantityMap.get(di.sale_item_id) || 0
+      deliveredQuantityMap.set(di.sale_item_id, currentQty + di.quantity)
+    })
+
+    let fullyResolvedCount = 0
+    let partiallyResolvedCount = 0
+
+    for (const si of (allSaleItems || [])) {
+      const deliveredQty = deliveredQuantityMap.get(si.id) || 0
+      const scQty = si.store_credit_qty || 0
+      const resolvedQty = deliveredQty + scQty
+
+      if (resolvedQty >= si.quantity) {
+        fullyResolvedCount++
+      } else if (resolvedQty > 0) {
+        partiallyResolvedCount++
+      }
+    }
 
     let newFulfillmentStatus = 'none'
-    if (deliveredItemIds.size === allItemIds.length) {
+    if (fullyResolvedCount === allItemIds.length) {
       newFulfillmentStatus = 'completed'
-    } else if (deliveredItemIds.size > 0) {
+    } else if (fullyResolvedCount > 0 || partiallyResolvedCount > 0) {
       newFulfillmentStatus = 'partial'
     }
 

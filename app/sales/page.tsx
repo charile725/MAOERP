@@ -504,7 +504,8 @@ export default function SalesPage() {
 
   const handleDeliverItem = async (item: SaleItem) => {
     const deliveredQty = item.delivered_quantity || 0
-    const remainingQty = item.quantity - deliveredQty
+    const storeCreditQty = item.store_credit_qty || 0
+    const remainingQty = item.quantity - deliveredQty - storeCreditQty
 
     if (remainingQty <= 0) {
       alert('此商品已全部出貨')
@@ -1536,7 +1537,9 @@ export default function SalesPage() {
                                     <tbody className="divide-y">
                                       {sale.sale_items.map((item) => {
                                         const deliveredQty = item.delivered_quantity || 0
-                                        const remainingQty = item.quantity - deliveredQty
+                                        const storeCreditQty = item.store_credit_qty || 0
+                                        const remainingQty = item.quantity - deliveredQty - storeCreditQty
+                                        const isFullyResolved = remainingQty <= 0
                                         return (
                                           <tr key={item.id}>
                                             <td className="py-2 text-sm text-gray-900 dark:text-gray-100">{item.products.item_code}</td>
@@ -1546,7 +1549,7 @@ export default function SalesPage() {
                                             </td>
                                             <td className="py-2 text-right text-sm">
                                               <span
-                                                className={`font-medium ${item.is_delivered
+                                                className={`font-medium ${isFullyResolved
                                                   ? 'text-green-600 dark:text-green-400'
                                                   : deliveredQty > 0
                                                     ? 'text-yellow-600 dark:text-yellow-400'
@@ -1564,7 +1567,7 @@ export default function SalesPage() {
                                             </td>
                                             <td className="py-2 text-center">
                                               <div className="flex items-center justify-center gap-1">
-                                                {!item.is_delivered && (
+                                                {!isFullyResolved && (
                                                   <button
                                                     onClick={() => handleDeliverItem(item)}
                                                     disabled={delivering === item.id}
