@@ -171,16 +171,19 @@ export async function GET(request: NextRequest) {
 
     stats.fake_total_sales = stats.total_sales + storeCreditOriginalTotal
 
-    // 計算購物金轉出（從 sale_corrections 查詢）
-    const allStoreCreditSaleIds = [
-      ...(storeCreditSales || []).map((s: any) => s.id),
-      ...(sales || []).map((s: any) => s.id),
-    ]
-    if (allStoreCreditSaleIds.length > 0) {
+    // 計算購物金轉出（查詢該營業日所有銷售的 sale_corrections，不限 status）
+    const { data: allDaySales } = await (supabaseServer
+      .from('sales') as any)
+      .select('id')
+      .eq('sale_date', businessDate)
+      .eq('source', source)
+
+    if (allDaySales && allDaySales.length > 0) {
+      const allDaySaleIds = allDaySales.map((s: any) => s.id)
       const { data: scCorrections } = await (supabaseServer
         .from('sale_corrections') as any)
         .select('store_credit_granted')
-        .in('sale_id', allStoreCreditSaleIds)
+        .in('sale_id', allDaySaleIds)
         .eq('correction_type', 'to_store_credit')
 
       if (scCorrections) {

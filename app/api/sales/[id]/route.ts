@@ -90,7 +90,7 @@ export async function PATCH(
     // 1. 讀取舊的 sale 記錄
     const { data: oldSale, error: fetchError } = await (supabaseServer
       .from('sales') as any)
-      .select('account_id, total, payment_method')
+      .select('account_id, total, payment_method, is_paid')
       .eq('id', id)
       .single()
 
@@ -115,11 +115,46 @@ export async function PATCH(
     const newAccountId = account?.id || null
 
     // 3. 如果帳戶有變更，處理餘額轉移
-    // 🔧 修正：只有當舊帳戶存在時才處理轉移
-    // 避免補記歷史銷售單的帳戶交易（當初創建時因 payment_method_code 未設定而沒有記帳）
+    // 🔧 只有在「確實有 sale 類型帳戶交易」時才做餘額轉移
+    // - 未付款的銷售單不會有帳戶交易，不需要轉移
+    // - 付款方式為 pending 的銷售單不會有帳戶交易（account-service 會跳過）
+    // - 透過 AR 收款的銷售單，帳戶交易 ref_type='settlement'，不屬於 sale 類型
     if (oldAccountId && oldAccountId !== newAccountId) {
-      // 3.1 還原舊帳戶餘額
-      if (oldAccountId) {
+      // 先檢查是否有實際的 sale 類型帳戶交易存在
+      const { data: existingSaleTransactions } = await (supabaseServer
+        .from('account_transactions') as any)
+        .select('id, account_id, amount')
+        .eq('ref_type', 'sale')
+        .eq('ref_id', id.toString())
+
+      const hasSaleTransactions = existingSaleTransactions && existingSaleTransactions.length > 0
+
+      if (hasSaleTransactions) {
+        // 3.1 還原舊帳戶餘額（只在確實有 sale 交易記錄時）
+        // 計算實際需要還原的金額（從交易記錄中取得，而非用 saleTotal）
+        const totalToRestore = existingSaleTransactions.reduce((sum: number, tx: any) => sum + tx.amount, 0)
+
+        for (const tx of existingSaleTransactions) {
+          const { data: txAccount } = await (supabaseServer
+            .from('accounts') as any)
+            .select('balance')
+            .eq('id', tx.account_id)
+            .single()
+
+          if (txAccount) {
+            const restoredBalance = txAccount.balance - tx.amount
+            await (supabaseServer
+              .from('accounts') as any)
+              .update({
+                balance: restoredBalance,
+                updated_at: getTaiwanTime()
+              })
+              .eq('id', tx.account_id)
+
+            console.log(`[Sale PATCH ${id}] Restored account ${tx.account_id}: -${tx.amount}`)
+          }
+        }
+
         // 刪除舊的 account_transactions
         await (supabaseServer
           .from('account_transactions') as any)
@@ -127,63 +162,47 @@ export async function PATCH(
           .eq('ref_type', 'sale')
           .eq('ref_id', id.toString())
 
-        // 還原舊帳戶餘額（減去收入）
-        const { data: oldAccount } = await (supabaseServer
-          .from('accounts') as any)
-          .select('balance')
-          .eq('id', oldAccountId)
-          .single()
-
-        if (oldAccount) {
-          const restoredBalance = oldAccount.balance - saleTotal
-          await (supabaseServer
+        // 3.2 記錄新帳戶交易（不轉入 pending 帳戶）
+        if (newAccountId && payment_method !== 'pending') {
+          const { data: newAccount } = await (supabaseServer
             .from('accounts') as any)
-            .update({
-              balance: restoredBalance,
-              updated_at: getTaiwanTime()
-            })
-            .eq('id', oldAccountId)
-
-          console.log(`[Sale PATCH ${id}] Restored old account ${oldAccountId}: -${saleTotal}`)
-        }
-      }
-
-      // 3.2 記錄新帳戶交易
-      if (newAccountId) {
-        const { data: newAccount } = await (supabaseServer
-          .from('accounts') as any)
-          .select('balance')
-          .eq('id', newAccountId)
-          .single()
-
-        if (newAccount) {
-          const newBalance = newAccount.balance + saleTotal
-
-          // 更新新帳戶餘額
-          await (supabaseServer
-            .from('accounts') as any)
-            .update({
-              balance: newBalance,
-              updated_at: getTaiwanTime()
-            })
+            .select('balance')
             .eq('id', newAccountId)
+            .single()
 
-          // 建立新的 account_transactions
-          await (supabaseServer
-            .from('account_transactions') as any)
-            .insert({
-              account_id: newAccountId,
-              transaction_type: 'sale',
-              amount: saleTotal,
-              balance_before: newAccount.balance,
-              balance_after: newBalance,
-              ref_type: 'sale',
-              ref_id: id.toString(),
-              note: `銷售單 ${id} - 變更支付方式為 ${payment_method}`
-            })
+          if (newAccount) {
+            const newBalance = newAccount.balance + totalToRestore
 
-          console.log(`[Sale PATCH ${id}] Recorded new account ${newAccountId}: +${saleTotal}`)
+            // 更新新帳戶餘額
+            await (supabaseServer
+              .from('accounts') as any)
+              .update({
+                balance: newBalance,
+                updated_at: getTaiwanTime()
+              })
+              .eq('id', newAccountId)
+
+            // 建立新的 account_transactions
+            await (supabaseServer
+              .from('account_transactions') as any)
+              .insert({
+                account_id: newAccountId,
+                transaction_type: 'sale',
+                amount: totalToRestore,
+                balance_before: newAccount.balance,
+                balance_after: newBalance,
+                ref_type: 'sale',
+                ref_id: id.toString(),
+                note: `銷售單 ${id} - 變更支付方式為 ${payment_method}`
+              })
+
+            console.log(`[Sale PATCH ${id}] Recorded new account ${newAccountId}: +${totalToRestore}`)
+          }
+        } else if (payment_method === 'pending') {
+          console.log(`[Sale PATCH ${id}] 新付款方式為 pending，跳過帳戶入帳`)
         }
+      } else {
+        console.log(`[Sale PATCH ${id}] 無 sale 類型帳戶交易，跳過餘額轉移（可能是未付款或 AR 收款的銷售單）`)
       }
     }
 
