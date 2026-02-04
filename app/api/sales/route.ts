@@ -397,6 +397,33 @@ export async function POST(request: NextRequest) {
     // 3. Get product details and insert sale items (subtotal is auto-calculated by database)
     const saleItems = await Promise.all(
       draft.items.map(async (item) => {
+        // 官方套賞項沒有 product_id，需從 prize + kuji 取得資訊
+        if (item.ichiban_kuji_prize_id && !item.product_id) {
+          const { data: prize } = await (supabaseServer
+            .from('ichiban_kuji_prizes') as any)
+            .select('prize_tier, prize_name, kuji_id')
+            .eq('id', item.ichiban_kuji_prize_id)
+            .single()
+
+          const { data: kuji } = await (supabaseServer
+            .from('ichiban_kuji') as any)
+            .select('avg_cost, name')
+            .eq('id', item.ichiban_kuji_id || prize?.kuji_id)
+            .single()
+
+          const displayName = prize?.prize_name || prize?.prize_tier || ''
+          return {
+            sale_id: sale.id,
+            product_id: null,
+            quantity: item.quantity,
+            price: item.price,
+            cost: kuji?.avg_cost || 0,
+            snapshot_name: displayName ? `${kuji?.name || ''} ${displayName}` : null,
+            ichiban_kuji_prize_id: item.ichiban_kuji_prize_id,
+            ichiban_kuji_id: item.ichiban_kuji_id || prize?.kuji_id || null,
+          }
+        }
+
         const { data: product } = await (supabaseServer
           .from('products') as any)
           .select('name, cost, avg_cost')

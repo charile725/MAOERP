@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
         ichiban_kuji_prizes (
           id,
           prize_tier,
+          prize_name,
           product_id,
           quantity,
           remaining,
@@ -70,27 +71,33 @@ export async function POST(request: NextRequest) {
     }
 
     const draft = validation.data
+    const isOfficial = draft.set_type === 'official'
 
     // Calculate total draws and average cost
     let totalDraws = 0
     let totalCost = 0
 
-    // Fetch product costs
-    const productIds = draft.prizes.map(p => p.product_id)
-    const { data: products } = await (supabaseServer
-      .from('products') as any)
-      .select('id, cost')
-      .in('id', productIds)
+    if (isOfficial) {
+      // 官方套：成本來自使用者輸入
+      totalDraws = draft.prizes.reduce((sum, p) => sum + p.quantity, 0)
+      totalCost = draft.total_cost || 0
+    } else {
+      // 自製套：成本從各商品計算
+      const productIds = draft.prizes.map(p => p.product_id).filter(Boolean) as string[]
+      const { data: products } = await (supabaseServer
+        .from('products') as any)
+        .select('id, cost')
+        .in('id', productIds)
 
-    const productCostMap = new Map(
-      (products as any[])?.map(p => [p.id, p.cost]) || []
-    )
+      const productCostMap = new Map(
+        (products as any[])?.map(p => [p.id, p.cost]) || []
+      )
 
-    // Calculate totals
-    for (const prize of draft.prizes) {
-      const cost = productCostMap.get(prize.product_id) || 0
-      totalDraws += prize.quantity
-      totalCost += cost * prize.quantity
+      for (const prize of draft.prizes) {
+        const cost = productCostMap.get(prize.product_id) || 0
+        totalDraws += prize.quantity
+        totalCost += cost * prize.quantity
+      }
     }
 
     const avgCost = totalDraws > 0 ? totalCost / totalDraws : 0
@@ -104,6 +111,8 @@ export async function POST(request: NextRequest) {
         price: draft.price,
         total_draws: totalDraws,
         avg_cost: avgCost,
+        set_type: draft.set_type || 'custom',
+        total_cost: totalCost,
         combo_prices: draft.combo_prices || [],
       })
       .select()
@@ -120,7 +129,8 @@ export async function POST(request: NextRequest) {
     const prizeInserts = draft.prizes.map(prize => ({
       kuji_id: kuji.id,
       prize_tier: prize.prize_tier,
-      product_id: prize.product_id,
+      prize_name: prize.prize_name || null,
+      product_id: isOfficial ? null : prize.product_id,
       quantity: prize.quantity,
       remaining: prize.quantity, // 初始剩餘數量等於總數量
     }))

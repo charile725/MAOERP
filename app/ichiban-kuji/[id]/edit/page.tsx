@@ -17,6 +17,7 @@ type Prize = {
   prize_tier: string
   product_id: string
   product?: Product | null
+  prize_name?: string
   quantity: number
 }
 
@@ -24,6 +25,8 @@ type ComboPrice = {
   draws: number
   price: number
 }
+
+type SetType = 'custom' | 'official'
 
 export default function EditIchibanKujiPage() {
   const router = useRouter()
@@ -33,6 +36,8 @@ export default function EditIchibanKujiPage() {
   const [name, setName] = useState('')
   const [barcode, setBarcode] = useState('')
   const [price, setPrice] = useState('')
+  const [setType, setSetType] = useState<SetType>('custom')
+  const [totalCost, setTotalCost] = useState('')
   const [prizes, setPrizes] = useState<Prize[]>([])
   const [comboPrices, setComboPrices] = useState<ComboPrice[]>([])
   const [products, setProducts] = useState<Product[]>([])
@@ -41,6 +46,8 @@ export default function EditIchibanKujiPage() {
   const [error, setError] = useState('')
   const [searchInputs, setSearchInputs] = useState<{ [key: number]: string }>({})
   const [searchResults, setSearchResults] = useState<{ [key: number]: Product[] }>({})
+
+  const isOfficial = setType === 'official'
 
   useEffect(() => {
     fetchProducts()
@@ -70,12 +77,17 @@ export default function EditIchibanKujiPage() {
         setName(kuji.name)
         setBarcode(kuji.barcode || '')
         setPrice(kuji.price.toString())
+        setSetType(kuji.set_type || 'custom')
+        setTotalCost(kuji.total_cost ? kuji.total_cost.toString() : '')
+
+        const loadedSetType = kuji.set_type || 'custom'
 
         // Convert prizes with product data
         const prizesData = kuji.ichiban_kuji_prizes.map((prize: any) => ({
           prize_tier: prize.prize_tier,
-          product_id: prize.product_id,
-          product: prize.products,
+          prize_name: prize.prize_name || '',
+          product_id: prize.product_id || '',
+          product: prize.products || null,
           quantity: prize.quantity
         }))
 
@@ -84,14 +96,16 @@ export default function EditIchibanKujiPage() {
         // Set combo prices
         setComboPrices(kuji.combo_prices || [])
 
-        // Set search inputs to product names
-        const inputs: { [key: number]: string } = {}
-        prizesData.forEach((prize: Prize, index: number) => {
-          if (prize.product) {
-            inputs[index] = prize.product.name
-          }
-        })
-        setSearchInputs(inputs)
+        // Set search inputs to product names (only for custom sets)
+        if (loadedSetType === 'custom') {
+          const inputs: { [key: number]: string } = {}
+          prizesData.forEach((prize: Prize, index: number) => {
+            if (prize.product) {
+              inputs[index] = prize.product.name
+            }
+          })
+          setSearchInputs(inputs)
+        }
       } else {
         setError('找不到一番賞')
       }
@@ -103,7 +117,7 @@ export default function EditIchibanKujiPage() {
   }
 
   const addPrize = () => {
-    setPrizes([...prizes, { prize_tier: '', product_id: '', product: null, quantity: 1 }])
+    setPrizes([...prizes, { prize_tier: '', product_id: '', product: null, prize_name: '', quantity: 1 }])
   }
 
   const removePrize = (index: number) => {
@@ -182,18 +196,23 @@ export default function EditIchibanKujiPage() {
 
   const calculateStats = () => {
     let totalDraws = 0
-    let totalCost = 0
+    let computedTotalCost = 0
 
-    prizes.forEach(prize => {
-      if (prize.product) {
-        totalDraws += prize.quantity
-        totalCost += prize.product.cost * prize.quantity
-      }
-    })
+    if (isOfficial) {
+      totalDraws = prizes.reduce((sum, p) => sum + p.quantity, 0)
+      computedTotalCost = parseFloat(totalCost) || 0
+    } else {
+      prizes.forEach(prize => {
+        if (prize.product) {
+          totalDraws += prize.quantity
+          computedTotalCost += prize.product.cost * prize.quantity
+        }
+      })
+    }
 
-    const avgCost = totalDraws > 0 ? totalCost / totalDraws : 0
+    const avgCost = totalDraws > 0 ? computedTotalCost / totalDraws : 0
 
-    return { totalDraws, totalCost, avgCost }
+    return { totalDraws, totalCost: computedTotalCost, avgCost }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -211,6 +230,14 @@ export default function EditIchibanKujiPage() {
       return
     }
 
+    if (isOfficial) {
+      const costNum = parseFloat(totalCost)
+      if (!totalCost || isNaN(costNum) || costNum < 0) {
+        setError('請輸入正確的整套成本')
+        return
+      }
+    }
+
     if (prizes.length === 0) {
       setError('請至少新增一個賞項')
       return
@@ -222,7 +249,7 @@ export default function EditIchibanKujiPage() {
         setError(`第 ${i + 1} 個賞項：請輸入賞別名稱`)
         return
       }
-      if (!prize.product_id) {
+      if (!isOfficial && !prize.product_id) {
         setError(`第 ${i + 1} 個賞項：請選擇商品`)
         return
       }
@@ -242,7 +269,14 @@ export default function EditIchibanKujiPage() {
           name,
           barcode: barcode.trim() || null,
           price: parseFloat(price),
-          prizes,
+          set_type: setType,
+          total_cost: isOfficial ? parseFloat(totalCost) || 0 : 0,
+          prizes: prizes.map(p => ({
+            prize_tier: p.prize_tier,
+            prize_name: p.prize_name || null,
+            product_id: isOfficial ? null : p.product_id,
+            quantity: p.quantity,
+          })),
           combo_prices: comboPrices
         })
       })
@@ -299,6 +333,21 @@ export default function EditIchibanKujiPage() {
           {/* Basic Info */}
           <div className="rounded-lg bg-white p-4 shadow dark:bg-gray-800 md:p-6">
             <h2 className="mb-4 text-xl font-semibold text-gray-900 dark:text-gray-100">基本資訊</h2>
+
+            {/* Set Type Display (read-only on edit) */}
+            <div className="mb-4">
+              <label className="mb-2 block text-sm font-medium text-gray-900 dark:text-gray-100">
+                套組類型
+              </label>
+              <span className={`inline-block rounded px-3 py-1 text-sm font-medium ${
+                isOfficial
+                  ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400'
+                  : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
+              }`}>
+                {isOfficial ? '官方套' : '自製套'}
+              </span>
+            </div>
+
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <div>
                 <label className="mb-2 block text-sm font-medium text-gray-900 dark:text-gray-100">
@@ -339,6 +388,24 @@ export default function EditIchibanKujiPage() {
                 />
               </div>
             </div>
+
+            {/* Total Cost for Official Sets */}
+            {isOfficial && (
+              <div className="mt-4">
+                <label className="mb-2 block text-sm font-medium text-gray-900 dark:text-gray-100">
+                  整套成本 *
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={totalCost}
+                  onChange={(e) => setTotalCost(e.target.value)}
+                  className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 md:w-1/3"
+                  placeholder="例：5000"
+                />
+              </div>
+            )}
           </div>
 
           {/* Combo Prices */}
@@ -418,7 +485,64 @@ export default function EditIchibanKujiPage() {
               <div className="rounded border-2 border-dashed border-gray-300 p-8 text-center text-gray-500 dark:border-gray-600 dark:text-gray-400">
                 尚未新增任何賞項，點擊上方按鈕新增
               </div>
+            ) : isOfficial ? (
+              /* Official Set: prize_tier, prize_name, and quantity */
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="border-b dark:border-gray-700">
+                    <tr>
+                      <th className="pb-2 text-left text-sm font-semibold text-gray-900 dark:text-gray-100 w-24">賞別 *</th>
+                      <th className="pb-2 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">商品名稱</th>
+                      <th className="pb-2 text-left text-sm font-semibold text-gray-900 dark:text-gray-100 w-28">數量 *</th>
+                      <th className="pb-2 text-center text-sm font-semibold text-gray-900 dark:text-gray-100 w-20">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y dark:divide-gray-700">
+                    {prizes.map((prize, index) => (
+                      <tr key={index}>
+                        <td className="py-2 pr-2">
+                          <input
+                            type="text"
+                            value={prize.prize_tier}
+                            onChange={(e) => updatePrize(index, 'prize_tier', e.target.value)}
+                            className="w-full rounded border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                            placeholder="A賞"
+                          />
+                        </td>
+                        <td className="py-2 pr-2">
+                          <input
+                            type="text"
+                            value={prize.prize_name || ''}
+                            onChange={(e) => updatePrize(index, 'prize_name', e.target.value)}
+                            className="w-full rounded border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                            placeholder="例：角色公仔"
+                          />
+                        </td>
+                        <td className="py-2 pr-2">
+                          <input
+                            type="number"
+                            min="1"
+                            value={prize.quantity}
+                            onChange={(e) => updatePrize(index, 'quantity', parseInt(e.target.value) || 1)}
+                            className="w-full rounded border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                          />
+                        </td>
+                        <td className="py-2 text-center">
+                          <button
+                            type="button"
+                            onClick={() => removePrize(index)}
+                            className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-500"
+                          >
+                            ✕
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             ) : (
+              /* Custom Set: Full table with product search */
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead className="border-b dark:border-gray-700">

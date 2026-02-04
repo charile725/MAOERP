@@ -82,7 +82,7 @@ export const saleDraftSchema = z.object({
   ).optional(),
   items: z.array(
     z.object({
-      product_id: z.string().uuid(),
+      product_id: z.string().uuid().optional().nullable(), // nullable for official ichiban kuji prizes
       quantity: z.number().int().positive('Quantity must be positive'),
       price: z.number().min(0, 'Price must be positive'),
       ichiban_kuji_prize_id: z.string().uuid().optional(), // 如果是從一番賞售出
@@ -131,7 +131,8 @@ export const settlementSchema = z.object({
 // Ichiban Kuji schemas
 export const ichibanKujiPrizeSchema = z.object({
   prize_tier: z.string().min(1, 'Prize tier is required'),
-  product_id: z.string().uuid('Invalid product ID'),
+  product_id: z.string().uuid('Invalid product ID').optional().nullable(),
+  prize_name: z.string().optional().nullable(),
   quantity: z.number().int().positive('Quantity must be positive'),
 })
 
@@ -144,6 +145,8 @@ export const ichibanKujiDraftSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   barcode: z.string().optional().nullable(),
   price: z.number().min(0, 'Price must be positive'),
+  set_type: z.enum(['custom', 'official']).optional().default('custom'),
+  total_cost: z.number().min(0).optional().default(0),
   prizes: z.array(ichibanKujiPrizeSchema).min(1, 'At least one prize is required'),
   combo_prices: z.array(ichibanKujiComboPriceSchema).optional().default([]),
 })

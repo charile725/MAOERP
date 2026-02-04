@@ -15,10 +15,11 @@ type Product = {
 type Prize = {
   id: string
   prize_tier: string
-  product_id: string
+  prize_name?: string | null
+  product_id: string | null
   quantity: number
   remaining: number
-  products: Product
+  products: Product | null
 }
 
 type ComboPrice = {
@@ -33,6 +34,8 @@ type IchibanKuji = {
   avg_cost: number
   price?: number
   is_active: boolean
+  set_type?: 'custom' | 'official'
+  total_cost?: number
   created_at: string
   combo_prices?: ComboPrice[]
   ichiban_kuji_prizes: Prize[]
@@ -187,6 +190,15 @@ export default function IchibanKujiPage() {
                               {expandedRows.has(kuji.id) ? '▼' : '▶'}
                             </span>
                             {kuji.name}
+                            {kuji.set_type === 'official' ? (
+                              <span className="rounded bg-orange-100 px-1.5 py-0.5 text-xs font-medium text-orange-800 dark:bg-orange-900/30 dark:text-orange-400">
+                                官方
+                              </span>
+                            ) : (
+                              <span className="rounded bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
+                                自製
+                              </span>
+                            )}
                           </div>
                         </td>
                         <td className="px-6 py-4 text-center text-sm text-gray-900 dark:text-gray-100">
@@ -303,10 +315,12 @@ export default function IchibanKujiPage() {
                                     <tr>
                                       <th className="pb-2 text-left text-xs font-semibold text-gray-900 dark:text-gray-100">賞別</th>
                                       <th className="pb-2 text-left text-xs font-semibold text-gray-900 dark:text-gray-100">商品名稱</th>
-                                      <th className="pb-2 text-left text-xs font-semibold text-gray-900 dark:text-gray-100">品號</th>
+                                      {kuji.set_type !== 'official' && (
+                                        <th className="pb-2 text-left text-xs font-semibold text-gray-900 dark:text-gray-100">品號</th>
+                                      )}
                                       <th className="pb-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">總數</th>
                                       <th className="pb-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">剩餘</th>
-                                      {userRole === 'admin' && (
+                                      {userRole === 'admin' && kuji.set_type !== 'official' && (
                                         <>
                                           <th className="pb-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">單位成本</th>
                                           <th className="pb-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">小計</th>
@@ -321,13 +335,17 @@ export default function IchibanKujiPage() {
                                           {prize.prize_tier}
                                         </td>
                                         <td className="py-2 text-sm text-gray-900 dark:text-gray-100">
-                                          {prize.products.name}
+                                          {kuji.set_type === 'official'
+                                            ? (prize.prize_name || '-')
+                                            : (prize.products?.name || '-')}
                                         </td>
-                                        <td className="py-2 text-sm text-gray-500 dark:text-gray-400">
-                                          {prize.products.item_code}
-                                        </td>
+                                        {kuji.set_type !== 'official' && (
+                                          <td className="py-2 text-sm text-gray-500 dark:text-gray-400">
+                                            {prize.products?.item_code || '-'}
+                                          </td>
+                                        )}
                                         <td className="py-2 text-right text-sm text-gray-900 dark:text-gray-100">
-                                          {prize.quantity} {prize.products.unit}
+                                          {prize.quantity} {prize.products?.unit || '抽'}
                                         </td>
                                         <td className="py-2 text-right text-sm font-semibold">
                                           <span className={
@@ -344,13 +362,13 @@ export default function IchibanKujiPage() {
                                                 : `${prize.remaining} 抽`}
                                           </span>
                                         </td>
-                                        {userRole === 'admin' && (
+                                        {userRole === 'admin' && kuji.set_type !== 'official' && (
                                           <>
                                             <td className="py-2 text-right text-sm text-gray-900 dark:text-gray-100">
-                                              {formatCurrency(prize.products.cost)}
+                                              {formatCurrency(prize.products?.cost || 0)}
                                             </td>
                                             <td className="py-2 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">
-                                              {formatCurrency(prize.products.cost * prize.quantity)}
+                                              {formatCurrency((prize.products?.cost || 0) * prize.quantity)}
                                             </td>
                                           </>
                                         )}
@@ -360,15 +378,17 @@ export default function IchibanKujiPage() {
                                   {userRole === 'admin' && (
                                     <tfoot className="border-t-2 bg-gray-100 dark:bg-gray-800">
                                       <tr>
-                                        <td colSpan={5} className="py-3 text-right text-sm font-semibold text-gray-600 dark:text-gray-400">
+                                        <td colSpan={kuji.set_type === 'official' ? 3 : 5} className="py-3 text-right text-sm font-semibold text-gray-600 dark:text-gray-400">
                                           Σ 總成本:
                                         </td>
-                                        <td colSpan={2} className="py-3 text-right text-base font-bold text-gray-700 dark:text-gray-300">
+                                        <td colSpan={kuji.set_type === 'official' ? 1 : 2} className="py-3 text-right text-base font-bold text-gray-700 dark:text-gray-300">
                                           {formatCurrency(
-                                            kuji.ichiban_kuji_prizes.reduce(
-                                              (sum, prize) => sum + prize.products.cost * prize.quantity,
-                                              0
-                                            )
+                                            kuji.set_type === 'official'
+                                              ? (kuji.total_cost || 0)
+                                              : kuji.ichiban_kuji_prizes.reduce(
+                                                  (sum, prize) => sum + (prize.products?.cost || 0) * prize.quantity,
+                                                  0
+                                                )
                                           )}
                                         </td>
                                       </tr>
