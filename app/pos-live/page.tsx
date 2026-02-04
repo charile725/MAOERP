@@ -77,7 +77,7 @@ export default function POSPage() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pending')
   const [isPaid, setIsPaid] = useState(false) // 待定付款方式預設為未收款
   const [deliveryMethod, setDeliveryMethod] = useState('') // 新增：交貨方式
-  const [expectedDeliveryDate, setExpectedDeliveryDate] = useState('') // 新增：預計出貨日
+
   const [deliveryNote, setDeliveryNote] = useState('') // 新增：出貨備註
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [customers, setCustomers] = useState<Customer[]>([])
@@ -838,7 +838,7 @@ export default function POSPage() {
           is_paid: isPaid,
           is_delivered: !hasNotDeliveredItems, // 保留向後兼容
           delivery_method: hasNotDeliveredItems ? deliveryMethod : undefined,
-          expected_delivery_date: hasNotDeliveredItems ? expectedDeliveryDate : undefined,
+          expected_delivery_date: undefined,
           delivery_note: hasNotDeliveredItems ? deliveryNote : undefined,
           note: note || undefined,
           discount_type: discountType,
@@ -864,7 +864,7 @@ export default function POSPage() {
         setPaymentMethod('pending') // 直播模式預設待定
         setIsPaid(false) // 待定付款方式預設為未收款
         setDeliveryMethod('') // 清空交貨方式
-        setExpectedDeliveryDate('') // 清空預計出貨日
+
         setDeliveryNote('') // 清空出貨備註
         setNote('')
         setDiscountType('none')
@@ -1985,15 +1985,7 @@ export default function POSPage() {
             {/* Delivery Details - Only when has not delivered items */}
             {cart.some(item => item.isNotDelivered) && (
               <div className="space-y-2 border-2 border-orange-400 dark:border-orange-600 rounded-lg p-3 bg-orange-50 dark:bg-orange-900/20">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">預計出貨日</label>
-                  <input
-                    type="date"
-                    value={expectedDeliveryDate}
-                    onChange={(e) => setExpectedDeliveryDate(e.target.value)}
-                    className="w-full border-2 border-gray-400 dark:border-gray-600 rounded-lg px-2 py-1 text-sm text-black dark:text-gray-100 bg-white dark:bg-gray-700"
-                  />
-                </div>
+
                 <div>
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">交貨方式</label>
                   <input
@@ -2397,168 +2389,168 @@ export default function POSPage() {
               {!closingStats ? (
                 <div className="p-12 text-center text-gray-500 dark:text-gray-400">載入中...</div>
               ) : (
-              <>
-              <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
-                {/* 日期選擇 */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    營業日期
-                  </label>
-                  <input
-                    type="date"
-                    value={businessDate}
-                    onChange={async (e) => {
-                      const newDate = e.target.value
-                      setBusinessDate(newDate)
-                      await fetchClosingStats(newDate)
-                    }}
-                    className="w-full border dark:border-gray-600 rounded-lg px-4 py-2 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 focus:border-blue-500 focus:outline-none"
-                  />
-                </div>
+                <>
+                  <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                    {/* 日期選擇 */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        營業日期
+                      </label>
+                      <input
+                        type="date"
+                        value={businessDate}
+                        onChange={async (e) => {
+                          const newDate = e.target.value
+                          setBusinessDate(newDate)
+                          await fetchClosingStats(newDate)
+                        }}
+                        className="w-full border dark:border-gray-600 rounded-lg px-4 py-2 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 focus:border-blue-500 focus:outline-none"
+                      />
+                    </div>
 
-                {/* 已日結警告 */}
-                {alreadyClosed && (
-                  <div className="bg-red-50 dark:bg-red-900/20 border-2 border-red-300 dark:border-red-700 rounded-lg p-4">
-                    <div className="text-red-800 dark:text-red-300 font-semibold">
-                      {businessDate} 已經日結過了，無法重複日結
-                    </div>
-                  </div>
-                )}
-
-                {/* 統計摘要 */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
-                    <div className="text-sm font-medium text-blue-800 dark:text-blue-400 mb-1">
-                      總銷售筆數
-                    </div>
-                    <div className="text-2xl font-bold text-blue-600 dark:text-blue-300">
-                      {closingStats.sales_count} 筆
-                    </div>
-                  </div>
-                  <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
-                    <div className="text-sm font-medium text-green-800 dark:text-green-400 mb-1">
-                      總營業額
-                    </div>
-                    <div className="text-2xl font-bold text-green-600 dark:text-green-300">
-                      {formatCurrency(closingStats.total_sales)}
-                    </div>
-                  </div>
-                </div>
-
-                {/* 假營業額（轉購物金前） */}
-                {closingStats.store_credit_converted > 0 && (
-                  <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4 border-2 border-purple-200 dark:border-purple-700">
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <div className="text-sm font-medium text-purple-800 dark:text-purple-400 mb-1">
-                          假營業額（轉購物金前）
-                        </div>
-                        <div className="text-xs text-purple-600 dark:text-purple-400">
-                          含 {closingStats.store_credit_count} 筆已轉購物金
+                    {/* 已日結警告 */}
+                    {alreadyClosed && (
+                      <div className="bg-red-50 dark:bg-red-900/20 border-2 border-red-300 dark:border-red-700 rounded-lg p-4">
+                        <div className="text-red-800 dark:text-red-300 font-semibold">
+                          {businessDate} 已經日結過了，無法重複日結
                         </div>
                       </div>
-                      <div className="text-2xl font-bold text-purple-600 dark:text-purple-300">
-                        {formatCurrency(closingStats.fake_total_sales)}
+                    )}
+
+                    {/* 統計摘要 */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
+                        <div className="text-sm font-medium text-blue-800 dark:text-blue-400 mb-1">
+                          總銷售筆數
+                        </div>
+                        <div className="text-2xl font-bold text-blue-600 dark:text-blue-300">
+                          {closingStats.sales_count} 筆
+                        </div>
+                      </div>
+                      <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
+                        <div className="text-sm font-medium text-green-800 dark:text-green-400 mb-1">
+                          總營業額
+                        </div>
+                        <div className="text-2xl font-bold text-green-600 dark:text-green-300">
+                          {formatCurrency(closingStats.total_sales)}
+                        </div>
                       </div>
                     </div>
-                    <div className="mt-2 pt-2 border-t border-purple-200 dark:border-purple-700 text-sm text-purple-700 dark:text-purple-300">
-                      <div className="flex justify-between">
-                        <span>轉購物金金額：</span>
-                        <span className="font-semibold">-{formatCurrency(closingStats.store_credit_converted)}</span>
+
+                    {/* 假營業額（轉購物金前） */}
+                    {closingStats.store_credit_converted > 0 && (
+                      <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4 border-2 border-purple-200 dark:border-purple-700">
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <div className="text-sm font-medium text-purple-800 dark:text-purple-400 mb-1">
+                              假營業額（轉購物金前）
+                            </div>
+                            <div className="text-xs text-purple-600 dark:text-purple-400">
+                              含 {closingStats.store_credit_count} 筆已轉購物金
+                            </div>
+                          </div>
+                          <div className="text-2xl font-bold text-purple-600 dark:text-purple-300">
+                            {formatCurrency(closingStats.fake_total_sales)}
+                          </div>
+                        </div>
+                        <div className="mt-2 pt-2 border-t border-purple-200 dark:border-purple-700 text-sm text-purple-700 dark:text-purple-300">
+                          <div className="flex justify-between">
+                            <span>轉購物金金額：</span>
+                            <span className="font-semibold">-{formatCurrency(closingStats.store_credit_converted)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 已收款 vs 未收款 */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-lg p-4 border-2 border-emerald-200 dark:border-emerald-700">
+                        <div className="text-sm font-medium text-emerald-800 dark:text-emerald-400 mb-1">
+                          已收款
+                        </div>
+                        <div className="text-xl font-bold text-emerald-600 dark:text-emerald-300">
+                          {formatCurrency(closingStats.paid_sales || 0)}
+                        </div>
+                        <div className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
+                          {closingStats.paid_count || 0} 筆
+                        </div>
+                      </div>
+                      <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-4 border-2 border-orange-200 dark:border-orange-700">
+                        <div className="text-sm font-medium text-orange-800 dark:text-orange-400 mb-1">
+                          未收款
+                        </div>
+                        <div className="text-xl font-bold text-orange-600 dark:text-orange-300">
+                          {formatCurrency(closingStats.unpaid_sales || 0)}
+                        </div>
+                        <div className="text-xs text-orange-600 dark:text-orange-400 mt-1">
+                          {closingStats.unpaid_count || 0} 筆
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
 
-                {/* 已收款 vs 未收款 */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-lg p-4 border-2 border-emerald-200 dark:border-emerald-700">
-                    <div className="text-sm font-medium text-emerald-800 dark:text-emerald-400 mb-1">
-                      已收款
+                    {/* 已收款明細 */}
+                    <div className="border-t dark:border-gray-700 pt-4">
+                      <h3 className="font-semibold text-lg mb-3 text-gray-900 dark:text-gray-100">已收款明細</h3>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="flex justify-between items-center bg-emerald-50 dark:bg-emerald-900/20 rounded px-4 py-2 border border-emerald-200 dark:border-emerald-700">
+                          <span className="text-emerald-700 dark:text-emerald-300">現金</span>
+                          <span className="font-semibold text-emerald-900 dark:text-emerald-100">
+                            {formatCurrency(closingStats.paid_cash || 0)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center bg-emerald-50 dark:bg-emerald-900/20 rounded px-4 py-2 border border-emerald-200 dark:border-emerald-700">
+                          <span className="text-emerald-700 dark:text-emerald-300">刷卡</span>
+                          <span className="font-semibold text-emerald-900 dark:text-emerald-100">
+                            {formatCurrency(closingStats.paid_card || 0)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center bg-emerald-50 dark:bg-emerald-900/20 rounded px-4 py-2 border border-emerald-200 dark:border-emerald-700">
+                          <span className="text-emerald-700 dark:text-emerald-300">轉帳</span>
+                          <span className="font-semibold text-emerald-900 dark:text-emerald-100">
+                            {formatCurrency(closingStats.paid_transfer || 0)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center bg-emerald-50 dark:bg-emerald-900/20 rounded px-4 py-2 border border-emerald-200 dark:border-emerald-700">
+                          <span className="text-emerald-700 dark:text-emerald-300">貨到付款</span>
+                          <span className="font-semibold text-emerald-900 dark:text-emerald-100">
+                            {formatCurrency(closingStats.paid_cod || 0)}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-xl font-bold text-emerald-600 dark:text-emerald-300">
-                      {formatCurrency(closingStats.paid_sales || 0)}
-                    </div>
-                    <div className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
-                      {closingStats.paid_count || 0} 筆
-                    </div>
-                  </div>
-                  <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-4 border-2 border-orange-200 dark:border-orange-700">
-                    <div className="text-sm font-medium text-orange-800 dark:text-orange-400 mb-1">
-                      未收款
-                    </div>
-                    <div className="text-xl font-bold text-orange-600 dark:text-orange-300">
-                      {formatCurrency(closingStats.unpaid_sales || 0)}
-                    </div>
-                    <div className="text-xs text-orange-600 dark:text-orange-400 mt-1">
-                      {closingStats.unpaid_count || 0} 筆
-                    </div>
-                  </div>
-                </div>
 
-                {/* 已收款明細 */}
-                <div className="border-t dark:border-gray-700 pt-4">
-                  <h3 className="font-semibold text-lg mb-3 text-gray-900 dark:text-gray-100">已收款明細</h3>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="flex justify-between items-center bg-emerald-50 dark:bg-emerald-900/20 rounded px-4 py-2 border border-emerald-200 dark:border-emerald-700">
-                      <span className="text-emerald-700 dark:text-emerald-300">現金</span>
-                      <span className="font-semibold text-emerald-900 dark:text-emerald-100">
-                        {formatCurrency(closingStats.paid_cash || 0)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center bg-emerald-50 dark:bg-emerald-900/20 rounded px-4 py-2 border border-emerald-200 dark:border-emerald-700">
-                      <span className="text-emerald-700 dark:text-emerald-300">刷卡</span>
-                      <span className="font-semibold text-emerald-900 dark:text-emerald-100">
-                        {formatCurrency(closingStats.paid_card || 0)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center bg-emerald-50 dark:bg-emerald-900/20 rounded px-4 py-2 border border-emerald-200 dark:border-emerald-700">
-                      <span className="text-emerald-700 dark:text-emerald-300">轉帳</span>
-                      <span className="font-semibold text-emerald-900 dark:text-emerald-100">
-                        {formatCurrency(closingStats.paid_transfer || 0)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center bg-emerald-50 dark:bg-emerald-900/20 rounded px-4 py-2 border border-emerald-200 dark:border-emerald-700">
-                      <span className="text-emerald-700 dark:text-emerald-300">貨到付款</span>
-                      <span className="font-semibold text-emerald-900 dark:text-emerald-100">
-                        {formatCurrency(closingStats.paid_cod || 0)}
-                      </span>
+                    {/* 備註 */}
+                    <div className="border-t dark:border-gray-700 pt-4">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        備註（選填）
+                      </label>
+                      <textarea
+                        value={closingNote}
+                        onChange={(e) => setClosingNote(e.target.value)}
+                        placeholder="例如：早班、晚班、值班人員等..."
+                        className="w-full border dark:border-gray-600 rounded-lg px-4 py-2 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 focus:border-blue-500 focus:outline-none"
+                        rows={3}
+                      />
                     </div>
                   </div>
-                </div>
 
-                {/* 備註 */}
-                <div className="border-t dark:border-gray-700 pt-4">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    備註（選填）
-                  </label>
-                  <textarea
-                    value={closingNote}
-                    onChange={(e) => setClosingNote(e.target.value)}
-                    placeholder="例如：早班、晚班、值班人員等..."
-                    className="w-full border dark:border-gray-600 rounded-lg px-4 py-2 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 focus:border-blue-500 focus:outline-none"
-                    rows={3}
-                  />
-                </div>
-              </div>
-
-              <div className="border-t dark:border-gray-700 px-6 py-4 flex gap-3">
-                <button
-                  onClick={handleClosing}
-                  disabled={closingInProgress || alreadyClosed}
-                  className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-bold py-3 rounded-lg transition-all"
-                >
-                  {closingInProgress ? '結算中...' : alreadyClosed ? '已日結' : '確認日結'}
-                </button>
-                <button
-                  onClick={() => setShowClosingModal(false)}
-                  disabled={closingInProgress}
-                  className="flex-1 bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500 disabled:bg-gray-200 text-gray-900 dark:text-gray-100 font-bold py-3 rounded-lg transition-all"
-                >
-                  取消
-                </button>
-              </div>
-              </>
+                  <div className="border-t dark:border-gray-700 px-6 py-4 flex gap-3">
+                    <button
+                      onClick={handleClosing}
+                      disabled={closingInProgress || alreadyClosed}
+                      className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-bold py-3 rounded-lg transition-all"
+                    >
+                      {closingInProgress ? '結算中...' : alreadyClosed ? '已日結' : '確認日結'}
+                    </button>
+                    <button
+                      onClick={() => setShowClosingModal(false)}
+                      disabled={closingInProgress}
+                      className="flex-1 bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500 disabled:bg-gray-200 text-gray-900 dark:text-gray-100 font-bold py-3 rounded-lg transition-all"
+                    >
+                      取消
+                    </button>
+                  </div>
+                </>
               )}
             </div>
           </div>
