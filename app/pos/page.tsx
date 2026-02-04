@@ -834,6 +834,15 @@ export default function POSPage() {
       }
     }
 
+    // 購物金部分折抵確認：防止購物金不足以支付全額卻誤按結帳
+    if (storeCreditUsed > 0 && finalTotal > 0 && isPaid && !isMultiPayment) {
+      const paymentLabel = paymentAccounts.find(a => a.payment_method_code === paymentMethod)?.account_name || paymentMethod
+      const confirmed = confirm(
+        `購物金折抵 ${formatCurrency(storeCreditUsed)} 後，剩餘 ${formatCurrency(finalTotal)} 將以「${paymentLabel}」收款。\n\n確定已經收到 ${formatCurrency(finalTotal)}？\n（如果尚未收款，請按取消並選擇「待定」）`
+      )
+      if (!confirmed) return
+    }
+
     setLoading(true)
     setError('')
 
@@ -2222,6 +2231,17 @@ export default function POSPage() {
 
             {/* Checkout Button - Fixed at bottom - 放大結帳按鈕 */}
             <div className="p-3 border-t border-slate-700 bg-slate-800">
+              {/* 購物金部分折抵警告 */}
+              {storeCreditUsed > 0 && finalTotal > 0 && isPaid && cart.length > 0 && (
+                <div className="mb-2 p-2 rounded-lg bg-amber-900/50 border border-amber-600 text-center">
+                  <div className="text-amber-400 text-sm font-medium">
+                    購物金折抵 {formatCurrency(storeCreditUsed)} 後
+                  </div>
+                  <div className="text-amber-300 text-sm">
+                    剩餘 {formatCurrency(finalTotal)} 將記為已收款
+                  </div>
+                </div>
+              )}
               {/* 現金不足提示 */}
               {!isMultiPayment && paymentMethod === 'cash' && cart.length > 0 && receivedAmount && parseFloat(receivedAmount) > 0 && parseFloat(receivedAmount) < finalTotal && (
                 <div className="mb-2 text-center text-red-400 text-sm">

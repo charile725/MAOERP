@@ -634,6 +634,18 @@ export default function MobilePOS({
                     />
                 </div>
 
+                {/* 購物金部分折抵警告 */}
+                {storeCreditUsed > 0 && finalTotal > 0 && isPaid && cart.length > 0 && (
+                    <div className="p-2 rounded-lg bg-amber-900/50 border border-amber-600 text-center">
+                        <div className="text-amber-400 text-sm font-medium">
+                            購物金折抵 {formatCurrency(storeCreditUsed)} 後
+                        </div>
+                        <div className="text-amber-300 text-sm">
+                            剩餘 {formatCurrency(finalTotal)} 將記為已收款
+                        </div>
+                    </div>
+                )}
+
                 {/* 總計 + 暫存/結帳 */}
                 <div className="flex items-center gap-2">
                     <div className="flex-1">

@@ -527,6 +527,26 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // 4.6. 安全檢查：購物金部分折抵時，如果沒有明確的付款覆蓋剩餘金額，強制設為未收款
+    // 防止購物金不足以支付全額卻以 is_paid=true 結帳，導致帳戶餘額虛增、無 AR 追蹤
+    let effectiveIsPaid = draft.is_paid
+    if (storeCreditUsed > 0 && finalTotal > 0 && draft.is_paid) {
+      const hasExplicitPayments = draft.payments && draft.payments.length > 0
+      const explicitTotal = hasExplicitPayments
+        ? draft.payments!.reduce((sum, p) => sum + p.amount, 0)
+        : 0
+
+      if (!hasExplicitPayments || explicitTotal < finalTotal) {
+        // 沒有足夠的明確付款覆蓋剩餘金額，強制設為未收款並建立 AR
+        effectiveIsPaid = false
+        console.warn(`[Sales API] 銷售 ${saleNo} 購物金折抵 $${storeCreditUsed} 後剩餘 $${finalTotal}，無明確付款覆蓋，自動設為未收款`)
+
+        await (supabaseServer.from('sales') as any)
+          .update({ is_paid: false, payment_method: 'pending' })
+          .eq('id', sale.id)
+      }
+    }
+
     // 5. Deduct ONLY ichiban kuji remaining (product stock is auto-deducted by DB trigger)
     for (const item of draft.items) {
       // 如果是從一番賞售出，扣除一番賞的 remaining
@@ -637,7 +657,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 6.5. 更新帳戶餘額（僅當已付款時）
-    if (draft.is_paid) {
+    if (effectiveIsPaid) {
       // Determine payments to process
       const paymentsToProcess = draft.payments && draft.payments.length > 0
         ? draft.payments
@@ -847,7 +867,7 @@ export async function POST(request: NextRequest) {
       .eq('id', sale.id)
 
     // 10. 自動創建應收帳款（AR）記錄 - 如果客戶未付款且有應收金額
-    if (draft.customer_code && !draft.is_paid && finalTotal > 0) {
+    if (draft.customer_code && !effectiveIsPaid && finalTotal > 0) {
       // 計算每個商品的到期日（預設 7 天後）
       const dueDate = new Date(taiwanTime)
       dueDate.setDate(dueDate.getDate() + 7)
