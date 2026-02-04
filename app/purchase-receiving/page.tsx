@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { formatCurrency, formatDate } from '@/lib/utils'
 
 type VendorOwed = {
@@ -30,11 +30,29 @@ type Summary = {
   totalPendingAmount: number
 }
 
+// 按廠商分組的類型
+type VendorGroup = {
+  vendorCode: string
+  vendorName: string
+  totalPending: number
+  totalPendingAmount: number
+  products: {
+    productId: string
+    itemCode: string
+    name: string
+    unit: string
+    pendingQuantity: number
+    pendingAmount: number
+    purchaseNos: string[]
+  }[]
+}
+
 export default function PurchaseReceivingStatsPage() {
   const [receivingStats, setReceivingStats] = useState<ProductReceiving[]>([])
   const [summary, setSummary] = useState<Summary | null>(null)
   const [loading, setLoading] = useState(true)
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
+  const [groupByVendor, setGroupByVendor] = useState(false)
 
   useEffect(() => {
     fetchReceivingStats()
@@ -66,6 +84,60 @@ export default function PurchaseReceivingStatsPage() {
     setExpandedRows(newExpanded)
   }
 
+  // 按廠商分組的數據
+  const vendorGroups = useMemo(() => {
+    const groupMap = new Map<string, VendorGroup>()
+
+    receivingStats.forEach(product => {
+      product.vendors.forEach(vendor => {
+        const key = vendor.vendorCode
+        const existing = groupMap.get(key)
+        const pendingAmount = vendor.pendingQuantity * vendor.cost
+
+        if (existing) {
+          const existingProduct = existing.products.find(p => p.productId === product.productId)
+          if (existingProduct) {
+            existingProduct.pendingQuantity += vendor.pendingQuantity
+            existingProduct.pendingAmount += pendingAmount
+            if (!existingProduct.purchaseNos.includes(vendor.purchaseNo)) {
+              existingProduct.purchaseNos.push(vendor.purchaseNo)
+            }
+          } else {
+            existing.products.push({
+              productId: product.productId,
+              itemCode: product.itemCode,
+              name: product.name,
+              unit: product.unit,
+              pendingQuantity: vendor.pendingQuantity,
+              pendingAmount: pendingAmount,
+              purchaseNos: [vendor.purchaseNo]
+            })
+          }
+          existing.totalPending += vendor.pendingQuantity
+          existing.totalPendingAmount += pendingAmount
+        } else {
+          groupMap.set(key, {
+            vendorCode: vendor.vendorCode,
+            vendorName: vendor.vendorName,
+            totalPending: vendor.pendingQuantity,
+            totalPendingAmount: pendingAmount,
+            products: [{
+              productId: product.productId,
+              itemCode: product.itemCode,
+              name: product.name,
+              unit: product.unit,
+              pendingQuantity: vendor.pendingQuantity,
+              pendingAmount: pendingAmount,
+              purchaseNos: [vendor.purchaseNo]
+            }]
+          })
+        }
+      })
+    })
+
+    return Array.from(groupMap.values()).sort((a, b) => b.totalPendingAmount - a.totalPendingAmount)
+  }, [receivingStats])
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
       <div className="mx-auto max-w-7xl">
@@ -93,9 +165,102 @@ export default function PurchaseReceivingStatsPage() {
           </div>
         )}
 
+        <div className="mb-4 flex gap-4">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={groupByVendor}
+              onChange={(e) => {
+                setGroupByVendor(e.target.checked)
+                setExpandedRows(new Set())
+              }}
+              className="h-4 w-4"
+            />
+            <span className="text-sm text-gray-900 dark:text-gray-100">按廠商分組</span>
+          </label>
+        </div>
+
         <div className="rounded-lg bg-white dark:bg-gray-800 shadow">
           {loading ? (
             <div className="p-8 text-center text-gray-900 dark:text-gray-100">載入中...</div>
+          ) : groupByVendor ? (
+            // 按廠商分組視圖
+            vendorGroups.length === 0 ? (
+              <div className="p-8 text-center">
+                <div className="text-4xl mb-4">✅</div>
+                <div className="text-gray-900 dark:text-gray-100 font-semibold mb-2">全部收貨完畢</div>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                {vendorGroups.map((group) => {
+                  const isExpanded = expandedRows.has(group.vendorCode)
+
+                  return (
+                    <div key={group.vendorCode}>
+                      <div
+                        className="flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
+                        onClick={() => toggleRow(group.vendorCode)}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-blue-600">
+                            {isExpanded ? '▼' : '▶'}
+                          </span>
+                          <span className="font-semibold text-gray-900 dark:text-gray-100">
+                            {group.vendorName}
+                          </span>
+                          <span className="text-sm text-gray-500 dark:text-gray-400">
+                            ({group.products.length} 項商品)
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-lg font-bold text-amber-600 dark:text-amber-400">
+                            {formatCurrency(group.totalPendingAmount)}
+                          </div>
+                          <div className="text-sm text-gray-500 dark:text-gray-400">
+                            待收 {group.totalPending} 件
+                          </div>
+                        </div>
+                      </div>
+
+                      {isExpanded && (
+                        <div className="bg-gray-50 dark:bg-gray-900 px-4 pb-4">
+                          <table className="w-full text-sm">
+                            <thead className="border-b">
+                              <tr>
+                                <th className="pb-2 text-left text-xs font-semibold text-gray-900 dark:text-gray-100">品號</th>
+                                <th className="pb-2 text-left text-xs font-semibold text-gray-900 dark:text-gray-100">商品名稱</th>
+                                <th className="pb-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">待收貨</th>
+                                <th className="pb-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">金額</th>
+                                <th className="pb-2 text-left text-xs font-semibold text-gray-900 dark:text-gray-100">相關單號</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                              {group.products
+                                .sort((a, b) => b.pendingAmount - a.pendingAmount)
+                                .map((product) => (
+                                  <tr key={product.productId}>
+                                    <td className="py-2 text-gray-900 dark:text-gray-100">{product.itemCode}</td>
+                                    <td className="py-2 text-gray-900 dark:text-gray-100">{product.name}</td>
+                                    <td className="py-2 text-right font-bold text-amber-600 dark:text-amber-400">
+                                      {product.pendingQuantity} {product.unit}
+                                    </td>
+                                    <td className="py-2 text-right text-gray-900 dark:text-gray-100">
+                                      {formatCurrency(product.pendingAmount)}
+                                    </td>
+                                    <td className="py-2 text-gray-500 dark:text-gray-400">
+                                      {product.purchaseNos.join(', ')}
+                                    </td>
+                                  </tr>
+                                ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )
           ) : receivingStats.length === 0 ? (
             <div className="p-8 text-center">
               <div className="text-4xl mb-4">✅</div>
@@ -107,6 +272,7 @@ export default function PurchaseReceivingStatsPage() {
               </div>
             </div>
           ) : (
+            // 按商品視圖
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="border-b bg-gray-50 dark:bg-gray-900">
@@ -150,31 +316,55 @@ export default function PurchaseReceivingStatsPage() {
                         <tr>
                           <td colSpan={5} className="bg-gray-50 dark:bg-gray-900 px-6 py-4">
                             <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
-                              <h4 className="mb-3 font-semibold text-gray-900 dark:text-gray-100">進貨明細 - 哪家廠商</h4>
+                              <h4 className="mb-3 font-semibold text-gray-900 dark:text-gray-100">廠商待收統計</h4>
                               <table className="w-full">
                                 <thead className="border-b">
                                   <tr>
-                                    <th className="pb-2 text-left text-xs font-semibold text-gray-900 dark:text-gray-100">廠商</th>
-                                    <th className="pb-2 text-left text-xs font-semibold text-gray-900 dark:text-gray-100">進貨單號</th>
-                                    <th className="pb-2 text-left text-xs font-semibold text-gray-900 dark:text-gray-100">進貨日期</th>
-                                    <th className="pb-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">訂購數量</th>
-                                    <th className="pb-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">待收貨</th>
+                                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-900 dark:text-gray-100">廠商</th>
+                                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">待收數量</th>
+                                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">金額</th>
+                                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-900 dark:text-gray-100">相關單號</th>
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y dark:divide-gray-700">
-                                  {product.vendors.map((vendor, idx) => (
-                                    <tr key={idx}>
-                                      <td className="py-2 text-sm text-gray-900 dark:text-gray-100">{vendor.vendorName}</td>
-                                      <td className="py-2 text-sm text-gray-500 dark:text-gray-400">{vendor.purchaseNo}</td>
-                                      <td className="py-2 text-sm text-gray-500 dark:text-gray-400">{formatDate(vendor.purchaseDate)}</td>
-                                      <td className="py-2 text-right text-sm text-gray-600 dark:text-gray-400">
-                                        {vendor.quantity} {product.unit}
-                                      </td>
-                                      <td className="py-2 text-right text-sm font-medium text-amber-600 dark:text-amber-400">
-                                        {vendor.pendingQuantity} {product.unit}
-                                      </td>
-                                    </tr>
-                                  ))}
+                                  {(() => {
+                                    // 按廠商汇总
+                                    const vendorSummary = new Map<string, { name: string, total: number, amount: number, purchaseNos: string[] }>()
+                                    product.vendors.forEach(v => {
+                                      const existing = vendorSummary.get(v.vendorCode)
+                                      const amount = v.pendingQuantity * v.cost
+                                      if (existing) {
+                                        existing.total += v.pendingQuantity
+                                        existing.amount += amount
+                                        if (!existing.purchaseNos.includes(v.purchaseNo)) {
+                                          existing.purchaseNos.push(v.purchaseNo)
+                                        }
+                                      } else {
+                                        vendorSummary.set(v.vendorCode, {
+                                          name: v.vendorName,
+                                          total: v.pendingQuantity,
+                                          amount: amount,
+                                          purchaseNos: [v.purchaseNo]
+                                        })
+                                      }
+                                    })
+                                    return Array.from(vendorSummary.entries())
+                                      .sort((a, b) => b[1].amount - a[1].amount)
+                                      .map(([key, data]) => (
+                                        <tr key={key}>
+                                          <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{data.name}</td>
+                                          <td className="px-4 py-3 text-right text-sm font-bold text-amber-600 dark:text-amber-400">
+                                            {data.total} {product.unit}
+                                          </td>
+                                          <td className="px-4 py-3 text-right text-sm text-gray-900 dark:text-gray-100">
+                                            {formatCurrency(data.amount)}
+                                          </td>
+                                          <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+                                            {data.purchaseNos.join(', ')}
+                                          </td>
+                                        </tr>
+                                      ))
+                                  })()}
                                 </tbody>
                               </table>
                             </div>
