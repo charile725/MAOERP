@@ -77,6 +77,21 @@ type VendorItemGroup = {
   total_quantity: number
 }
 
+type ProductPurchaseStats = {
+  product_name: string
+  item_code: string
+  total_quantity: number
+  total_cost: number
+  pending_quantity: number  // 未收貨總數量
+  vendor_purchases: {
+    vendor_name: string
+    vendor_code: string
+    quantity: number
+    pending_quantity: number
+    purchase_count: number
+  }[]
+}
+
 type UserRole = 'admin' | 'staff'
 
 export default function PurchasesPage() {
@@ -86,7 +101,10 @@ export default function PurchasesPage() {
   const [expandedVendors, setExpandedVendors] = useState<Set<string>>(new Set())
   const [groupByVendor, setGroupByVendor] = useState(false)
   const [keyword, setKeyword] = useState('')
-  const [productKeyword, setProductKeyword] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [showUnreceivedOnly, setShowUnreceivedOnly] = useState(false)
+  const [productStats, setProductStats] = useState<ProductPurchaseStats | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [userRole, setUserRole] = useState<UserRole | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
@@ -128,13 +146,18 @@ export default function PurchasesPage() {
     setExpandedVendors(newExpanded)
   }
 
+  const displayedPurchases = useMemo(() => {
+    if (!showUnreceivedOnly) return purchases
+    return purchases.filter(p => p.receiving_status !== 'completed')
+  }, [purchases, showUnreceivedOnly])
+
   // 按廠商分組（舊版，保留但不使用）
   const vendorGroups = useMemo(() => {
     if (!groupByVendor) return []
 
     const groups: { [key: string]: VendorGroup } = {}
 
-    purchases.forEach((purchase) => {
+    displayedPurchases.forEach((purchase) => {
       const key = purchase.vendor_code
 
       if (!groups[key]) {
@@ -158,7 +181,7 @@ export default function PurchasesPage() {
     return Object.values(groups).sort((a, b) =>
       a.vendor_name.localeCompare(b.vendor_name, 'zh-TW')
     )
-  }, [purchases, groupByVendor])
+  }, [displayedPurchases, groupByVendor])
 
   // 按廠商分組 - 直接顯示商品明細
   const vendorItemGroups = useMemo(() => {
@@ -166,7 +189,7 @@ export default function PurchasesPage() {
 
     const groups: { [key: string]: VendorItemGroup } = {}
 
-    purchases.forEach((purchase) => {
+    displayedPurchases.forEach((purchase) => {
       const key = purchase.vendor_code
 
       if (!groups[key]) {
@@ -210,7 +233,7 @@ export default function PurchasesPage() {
     return Object.values(groups).sort((a, b) =>
       a.vendor_name.localeCompare(b.vendor_name, 'zh-TW')
     )
-  }, [purchases, groupByVendor])
+  }, [displayedPurchases, groupByVendor])
 
   const fetchPurchases = async () => {
     setLoading(true)
@@ -218,7 +241,8 @@ export default function PurchasesPage() {
     try {
       const params = new URLSearchParams()
       if (keyword) params.set('keyword', keyword)
-      if (productKeyword) params.set('product_keyword', productKeyword)
+      if (dateFrom) params.set('date_from', dateFrom)
+      if (dateTo) params.set('date_to', dateTo)
 
       const res = await fetch(`/api/purchases?${params}`)
       const data = await res.json()
@@ -247,6 +271,68 @@ export default function PurchasesPage() {
         })
 
         setPurchases(purchasesWithStatus)
+
+        // 計算商品統計（只在有關鍵字時）
+        if (keyword && purchasesWithStatus.length > 0) {
+          const stats: { [key: string]: ProductPurchaseStats } = {}
+          const vendorMap: { [productKey: string]: { [vendorKey: string]: { vendor_name: string, vendor_code: string, quantity: number, pending_quantity: number, purchase_count: number } } } = {}
+          const kw = keyword.toLowerCase()
+
+          purchasesWithStatus.forEach((purchase: Purchase) => {
+            if (purchase.purchase_items) {
+              purchase.purchase_items.forEach((item: PurchaseItem) => {
+                const matchesKeyword =
+                  item.products?.name?.toLowerCase().includes(kw) ||
+                  item.products?.item_code?.toLowerCase().includes(kw)
+                if (!matchesKeyword) return
+
+                const productKey = `${item.product_id}`
+                const vendorKey = purchase.vendor_code
+
+                const pendingQty = Math.max(0, item.quantity - (item.received_quantity || 0))
+
+                if (!stats[productKey]) {
+                  stats[productKey] = {
+                    product_name: item.products.name,
+                    item_code: item.products.item_code,
+                    total_quantity: 0,
+                    total_cost: 0,
+                    pending_quantity: 0,
+                    vendor_purchases: []
+                  }
+                  vendorMap[productKey] = {}
+                }
+
+                stats[productKey].total_quantity += item.quantity
+                stats[productKey].total_cost += item.subtotal || Math.round(item.quantity * item.cost)
+                stats[productKey].pending_quantity += pendingQty
+
+                if (!vendorMap[productKey][vendorKey]) {
+                  vendorMap[productKey][vendorKey] = {
+                    vendor_name: purchase.vendors?.vendor_name || purchase.vendor_code,
+                    vendor_code: purchase.vendor_code,
+                    quantity: 0,
+                    pending_quantity: 0,
+                    purchase_count: 0
+                  }
+                }
+                vendorMap[productKey][vendorKey].quantity += item.quantity
+                vendorMap[productKey][vendorKey].pending_quantity += pendingQty
+                vendorMap[productKey][vendorKey].purchase_count += 1
+              })
+            }
+          })
+
+          Object.keys(stats).forEach(productKey => {
+            stats[productKey].vendor_purchases = Object.values(vendorMap[productKey])
+              .sort((a, b) => b.quantity - a.quantity)
+          })
+
+          const firstProduct = Object.values(stats)[0]
+          setProductStats(firstProduct || null)
+        } else {
+          setProductStats(null)
+        }
       }
     } catch (err) {
       console.error('Failed to fetch purchases:', err)
@@ -389,16 +475,7 @@ export default function PurchasesPage() {
                 type="text"
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
-                placeholder="搜尋進貨單號、廠商代碼或廠商名稱"
-                className="flex-1 rounded border border-gray-300 dark:border-gray-600 px-4 py-2 text-gray-900 dark:text-gray-100 dark:bg-gray-700 placeholder:text-gray-900 dark:placeholder:text-gray-400"
-              />
-            </div>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={productKeyword}
-                onChange={(e) => setProductKeyword(e.target.value)}
-                placeholder="搜尋商品名稱或品號"
+                placeholder="搜尋單號、廠商名稱、商品名稱或品號"
                 className="flex-1 rounded border border-gray-300 dark:border-gray-600 px-4 py-2 text-gray-900 dark:text-gray-100 dark:bg-gray-700 placeholder:text-gray-900 dark:placeholder:text-gray-400"
               />
               <button
@@ -408,7 +485,31 @@ export default function PurchasesPage() {
                 搜尋
               </button>
             </div>
-            <div className="flex items-center gap-2 pt-2">
+            <div className="flex gap-2 items-center">
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="flex-1 rounded border border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-gray-100 dark:bg-gray-700"
+              />
+              <span className="text-gray-500 dark:text-gray-400">至</span>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="flex-1 rounded border border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-gray-100 dark:bg-gray-700"
+              />
+              {(dateFrom || dateTo) && (
+                <button
+                  type="button"
+                  onClick={() => { setDateFrom(''); setDateTo(''); }}
+                  className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                >
+                  清除
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-4">
               <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700 dark:text-gray-300">
                 <input
                   type="checkbox"
@@ -421,14 +522,97 @@ export default function PurchasesPage() {
                 />
                 按廠商分組
               </label>
+              <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700 dark:text-gray-300">
+                <input
+                  type="checkbox"
+                  checked={showUnreceivedOnly}
+                  onChange={(e) => {
+                    setShowUnreceivedOnly(e.target.checked)
+                    setCurrentPage(1)
+                  }}
+                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                顯示未收貨
+              </label>
             </div>
           </form>
         </div>
 
+        {/* 商品進貨統計卡片 */}
+        {productStats && (
+          <div className="mb-6 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 p-6 shadow-lg border border-blue-200 dark:border-blue-800">
+            <div className="mb-4">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-1">
+                📊 商品進貨統計
+              </h3>
+              <div className="text-sm text-gray-600 dark:text-gray-400">
+                {productStats.item_code} - {productStats.product_name}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4 mb-6">
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
+                <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">總進貨數量</div>
+                <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">
+                  {productStats.total_quantity}
+                </div>
+              </div>
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
+                <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">未收貨數量</div>
+                <div className="text-3xl font-bold text-amber-600 dark:text-amber-400">
+                  {productStats.pending_quantity}
+                </div>
+              </div>
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
+                <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">總進貨金額</div>
+                <div className="text-3xl font-bold text-green-600 dark:text-green-400">
+                  {formatCurrency(productStats.total_cost)}
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                進貨廠商明細（共 {productStats.vendor_purchases.length} 家）
+              </h4>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {productStats.vendor_purchases.map((vendor, index) => (
+                  <div
+                    key={`${vendor.vendor_code}-${index}`}
+                    className="flex items-center justify-between bg-white dark:bg-gray-800 rounded-lg p-3 shadow-sm"
+                  >
+                    <div className="flex-1">
+                      <div className="font-medium text-gray-900 dark:text-gray-100">
+                        {vendor.vendor_name}
+                      </div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                        {vendor.vendor_code}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                        {vendor.quantity} 個
+                      </div>
+                      {vendor.pending_quantity > 0 && (
+                        <div className="text-sm font-medium text-amber-600 dark:text-amber-400">
+                          📦 未收貨 {vendor.pending_quantity} 個
+                        </div>
+                      )}
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                        {vendor.purchase_count} 筆進貨
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="rounded-lg bg-white dark:bg-gray-800 shadow">
           {loading ? (
             <div className="p-8 text-center text-gray-900 dark:text-gray-100">載入中...</div>
-          ) : purchases.length === 0 ? (
+          ) : displayedPurchases.length === 0 ? (
             <div className="p-8 text-center text-gray-900 dark:text-gray-100">沒有進貨單</div>
           ) : groupByVendor ? (
             /* 分組顯示 - 直接顯示商品明細 */
@@ -557,18 +741,17 @@ export default function PurchasesPage() {
                                           {formatCurrency(item.subtotal || Math.round(item.quantity * item.cost))}
                                         </td>
                                         <td className="py-3 text-center text-sm">
-                                          <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${
-                                            item.payment_status === 'paid'
+                                          <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${item.payment_status === 'paid'
                                               ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
                                               : item.payment_status === 'partial'
-                                              ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-                                              : item.payment_status === 'unpaid'
-                                              ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                                              : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
-                                          }`}>
+                                                ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                                                : item.payment_status === 'unpaid'
+                                                  ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                                                  : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
+                                            }`}>
                                             {item.payment_status === 'paid' ? '已付' :
-                                             item.payment_status === 'partial' ? '部分' :
-                                             item.payment_status === 'unpaid' ? '未付' : '-'}
+                                              item.payment_status === 'partial' ? '部分' :
+                                                item.payment_status === 'unpaid' ? '未付' : '-'}
                                           </span>
                                         </td>
                                       </>
@@ -618,12 +801,12 @@ export default function PurchasesPage() {
             /* 平鋪顯示（原有邏輯） */
             <>
               {/* 分頁資訊 */}
-              {purchases.length > 0 && (
+              {displayedPurchases.length > 0 && (
                 <div className="px-6 pt-6 pb-4 flex items-center justify-between">
                   <div className="text-sm text-gray-600 dark:text-gray-400">
-                    共 {purchases.length} 筆記錄
-                    {purchases.length > itemsPerPage && (
-                      <span> · 顯示第 {(currentPage - 1) * itemsPerPage + 1} - {Math.min(currentPage * itemsPerPage, purchases.length)} 筆</span>
+                    共 {displayedPurchases.length} 筆記錄
+                    {displayedPurchases.length > itemsPerPage && (
+                      <span> · 顯示第 {(currentPage - 1) * itemsPerPage + 1} - {Math.min(currentPage * itemsPerPage, displayedPurchases.length)} 筆</span>
                     )}
                   </div>
                 </div>
@@ -652,7 +835,7 @@ export default function PurchasesPage() {
                     {(() => {
                       const startIndex = (currentPage - 1) * itemsPerPage
                       const endIndex = startIndex + itemsPerPage
-                      const paginatedPurchases = purchases.slice(startIndex, endIndex)
+                      const paginatedPurchases = displayedPurchases.slice(startIndex, endIndex)
 
                       return paginatedPurchases.map((purchase) => (
                         <React.Fragment key={purchase.id}>
@@ -818,18 +1001,17 @@ export default function PurchasesPage() {
                                                   {formatCurrency(item.subtotal || Math.round(item.quantity * item.cost))}
                                                 </td>
                                                 <td className="py-2 text-center text-sm">
-                                                  <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${
-                                                    item.payment_status === 'paid'
+                                                  <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${item.payment_status === 'paid'
                                                       ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
                                                       : item.payment_status === 'partial'
-                                                      ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-                                                      : item.payment_status === 'unpaid'
-                                                      ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                                                      : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
-                                                  }`}>
+                                                        ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                                                        : item.payment_status === 'unpaid'
+                                                          ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                                                          : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
+                                                    }`}>
                                                     {item.payment_status === 'paid' ? '已付' :
-                                                     item.payment_status === 'partial' ? '部分' :
-                                                     item.payment_status === 'unpaid' ? '未付' : '-'}
+                                                      item.payment_status === 'partial' ? '部分' :
+                                                        item.payment_status === 'unpaid' ? '未付' : '-'}
                                                   </span>
                                                 </td>
                                               </>
@@ -876,7 +1058,7 @@ export default function PurchasesPage() {
               </div>
 
               {/* Pagination */}
-              {purchases.length > itemsPerPage && (
+              {displayedPurchases.length > itemsPerPage && (
                 <div className="mt-4 flex items-center justify-center gap-2 pb-4">
                   <button
                     onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
@@ -887,7 +1069,7 @@ export default function PurchasesPage() {
                   </button>
 
                   {(() => {
-                    const totalPages = Math.ceil(purchases.length / itemsPerPage)
+                    const totalPages = Math.ceil(displayedPurchases.length / itemsPerPage)
                     const pages: (number | string)[] = []
 
                     if (totalPages <= 7) {
@@ -931,8 +1113,8 @@ export default function PurchasesPage() {
                   })()}
 
                   <button
-                    onClick={() => setCurrentPage(p => Math.min(Math.ceil(purchases.length / itemsPerPage), p + 1))}
-                    disabled={currentPage >= Math.ceil(purchases.length / itemsPerPage)}
+                    onClick={() => setCurrentPage(p => Math.min(Math.ceil(displayedPurchases.length / itemsPerPage), p + 1))}
+                    disabled={currentPage >= Math.ceil(displayedPurchases.length / itemsPerPage)}
                     className="px-3 py-1 text-sm rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     下一頁

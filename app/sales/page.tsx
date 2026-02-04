@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
+import Link from 'next/link'
 import { formatCurrency, formatDate, formatDateTime, formatPaymentMethod } from '@/lib/utils'
 
 // Portal Dropdown 組件
@@ -203,7 +204,6 @@ export default function SalesPage() {
   const [expandedCustomers, setExpandedCustomers] = useState<Set<string>>(new Set())
   const [expandedSales, setExpandedSales] = useState<Set<string>>(new Set())
   const [keyword, setKeyword] = useState('')
-  const [productKeyword, setProductKeyword] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [deleting, setDeleting] = useState<string | null>(null)
@@ -258,7 +258,6 @@ export default function SalesPage() {
     try {
       const params = new URLSearchParams()
       if (keyword) params.set('keyword', keyword)
-      if (productKeyword) params.set('product_keyword', productKeyword)
       if (dateFrom) params.set('date_from', dateFrom)
       if (dateTo) params.set('date_to', dateTo)
       if (sourceFilter !== 'all') params.set('source', sourceFilter)
@@ -278,19 +277,19 @@ export default function SalesPage() {
           setCurrentPage(data.pagination.page)
         }
 
-        // 計算商品統計（只在有商品關鍵字時）
-        if (productKeyword && allSales.length > 0) {
+        // 計算商品統計（只在有關鍵字時）
+        if (keyword && allSales.length > 0) {
           const stats: { [key: string]: ProductStats } = {}
           const customerMap: { [productKey: string]: { [customerKey: string]: { customer_name: string, customer_code: string | null, quantity: number, pending_quantity: number, sales_count: number } } } = {}
-          const keyword = productKeyword.toLowerCase()
+          const kw = keyword.toLowerCase()
 
           allSales.forEach((sale: Sale) => {
             if (sale.sale_items) {
               sale.sale_items.forEach((item: SaleItem) => {
                 // 只統計符合關鍵字的商品
-                const matchesKeyword = 
-                  item.snapshot_name?.toLowerCase().includes(keyword) ||
-                  item.products?.item_code?.toLowerCase().includes(keyword)
+                const matchesKeyword =
+                  item.snapshot_name?.toLowerCase().includes(kw) ||
+                  item.products?.item_code?.toLowerCase().includes(kw)
                 if (!matchesKeyword) return
 
                 const productKey = `${item.product_id}`
@@ -881,16 +880,7 @@ export default function SalesPage() {
                 type="text"
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
-                placeholder="搜尋銷售單號或客戶名稱"
-                className="flex-1 rounded border border-gray-300 dark:border-gray-600 px-4 py-2 text-gray-900 dark:text-gray-100 dark:bg-gray-700 placeholder:text-gray-900 dark:placeholder:text-gray-400"
-              />
-            </div>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={productKeyword}
-                onChange={(e) => setProductKeyword(e.target.value)}
-                placeholder="搜尋商品名稱或品號"
+                placeholder="搜尋單號、客戶名稱、商品名稱或品號"
                 className="flex-1 rounded border border-gray-300 dark:border-gray-600 px-4 py-2 text-gray-900 dark:text-gray-100 dark:bg-gray-700 placeholder:text-gray-900 dark:placeholder:text-gray-400"
               />
               <button
@@ -901,7 +891,6 @@ export default function SalesPage() {
               </button>
             </div>
             <div className="flex gap-2 items-center">
-              <label className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">日期範圍</label>
               <input
                 type="date"
                 value={dateFrom}
@@ -945,6 +934,12 @@ export default function SalesPage() {
                   />
                   <span className="text-sm text-gray-900 dark:text-gray-100">顯示未出貨</span>
                 </label>
+                <Link
+                  href="/deliveries"
+                  className="text-sm text-red-600 dark:text-red-400 hover:underline"
+                >
+                  欠貨統計
+                </Link>
               </div>
               <div>
                 <label className="mb-2 block text-sm font-medium text-gray-900 dark:text-gray-100">
@@ -1216,13 +1211,12 @@ export default function SalesPage() {
                                       {item.quantity} {item.products.unit}
                                     </td>
                                     <td className="py-2 text-right">
-                                      <span className={`font-medium ${
-                                        isFullyResolved
+                                      <span className={`font-medium ${isFullyResolved
                                           ? 'text-green-600 dark:text-green-400'
                                           : deliveredQty > 0
                                             ? 'text-yellow-600 dark:text-yellow-400'
                                             : 'text-gray-600 dark:text-gray-400'
-                                      }`}>
+                                        }`}>
                                         {deliveredQty}/{item.quantity}
                                       </span>
                                     </td>

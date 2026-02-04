@@ -18,7 +18,6 @@ export async function GET(request: NextRequest) {
     const customerCode = searchParams.get('customer_code')
     const source = searchParams.get('source')
     const keyword = searchParams.get('keyword')
-    const productKeyword = searchParams.get('product_keyword')
     const groupByCustomer = searchParams.get('group_by_customer') === 'true' // 按客戶分組時不分頁
 
     // 分頁參數
@@ -79,28 +78,19 @@ export async function GET(request: NextRequest) {
       query = query.eq('source', source)
     }
 
-    // Search by keyword in sale_no, customer_code, or customer_name
+    // Search by keyword in sale_no, customer_name, product name or item_code
+    // 有關鍵字時需要取得所有資料再做客戶端過濾（因為商品搜尋無法在 DB 層面完成）
+    let matchingCustomerCodes: string[] = []
     if (keyword) {
-      // First find customer codes that match the keyword
       const { data: matchingCustomers } = await (supabaseServer
         .from('customers') as any)
         .select('customer_code')
         .ilike('customer_name', `%${keyword}%`)
-
-      const matchingCodes = matchingCustomers?.map((c: any) => c.customer_code) || []
-
-      // Build the search query
-      if (matchingCodes.length > 0) {
-        query = query.or(`sale_no.ilike.%${keyword}%,customer_code.in.(${matchingCodes.join(',')})`)
-      } else {
-        query = query.ilike('sale_no', `%${keyword}%`)
-      }
+      matchingCustomerCodes = matchingCustomers?.map((c: any) => c.customer_code) || []
     }
 
-    // 只有在沒有 productKeyword 且沒有 groupByCustomer 時才使用服務器端分頁
-    // 因為 productKeyword 需要在後端過濾 sale_items
-    // groupByCustomer 需要所有資料才能正確分組統計
-    if (!productKeyword && !groupByCustomer) {
+    // 有關鍵字或按客戶分組時不使用服務器端分頁
+    if (!keyword && !groupByCustomer) {
       query = query.range(offset, offset + limit - 1)
     }
 
@@ -116,8 +106,7 @@ export async function GET(request: NextRequest) {
           createdTo,
           source,
           customerCode,
-          keyword,
-          productKeyword
+          keyword
         }
       })
       return NextResponse.json(
@@ -126,14 +115,20 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Filter by product if needed
+    // 統一關鍵字過濾：單號、客戶名稱、商品名稱、品號
     let filteredData = data
-    if (productKeyword) {
+    if (keyword) {
+      const kw = keyword.toLowerCase()
       filteredData = data?.filter((sale: any) => {
+        // 匹配銷售單號
+        if (sale.sale_no?.toLowerCase().includes(kw)) return true
+        // 匹配客戶
+        if (matchingCustomerCodes.includes(sale.customer_code)) return true
+        // 匹配商品名稱或品號
         const items = sale.sale_items || []
         return items.some((item: any) =>
-          item.snapshot_name?.toLowerCase().includes(productKeyword.toLowerCase()) ||
-          item.products?.item_code?.toLowerCase().includes(productKeyword.toLowerCase())
+          item.snapshot_name?.toLowerCase().includes(kw) ||
+          item.products?.item_code?.toLowerCase().includes(kw)
         )
       })
     }
@@ -205,17 +200,18 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    // 當有 productKeyword 或 groupByCustomer 時，使用過濾後的數據長度作為 total
-    const actualTotal = (productKeyword || groupByCustomer) ? (salesWithSummary?.length || 0) : (count || salesWithSummary?.length || 0)
+    // 當有 keyword 或 groupByCustomer 時，使用過濾後的數據長度作為 total
+    const noServerPagination = keyword || groupByCustomer
+    const actualTotal = noServerPagination ? (salesWithSummary?.length || 0) : (count || salesWithSummary?.length || 0)
 
     return NextResponse.json({
       ok: true,
       data: salesWithSummary,
       pagination: {
-        page: (productKeyword || groupByCustomer) ? 1 : page, // productKeyword 或 groupByCustomer 時不分頁，固定為第一頁
+        page: noServerPagination ? 1 : page,
         limit,
         total: actualTotal,
-        totalPages: (productKeyword || groupByCustomer) ? 1 : (count ? Math.ceil(count / limit) : 1)
+        totalPages: noServerPagination ? 1 : (count ? Math.ceil(count / limit) : 1)
       }
     })
   } catch (error) {

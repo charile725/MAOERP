@@ -26,10 +26,11 @@ export async function GET(request: NextRequest) {
           id,
           product_id,
           quantity,
-          products (
+          products:product_id (
             name,
             item_code,
-            unit
+            unit,
+            stock
           )
         )
       `)

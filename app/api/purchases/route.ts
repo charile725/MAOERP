@@ -12,7 +12,6 @@ export async function GET(request: NextRequest) {
     const dateTo = searchParams.get('date_to')
     const vendorCode = searchParams.get('vendor_code')
     const keyword = searchParams.get('keyword')
-    const productKeyword = searchParams.get('product_keyword')
     const status = searchParams.get('status')
 
     let query = (supabaseServer
@@ -60,24 +59,18 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Filter by keyword (purchase_no, vendor_code, vendor_name)
+    // 統一關鍵字過濾：單號、廠商代碼、廠商名稱、商品名稱、品號
     let filteredData = data
     if (keyword) {
       const kw = keyword.toLowerCase()
-      filteredData = filteredData?.filter((purchase: any) =>
-        purchase.purchase_no?.toLowerCase().includes(kw) ||
-        purchase.vendor_code?.toLowerCase().includes(kw) ||
-        purchase.vendors?.vendor_name?.toLowerCase().includes(kw)
-      )
-    }
-
-    // Filter by product if needed
-    if (productKeyword) {
       filteredData = filteredData?.filter((purchase: any) => {
+        if (purchase.purchase_no?.toLowerCase().includes(kw)) return true
+        if (purchase.vendor_code?.toLowerCase().includes(kw)) return true
+        if (purchase.vendors?.vendor_name?.toLowerCase().includes(kw)) return true
         const items = purchase.purchase_items || []
         return items.some((item: any) =>
-          item.products?.name?.toLowerCase().includes(productKeyword.toLowerCase()) ||
-          item.products?.item_code?.toLowerCase().includes(productKeyword.toLowerCase())
+          item.products?.name?.toLowerCase().includes(kw) ||
+          item.products?.item_code?.toLowerCase().includes(kw)
         )
       })
     }
