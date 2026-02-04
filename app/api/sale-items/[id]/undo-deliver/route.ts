@@ -44,29 +44,33 @@ export async function POST(
       )
     }
 
-    // 2. 獲取該 sale_item 的所有已確認出貨記錄
-    const { data: deliveryItems, error: diError } = await (supabaseServer
+    // 2. 獲取該 sale_item 的所有出貨記錄
+    const { data: allDeliveryItems, error: diError } = await (supabaseServer
       .from('delivery_items') as any)
       .select(`
         id,
         quantity,
         delivery_id,
-        deliveries!inner (
+        deliveries (
           id,
           delivery_no,
           status
         )
       `)
       .eq('sale_item_id', saleItemId)
-      .eq('deliveries.status', 'confirmed')
-      .order('created_at', { ascending: false })
 
     if (diError) {
+      console.error('Query delivery_items error:', diError)
       return NextResponse.json(
-        { ok: false, error: '查詢出貨記錄失敗' },
+        { ok: false, error: '查詢出貨記錄失敗: ' + diError.message },
         { status: 500 }
       )
     }
+
+    // 過濾只保留已確認的出貨記錄
+    const deliveryItems = (allDeliveryItems || []).filter(
+      (di: any) => di.deliveries?.status === 'confirmed'
+    )
 
     // 計算已出貨總量
     const totalDelivered = deliveryItems?.reduce((sum: number, di: any) => sum + di.quantity, 0) || 0
@@ -108,16 +112,43 @@ export async function POST(
           .eq('id', di.id)
       }
 
-      // 寫入庫存日誌（補回庫存）
-      await (supabaseServer
-        .from('inventory_logs') as any)
-        .insert({
-          product_id: saleItem.product_id,
-          ref_type: 'undo_delivery',
-          ref_id: di.delivery_id,
-          qty_change: undoQty,
-          memo: `撤銷出貨 - ${di.deliveries.delivery_no} (${saleItem.snapshot_name} x${undoQty})`
-        })
+      // 寫入庫存日誌並更新庫存 - 只有有 product_id 的商品才需要
+      if (saleItem.product_id) {
+        // 取得目前庫存
+        const { data: product } = await (supabaseServer
+          .from('products') as any)
+          .select('stock')
+          .eq('id', saleItem.product_id)
+          .single()
+
+        const currentStock = product?.stock || 0
+        const newStock = currentStock + undoQty
+
+        // 直接更新庫存
+        const { error: stockError } = await (supabaseServer
+          .from('products') as any)
+          .update({ stock: newStock })
+          .eq('id', saleItem.product_id)
+
+        if (stockError) {
+          console.error('Failed to update stock:', stockError)
+        }
+
+        // 寫入庫存日誌
+        const { error: logError } = await (supabaseServer
+          .from('inventory_logs') as any)
+          .insert({
+            product_id: saleItem.product_id,
+            ref_type: 'undo_delivery',
+            ref_id: di.delivery_id,
+            qty_change: undoQty,
+            memo: `撤銷出貨 - ${di.deliveries?.delivery_no || 'N/A'} (${saleItem.snapshot_name} x${undoQty})`
+          })
+
+        if (logError) {
+          console.error('Failed to insert inventory log:', logError)
+        }
+      }
 
       undoneDeliveries.push(di.deliveries.delivery_no)
       remainingToUndo -= undoQty
@@ -150,20 +181,21 @@ export async function POST(
       allSaleItems?.map((item: any) => [item.id, item.quantity]) || []
     )
 
-    const { data: confirmedDeliveryItems } = await (supabaseServer
+    const { data: allConfirmedDeliveryItems } = await (supabaseServer
       .from('delivery_items') as any)
       .select(`
         sale_item_id,
         quantity,
-        deliveries!inner (
+        deliveries (
           status
         )
       `)
       .in('sale_item_id', allItemIds)
-      .eq('deliveries.status', 'confirmed')
 
     const deliveredQuantityMap = new Map<string, number>()
-    confirmedDeliveryItems?.forEach((di: any) => {
+    allConfirmedDeliveryItems?.forEach((di: any) => {
+      // 只計算已確認的出貨
+      if (di.deliveries?.status !== 'confirmed') return
       const currentQty = deliveredQuantityMap.get(di.sale_item_id) || 0
       deliveredQuantityMap.set(di.sale_item_id, currentQty + di.quantity)
     })

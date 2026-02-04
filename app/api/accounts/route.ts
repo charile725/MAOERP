@@ -37,6 +37,15 @@ export async function GET(request: NextRequest) {
   }
 }
 
+// 從帳戶名稱產生付款方式代碼
+function generatePaymentMethodCode(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/\s+/g, '_')           // 空白換成底線
+    .replace(/[^\w\u4e00-\u9fff]/g, '') // 只保留字母數字底線和中文
+    .substring(0, 50)               // 限制長度
+}
+
 // POST /api/accounts - 新增帳戶
 export async function POST(request: NextRequest) {
   try {
@@ -67,12 +76,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // 自動產生 payment_method_code（如果沒有提供）
+    const paymentMethodCode = body.payment_method_code || generatePaymentMethodCode(account.account_name)
+
     // 新增帳戶（使用台灣時間）
     const { data, error } = await (supabaseServer.from('accounts') as any)
       .insert({
         account_name: account.account_name,
         account_type: account.account_type,
-        payment_method_code: body.payment_method_code || null,
+        payment_method_code: paymentMethodCode,
         display_name: body.display_name || account.account_name,
         sort_order: body.sort_order ?? 999,
         auto_mark_paid: body.auto_mark_paid ?? false,

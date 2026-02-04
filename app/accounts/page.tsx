@@ -17,6 +17,8 @@ type Account = {
   id: string
   account_name: string
   account_type: 'cash' | 'bank' | 'petty_cash'
+  payment_method_code: string | null
+  display_name: string | null
   balance: number
   is_active: boolean
   created_at: string
@@ -63,7 +65,12 @@ export default function AccountsPage() {
   })
 
   useEffect(() => {
-    fetchAccounts()
+    // 自動修復沒有 payment_method_code 的帳戶
+    const fixAndFetch = async () => {
+      await fetch('/api/accounts/fix-payment-codes', { method: 'POST' })
+      fetchAccounts()
+    }
+    fixAndFetch()
   }, [])
 
   const fetchAccounts = async () => {
