@@ -240,6 +240,15 @@ export async function POST(request: NextRequest) {
 
     const draft = validation.data
 
+    // 安全檢查：有未出貨商品時必須有客戶（否則無法追蹤配送）
+    const hasNotDeliveredItems = draft.items.some(item => item.isNotDelivered)
+    if (hasNotDeliveredItems && !draft.customer_code) {
+      return NextResponse.json(
+        { ok: false, error: '有未出貨商品時，必須選擇客戶' },
+        { status: 400 }
+      )
+    }
+
     // Generate sale_no - 查找所有销售记录中的最大编号
     const { data: allSales } = await supabaseServer
       .from('sales')

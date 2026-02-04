@@ -823,6 +823,19 @@ export default function POSPage() {
       return
     }
 
+    // 有未出貨商品時，必須選擇客戶（否則無法追蹤配送）
+    const hasNotDeliveredItems = cart.some(item => item.isNotDelivered)
+    if (!selectedCustomer && hasNotDeliveredItems) {
+      const shouldAddCustomer = confirm('有未出貨商品，必須選擇客戶以便後續配送追蹤\n\n要建立新客戶嗎？')
+      if (shouldAddCustomer) {
+        setShowQuickAddCustomer(true)
+        return
+      } else {
+        setError('有未出貨商品時，必須選擇客戶')
+        return
+      }
+    }
+
     if (!selectedCustomer && !isPaid) {
       const shouldAddCustomer = confirm('未收款訂單需要選擇客戶\n\n要建立新客戶嗎？')
       if (shouldAddCustomer) {
