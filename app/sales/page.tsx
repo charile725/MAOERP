@@ -1473,6 +1473,8 @@ export default function SalesPage() {
                                 </button>
                                 {sale.customer_code && (() => {
                                   const hasDelivered = sale.sale_items?.some(i => (i.delivered_quantity || 0) > 0)
+                                  const allZeroPrice = sale.sale_items?.every(i => i.price === 0)
+                                  if (!allZeroPrice) return null
                                   return hasDelivered ? (
                                     <span className="block w-full px-4 py-2 text-left text-sm text-gray-400 dark:text-gray-600 cursor-not-allowed">
                                       💰 轉購物金（已出貨）

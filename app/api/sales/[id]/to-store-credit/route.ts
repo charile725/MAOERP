@@ -68,6 +68,15 @@ export async function POST(
             )
         }
 
+        // 檢查所有品項售價是否為 0 → 只有售價=0的品項才能轉購物金
+        const hasNonZeroPriceItems = sale.sale_items?.some((item: any) => item.price !== 0)
+        if (hasNonZeroPriceItems) {
+            return NextResponse.json(
+                { ok: false, error: '只有所有品項售價皆為 $0 的銷售單才能轉購物金' },
+                { status: 400 }
+            )
+        }
+
         // 檢查是否有已出貨的品項 → 已出貨不能轉購物金
         const { data: confirmedDeliveries } = await (supabaseServer
             .from('deliveries') as any)
