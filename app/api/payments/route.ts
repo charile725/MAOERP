@@ -122,7 +122,7 @@ export async function POST(request: NextRequest) {
         .eq('id', settlement.id)
     }
 
-    // Create allocations (trigger will handle updating partner_accounts)
+    // Create allocations
     const { error: allocationsError } = await (supabaseServer
       .from('settlement_allocations') as any)
       .insert(
@@ -142,39 +142,52 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 檢查並更新進貨單的付款狀態
-    // 找出這次付款涉及的所有進貨單
-    const { data: paidAccounts } = await (supabaseServer
-      .from('partner_accounts') as any)
-      .select('ref_id, ref_type, status')
-      .in('id', draft.allocations.map(a => a.partner_account_id))
+    // ===== 手動更新 AP 記錄的 received_paid 和 status =====
+    // （資料庫沒有 trigger 自動處理，需要在應用層更新）
+    const purchaseIdsToCheck = new Set<string>()
 
-    if (paidAccounts) {
-      // 找出所有相關的進貨單 ID
-      const purchaseIds = [...new Set(
-        paidAccounts
-          .filter((a: any) => a.ref_type === 'purchase')
-          .map((a: any) => a.ref_id)
-      )]
+    for (const allocation of draft.allocations) {
+      const { data: ap } = await (supabaseServer
+        .from('partner_accounts') as any)
+        .select('id, amount, received_paid, ref_type, ref_id')
+        .eq('id', allocation.partner_account_id)
+        .single()
 
-      // 對每個進貨單，檢查是否所有 AP 都已付清
-      for (const purchaseId of purchaseIds) {
-        const { data: remainingAP } = await (supabaseServer
-          .from('partner_accounts') as any)
-          .select('id, status')
-          .eq('ref_type', 'purchase')
-          .eq('ref_id', purchaseId)
-          .neq('status', 'paid')
+      if (!ap) continue
 
-        // 如果沒有未付的 AP，更新進貨單為已付款
-        if (!remainingAP || remainingAP.length === 0) {
-          await (supabaseServer
-            .from('purchases') as any)
-            .update({ is_paid: true })
-            .eq('id', purchaseId)
-          console.log(`[Payment] Updated purchase ${purchaseId} to is_paid=true`)
-        }
+      const newReceivedPaid = (ap.received_paid || 0) + allocation.amount
+      const newStatus = newReceivedPaid >= ap.amount ? 'paid' : newReceivedPaid > 0 ? 'partial' : 'unpaid'
+
+      await (supabaseServer
+        .from('partner_accounts') as any)
+        .update({
+          received_paid: newReceivedPaid,
+          status: newStatus,
+        })
+        .eq('id', allocation.partner_account_id)
+
+      if (ap.ref_type === 'purchase') {
+        purchaseIdsToCheck.add(ap.ref_id)
       }
+    }
+
+    // ===== 檢查進貨單是否已全部付清，更新 is_paid =====
+    for (const purchaseId of Array.from(purchaseIdsToCheck)) {
+      const { data: purchaseAPs } = await (supabaseServer
+        .from('partner_accounts') as any)
+        .select('amount, received_paid')
+        .eq('ref_type', 'purchase')
+        .eq('ref_id', purchaseId)
+
+      if (!purchaseAPs) continue
+
+      const allPaid = purchaseAPs.every((ap: any) => ap.received_paid >= ap.amount)
+      if (!allPaid) continue
+
+      await (supabaseServer
+        .from('purchases') as any)
+        .update({ is_paid: true })
+        .eq('id', purchaseId)
     }
 
     return NextResponse.json({ ok: true, data: settlement }, { status: 201 })

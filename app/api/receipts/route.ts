@@ -192,7 +192,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create allocations (trigger will handle updating partner_accounts)
+    // Create allocations
     const { error: allocationsError } = await (supabaseServer
       .from('settlement_allocations') as any)
       .insert(
@@ -210,6 +210,84 @@ export async function POST(request: NextRequest) {
         { ok: false, error: allocationsError.message },
         { status: 500 }
       )
+    }
+
+    // ===== 手動更新 AR 記錄的 received_paid 和 status =====
+    // （資料庫沒有 trigger 自動處理，需要在應用層更新）
+    const saleIdsToCheck = new Set<string>()
+
+    for (const allocation of draft.allocations) {
+      const { data: ar } = await (supabaseServer
+        .from('partner_accounts') as any)
+        .select('id, amount, received_paid, ref_type, ref_id')
+        .eq('id', allocation.partner_account_id)
+        .single()
+
+      if (!ar) continue
+
+      const newReceivedPaid = (ar.received_paid || 0) + allocation.amount
+      const newStatus = newReceivedPaid >= ar.amount ? 'paid' : newReceivedPaid > 0 ? 'partial' : 'unpaid'
+
+      await (supabaseServer
+        .from('partner_accounts') as any)
+        .update({
+          received_paid: newReceivedPaid,
+          status: newStatus,
+        })
+        .eq('id', allocation.partner_account_id)
+
+      if (ar.ref_type === 'sale') {
+        saleIdsToCheck.add(ar.ref_id)
+      }
+    }
+
+    // ===== 檢查銷售單是否已全部收清，同步更新 sales =====
+    for (const saleId of Array.from(saleIdsToCheck)) {
+      const { data: saleARs } = await (supabaseServer
+        .from('partner_accounts') as any)
+        .select('amount, received_paid')
+        .eq('ref_type', 'sale')
+        .eq('ref_id', saleId)
+
+      if (!saleARs) continue
+
+      const allPaid = saleARs.every((ar: any) => ar.received_paid >= ar.amount)
+      if (!allPaid) continue
+
+      const { data: currentSale } = await (supabaseServer
+        .from('sales') as any)
+        .select('payment_method, is_paid')
+        .eq('id', saleId)
+        .single()
+
+      if (!currentSale || currentSale.is_paid) continue
+
+      const saleUpdate: Record<string, any> = { is_paid: true }
+
+      // 只有非購物金收款才更新付款方式（避免購物金收款後跳去現金收入）
+      if (currentSale.payment_method === 'pending' && !isStoreCredit) {
+        saleUpdate.payment_method = draft.method
+
+        // 同步更新 account_id
+        if (settlement.account_id) {
+          saleUpdate.account_id = settlement.account_id
+        } else {
+          const { data: methodAccount } = await (supabaseServer
+            .from('accounts') as any)
+            .select('id')
+            .eq('payment_method_code', draft.method)
+            .eq('is_active', true)
+            .single()
+          if (methodAccount) {
+            saleUpdate.account_id = methodAccount.id
+          }
+        }
+      }
+
+      await (supabaseServer
+        .from('sales') as any)
+        .update(saleUpdate)
+        .eq('id', saleId)
     }
 
     return NextResponse.json({ ok: true, data: settlement }, { status: 201 })
