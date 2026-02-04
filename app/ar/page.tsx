@@ -153,7 +153,7 @@ export default function ARPageV2() {
   // 取得付款帳戶列表
   const fetchPaymentAccounts = async () => {
     try {
-      const res = await fetch('/api/accounts?active=true')
+      const res = await fetch('/api/accounts?active_only=true')
       const data = await res.json()
       if (data.ok) {
         // 過濾掉 pending（待定不應該用於收款）

@@ -90,9 +90,9 @@ export default function APPageV2() {
       const res = await fetch('/api/accounts?active_only=true')
       const data = await res.json()
       if (data.ok) {
-        // 過濾出可用於付款的帳戶（排除 pending）
+        // 顯示所有活躍帳戶（排除 pending）
         const accounts = (data.data as PaymentAccount[])
-          .filter(a => a.payment_method_code && a.payment_method_code !== 'pending')
+          .filter(a => a.payment_method_code !== 'pending')
           .sort((a, b) => a.sort_order - b.sort_order)
         setPaymentAccounts(accounts)
         // 預設選擇第一個帳戶
@@ -278,7 +278,7 @@ export default function APPageV2() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           partner_code: currentVendor,
-          method: selectedPaymentAccount.payment_method_code,
+          method: selectedPaymentAccount.payment_method_code || 'cash',
           account_id: paymentAccountId,
           amount,
           allocations
@@ -604,7 +604,7 @@ export default function APPageV2() {
                 ) : (
                   paymentAccounts.map((account) => (
                     <option key={account.id} value={account.id}>
-                      {account.display_name || account.account_name} (餘額: {formatCurrency(account.balance)})
+                      {account.account_name} (餘額: {formatCurrency(account.balance)})
                     </option>
                   ))
                 )}
