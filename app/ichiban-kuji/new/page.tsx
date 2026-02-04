@@ -4,6 +4,11 @@ import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { formatCurrency } from '@/lib/utils'
 
+type Vendor = {
+  vendor_code: string
+  vendor_name: string
+}
+
 type Product = {
   id: string
   name: string
@@ -38,6 +43,8 @@ export default function NewIchibanKujiPage() {
   const [prizes, setPrizes] = useState<Prize[]>([])
   const [comboPrices, setComboPrices] = useState<ComboPrice[]>([])
   const [openingComboPrices, setOpeningComboPrices] = useState<ComboPrice[]>([])
+  const [vendors, setVendors] = useState<Vendor[]>([])
+  const [vendorCode, setVendorCode] = useState('')
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -47,7 +54,9 @@ export default function NewIchibanKujiPage() {
   const isOfficial = setType === 'official'
 
   useEffect(() => {
-    if (!isOfficial) {
+    if (isOfficial) {
+      fetchVendors()
+    } else {
       fetchProducts()
     }
   }, [isOfficial])
@@ -61,6 +70,18 @@ export default function NewIchibanKujiPage() {
       }
     } catch (err) {
       console.error('Failed to fetch products:', err)
+    }
+  }
+
+  const fetchVendors = async () => {
+    try {
+      const res = await fetch('/api/vendors?active=true')
+      const data = await res.json()
+      if (data.ok) {
+        setVendors(data.data || [])
+      }
+    } catch (err) {
+      console.error('Failed to fetch vendors:', err)
     }
   }
 
@@ -201,6 +222,10 @@ export default function NewIchibanKujiPage() {
         setError('請輸入正確的整套成本')
         return
       }
+      if (!vendorCode) {
+        setError('官方套必須選擇廠商')
+        return
+      }
     }
 
     if (prizes.length === 0) {
@@ -237,6 +262,7 @@ export default function NewIchibanKujiPage() {
           price: parseFloat(price),
           set_type: setType,
           total_cost: isOfficial ? parseFloat(totalCost) || 0 : 0,
+          vendor_code: isOfficial ? vendorCode : null,
           prizes: prizes.map(p => ({
             prize_tier: p.prize_tier,
             prize_name: p.prize_name || null,
@@ -270,6 +296,7 @@ export default function NewIchibanKujiPage() {
     setSearchInputs({})
     setSearchResults({})
     setTotalCost('')
+    setVendorCode('')
     setOpeningComboPrices([])
   }
 
@@ -376,21 +403,45 @@ export default function NewIchibanKujiPage() {
               </div>
             </div>
 
-            {/* Total Cost for Official Sets */}
+            {/* Total Cost & Vendor for Official Sets */}
             {isOfficial && (
-              <div className="mt-4">
-                <label className="mb-2 block text-sm font-medium text-gray-900 dark:text-gray-100">
-                  整套成本 *
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={totalCost}
-                  onChange={(e) => setTotalCost(e.target.value)}
-                  className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 md:w-1/3"
-                  placeholder="例：5000"
-                />
+              <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-900 dark:text-gray-100">
+                    整套成本 *
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={totalCost}
+                    onChange={(e) => setTotalCost(e.target.value)}
+                    className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                    placeholder="例：5000"
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-900 dark:text-gray-100">
+                    廠商 *
+                  </label>
+                  <select
+                    value={vendorCode}
+                    onChange={(e) => setVendorCode(e.target.value)}
+                    className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                  >
+                    <option value="">-- 選擇廠商 --</option>
+                    {vendors.map((v) => (
+                      <option key={v.vendor_code} value={v.vendor_code}>
+                        {v.vendor_name} ({v.vendor_code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="md:col-span-2">
+                  <p className="text-xs text-orange-600 dark:text-orange-400">
+                    建立後將自動產生應付帳款，一番賞預設為未收貨、未啟用狀態
+                  </p>
+                </div>
               </div>
             )}
           </div>

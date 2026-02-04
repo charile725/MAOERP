@@ -147,6 +147,7 @@ export const ichibanKujiDraftSchema = z.object({
   price: z.number().min(0, 'Price must be positive'),
   set_type: z.enum(['custom', 'official']).optional().default('custom'),
   total_cost: z.number().min(0).optional().default(0),
+  vendor_code: z.string().optional().nullable(),
   prizes: z.array(ichibanKujiPrizeSchema).min(1, 'At least one prize is required'),
   combo_prices: z.array(ichibanKujiComboPriceSchema).optional().default([]),
   opening_combo_prices: z.array(ichibanKujiComboPriceSchema).optional().default([]),

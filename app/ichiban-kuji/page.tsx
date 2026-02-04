@@ -34,6 +34,8 @@ type IchibanKuji = {
   avg_cost: number
   price?: number
   is_active: boolean
+  is_received?: boolean
+  vendor_code?: string | null
   set_type?: 'custom' | 'official'
   total_cost?: number
   created_at: string
@@ -121,6 +123,45 @@ export default function IchibanKujiPage() {
       alert('刪除失敗')
     } finally {
       setDeleting(null)
+    }
+  }
+
+  const handleToggleActive = async (kuji: IchibanKuji) => {
+    const newActive = !kuji.is_active
+    try {
+      const res = await fetch(`/api/ichiban-kuji/${kuji.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: newActive }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        fetchKujis()
+      } else {
+        alert(data.error || '操作失敗')
+      }
+    } catch (err) {
+      alert('操作失敗')
+    }
+  }
+
+  const handleMarkReceived = async (kuji: IchibanKuji) => {
+    if (!confirm(`確定要將「${kuji.name}」標記為已收貨嗎？`)) return
+    try {
+      const res = await fetch(`/api/ichiban-kuji/${kuji.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_received: true }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        alert('已標記為收貨')
+        fetchKujis()
+      } else {
+        alert(data.error || '操作失敗')
+      }
+    } catch (err) {
+      alert('操作失敗')
     }
   }
 
@@ -223,15 +264,34 @@ export default function IchibanKujiPage() {
                             </span>
                           </td>
                         )}
-                        <td className="px-6 py-4 text-center text-sm">
-                          <span
-                            className={`inline-block rounded px-2 py-1 text-xs ${kuji.is_active
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-gray-100 text-gray-800'
+                        <td className="px-6 py-4 text-center text-sm" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex flex-col items-center gap-1">
+                            {/* 收貨狀態（僅官方套顯示） */}
+                            {kuji.set_type === 'official' && (
+                              <span className={`inline-block rounded px-1.5 py-0.5 text-xs ${
+                                kuji.is_received === false
+                                  ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
+                                  : 'bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-400'
+                              }`}>
+                                {kuji.is_received === false ? '未收貨' : '已收貨'}
+                              </span>
+                            )}
+                            {/* 啟用/停用切換按鈕 */}
+                            <button
+                              onClick={() => handleToggleActive(kuji)}
+                              disabled={kuji.set_type === 'official' && kuji.is_received === false && !kuji.is_active}
+                              title={kuji.set_type === 'official' && kuji.is_received === false && !kuji.is_active ? '尚未收貨，無法啟用' : ''}
+                              className={`inline-block rounded px-2 py-1 text-xs font-medium transition-colors ${
+                                kuji.is_active
+                                  ? 'bg-green-100 text-green-800 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50'
+                                  : kuji.set_type === 'official' && kuji.is_received === false
+                                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed dark:bg-gray-700 dark:text-gray-500'
+                                    : 'bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
                               }`}
-                          >
-                            {kuji.is_active ? '啟用' : '停用'}
-                          </span>
+                            >
+                              {kuji.is_active ? '啟用' : '停用'}
+                            </button>
+                          </div>
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
                           {formatDate(kuji.created_at)}
@@ -263,7 +323,20 @@ export default function IchibanKujiPage() {
                                     setOpenMenuId(null)
                                   }}
                                 />
-                                <div className="absolute right-0 top-8 z-20 w-32 rounded-lg bg-white dark:bg-gray-700 shadow-lg border border-gray-200 dark:border-gray-600 py-1">
+                                <div className="absolute right-0 top-8 z-20 w-36 rounded-lg bg-white dark:bg-gray-700 shadow-lg border border-gray-200 dark:border-gray-600 py-1">
+                                  {/* 標記已收貨（僅官方套且未收貨時顯示） */}
+                                  {kuji.set_type === 'official' && kuji.is_received === false && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleMarkReceived(kuji)
+                                        setOpenMenuId(null)
+                                      }}
+                                      className="block w-full text-left px-4 py-2 text-sm text-teal-600 dark:text-teal-400 hover:bg-gray-100 dark:hover:bg-gray-600"
+                                    >
+                                      標記已收貨
+                                    </button>
+                                  )}
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation()

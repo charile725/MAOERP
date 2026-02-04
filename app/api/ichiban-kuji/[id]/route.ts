@@ -271,6 +271,78 @@ export async function PUT(
   }
 }
 
+// PATCH /api/ichiban-kuji/:id - Toggle active / mark received
+export async function PATCH(
+  request: NextRequest,
+  context: RouteContext
+) {
+  try {
+    const { id } = await context.params
+    const body = await request.json()
+
+    // 讀取當前一番賞資料
+    const { data: kuji, error: fetchError } = await (supabaseServer
+      .from('ichiban_kuji') as any)
+      .select('id, is_active, is_received, set_type')
+      .eq('id', id)
+      .single()
+
+    if (fetchError || !kuji) {
+      return NextResponse.json(
+        { ok: false, error: '找不到一番賞' },
+        { status: 404 }
+      )
+    }
+
+    const updateData: any = {}
+
+    // 處理啟用/停用
+    if (typeof body.is_active === 'boolean') {
+      // 啟用時檢查：官方套未收貨不給啟用
+      if (body.is_active && kuji.is_received === false) {
+        return NextResponse.json(
+          { ok: false, error: '尚未收貨，無法啟用' },
+          { status: 400 }
+        )
+      }
+      updateData.is_active = body.is_active
+    }
+
+    // 處理收貨確認
+    if (typeof body.is_received === 'boolean') {
+      updateData.is_received = body.is_received
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json(
+        { ok: false, error: '沒有需要更新的欄位' },
+        { status: 400 }
+      )
+    }
+
+    const { data: updated, error: updateError } = await (supabaseServer
+      .from('ichiban_kuji') as any)
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (updateError) {
+      return NextResponse.json(
+        { ok: false, error: updateError.message },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({ ok: true, data: updated })
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
+
 // DELETE /api/ichiban-kuji/:id - Delete ichiban kuji
 export async function DELETE(
   request: NextRequest,

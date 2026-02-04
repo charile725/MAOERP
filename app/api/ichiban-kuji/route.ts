@@ -73,6 +73,14 @@ export async function POST(request: NextRequest) {
     const draft = validation.data
     const isOfficial = draft.set_type === 'official'
 
+    // 官方套必須選擇廠商
+    if (isOfficial && !draft.vendor_code) {
+      return NextResponse.json(
+        { ok: false, error: '官方套必須選擇廠商' },
+        { status: 400 }
+      )
+    }
+
     // Calculate total draws and average cost
     let totalDraws = 0
     let totalCost = 0
@@ -103,19 +111,28 @@ export async function POST(request: NextRequest) {
     const avgCost = totalDraws > 0 ? totalCost / totalDraws : 0
 
     // Create ichiban kuji
+    const insertData: any = {
+      name: draft.name,
+      barcode: draft.barcode || null,
+      price: draft.price,
+      total_draws: totalDraws,
+      avg_cost: avgCost,
+      set_type: draft.set_type || 'custom',
+      total_cost: totalCost,
+      combo_prices: draft.combo_prices || [],
+      opening_combo_prices: draft.opening_combo_prices || [],
+    }
+
+    // 官方套：設定廠商、未收貨、未啟用
+    if (isOfficial) {
+      insertData.vendor_code = draft.vendor_code
+      insertData.is_received = false
+      insertData.is_active = false
+    }
+
     const { data: kuji, error: kujiError } = await (supabaseServer
       .from('ichiban_kuji') as any)
-      .insert({
-        name: draft.name,
-        barcode: draft.barcode || null,
-        price: draft.price,
-        total_draws: totalDraws,
-        avg_cost: avgCost,
-        set_type: draft.set_type || 'custom',
-        total_cost: totalCost,
-        combo_prices: draft.combo_prices || [],
-        opening_combo_prices: draft.opening_combo_prices || [],
-      })
+      .insert(insertData)
       .select()
       .single()
 
@@ -147,6 +164,28 @@ export async function POST(request: NextRequest) {
         { ok: false, error: prizesError.message },
         { status: 500 }
       )
+    }
+
+    // 官方套：建立 AP（應付帳款）記錄
+    if (isOfficial && draft.vendor_code && totalCost > 0) {
+      const { error: apError } = await (supabaseServer
+        .from('partner_accounts') as any)
+        .insert({
+          partner_type: 'vendor',
+          partner_code: draft.vendor_code,
+          direction: 'AP',
+          ref_type: 'ichiban_kuji',
+          ref_id: kuji.id,
+          amount: totalCost,
+          received_paid: 0,
+          due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          status: 'unpaid',
+        })
+
+      if (apError) {
+        console.error('[Ichiban Kuji POST] Failed to create AP record:', apError)
+        // AP 建立失敗不阻斷流程，只記錄錯誤
+      }
     }
 
     return NextResponse.json(

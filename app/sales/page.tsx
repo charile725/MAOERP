@@ -232,6 +232,7 @@ export default function SalesPage() {
   const [convertingToStoreCredit, setConvertingToStoreCredit] = useState(false)
   const [convertingItemId, setConvertingItemId] = useState<string | null>(null)
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null)
+  const [undoingItemId, setUndoingItemId] = useState<string | null>(null)
 
   const toggleCustomer = (customerKey: string) => {
     const newExpanded = new Set(expandedCustomers)
@@ -871,6 +872,60 @@ export default function SalesPage() {
     }
   }
 
+  // 撤銷出貨
+  const handleUndoDeliver = async (item: SaleItem) => {
+    const deliveredQty = item.delivered_quantity || 0
+
+    if (deliveredQty <= 0) {
+      alert('此商品沒有出貨記錄')
+      return
+    }
+
+    const qtyInput = prompt(`撤銷出貨數量（已出貨: ${deliveredQty} ${item.products.unit}）：`, deliveredQty.toString())
+
+    if (qtyInput === null) {
+      return
+    }
+
+    const quantity = parseInt(qtyInput)
+
+    if (isNaN(quantity) || quantity <= 0) {
+      alert('請輸入有效的數量')
+      return
+    }
+
+    if (quantity > deliveredQty) {
+      alert(`撤銷數量不能超過已出貨數量（${deliveredQty}）`)
+      return
+    }
+
+    if (!confirm(`確定要撤銷出貨 ${quantity} ${item.products.unit} 嗎？\n\n庫存將會補回。`)) {
+      return
+    }
+
+    setUndoingItemId(item.id)
+    try {
+      const res = await fetch(`/api/sale-items/${item.id}/undo-deliver`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quantity })
+      })
+
+      const data = await res.json()
+
+      if (data.ok) {
+        alert(data.message || '撤銷出貨成功！')
+        fetchSales(currentPage)
+      } else {
+        alert(`撤銷失敗：${data.error}`)
+      }
+    } catch (err) {
+      alert('撤銷失敗')
+    } finally {
+      setUndoingItemId(null)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
       <div className="mx-auto max-w-7xl">
@@ -1262,6 +1317,16 @@ export default function SalesPage() {
                                             {convertingItemId === item.id ? '...' : '💰'}
                                           </button>
                                         )}
+                                        {deliveredQty > 0 && (
+                                          <button
+                                            onClick={() => handleUndoDeliver(item)}
+                                            disabled={undoingItemId === item.id}
+                                            className="rounded px-2 py-0.5 text-xs text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 disabled:opacity-50"
+                                            title="撤銷出貨"
+                                          >
+                                            {undoingItemId === item.id ? '...' : '↩'}
+                                          </button>
+                                        )}
                                       </div>
                                     </td>
                                   </tr>
@@ -1504,6 +1569,16 @@ export default function SalesPage() {
                                                     className="rounded bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700 disabled:bg-gray-400"
                                                   >
                                                     {delivering === item.id ? '處理中...' : '出貨'}
+                                                  </button>
+                                                )}
+                                                {deliveredQty > 0 && (
+                                                  <button
+                                                    onClick={() => handleUndoDeliver(item)}
+                                                    disabled={undoingItemId === item.id}
+                                                    className="rounded px-2 py-0.5 text-xs text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 disabled:opacity-50"
+                                                    title="撤銷出貨"
+                                                  >
+                                                    {undoingItemId === item.id ? '...' : '↩'}
                                                   </button>
                                                 )}
                                                 {sale.customer_code && item.price === 0 && (() => {
