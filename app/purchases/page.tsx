@@ -534,6 +534,12 @@ export default function PurchasesPage() {
                 />
                 顯示未收貨
               </label>
+              <Link
+                href="/purchase-receiving"
+                className="text-sm text-red-600 dark:text-red-400 hover:underline"
+              >
+                未收貨統計
+              </Link>
             </div>
           </form>
         </div>
