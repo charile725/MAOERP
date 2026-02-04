@@ -391,6 +391,11 @@ export default function ProductsPage() {
                         <SortIcon field="stock" />
                       </div>
                     </th>
+                    <th className="px-6 py-3 text-right text-sm font-semibold text-gray-900 dark:text-gray-100 select-none">
+                      <div className="flex items-center justify-end whitespace-nowrap">
+                        待出貨
+                      </div>
+                    </th>
                     <th
                       className="px-6 py-3 text-left text-sm font-semibold text-gray-900 dark:text-gray-100 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 select-none"
                       onClick={() => handleSort('updated_at')}
@@ -434,6 +439,15 @@ export default function ProductsPage() {
                         >
                           {product.stock <= 3 && '⚠ '}{product.stock}
                         </span>
+                      </td>
+                      <td className="px-6 py-4 text-right text-sm">
+                        {product.pending_delivery ? (
+                          <span className="font-semibold text-blue-600 dark:text-blue-400">
+                            {product.pending_delivery}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400 dark:text-gray-500">-</span>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
                         {product.updated_at

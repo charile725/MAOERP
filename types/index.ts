@@ -13,6 +13,7 @@ export type Product = {
   is_active: boolean
   tags: string[]
   image_url?: string | null
+  pending_delivery?: number
   created_at?: string
   updated_at?: string
 }
