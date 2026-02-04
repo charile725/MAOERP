@@ -735,87 +735,52 @@ export default function ARPageV2() {
 
                 return (
                   <div key={group.partner_code} className="border-b border-gray-200 dark:border-gray-700 last:border-b-0">
-                    {/* Customer Card */}
-                    <div className="p-3 hover:bg-gray-50 dark:hover:bg-gray-700">
-                      <div className="flex items-start gap-3">
-                        <div
-                          className="flex-1 cursor-pointer"
-                          onClick={() => toggleCustomer(group.partner_code)}
-                        >
-                          {/* 客戶名稱與展開箭頭 */}
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="text-gray-400 text-xs">
-                              {isExpanded ? '▾' : '▸'}
+                    {/* Customer Header */}
+                    <div className="flex items-center gap-4 p-4 hover:bg-gray-50 dark:hover:bg-gray-700">
+                      <div
+                        className="flex-1 cursor-pointer dark:text-gray-100"
+                        onClick={() => toggleCustomer(group.partner_code)}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="text-blue-600">
+                              {isExpanded ? '▼' : '▶'}
                             </span>
-                            <span className="text-base font-semibold text-gray-900 dark:text-gray-100">
+                            <span className="font-semibold text-gray-900 dark:text-gray-100">
                               {group.customer_name}
                             </span>
-                            <span className="text-xs text-gray-500 dark:text-gray-400">
-                              {group.partner_code}
+                            <span className="text-sm text-gray-500 dark:text-gray-400">
+                              ({group.partner_code})
                             </span>
                           </div>
 
-                          {/* 關鍵指標 - 4格卡片 */}
-                          <div className="grid grid-cols-4 gap-2 mb-1.5">
-                            <div className="rounded bg-gray-50 dark:bg-gray-800 px-2 py-1">
-                              <div className="text-[10px] text-gray-500 dark:text-gray-400">未收總額</div>
-                              <div className="text-sm font-bold text-gray-900 dark:text-gray-100">
+                          <div className="flex items-center gap-4">
+                            <div className="text-right">
+                              <div className="text-sm text-gray-500 dark:text-gray-400">未收款</div>
+                              <div className="text-lg font-bold text-gray-900 dark:text-gray-100">
                                 {formatCurrency(group.total_balance)}
                               </div>
-                            </div>
-
-                            <div className="rounded bg-gray-50 dark:bg-gray-800 px-2 py-1">
-                              <div className="text-[10px] text-gray-500 dark:text-gray-400">逾期金額</div>
-                              <div className={`text-sm font-bold ${overdueAmount > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-400'
-                                }`}>
-                                {overdueAmount > 0 ? formatCurrency(overdueAmount) : '-'}
+                              <div className="text-xs text-gray-500 dark:text-gray-400">
+                                {group.unpaid_count} 筆單據
                               </div>
-                            </div>
-
-                            <div className="rounded bg-gray-50 dark:bg-gray-800 px-2 py-1">
-                              <div className="text-[10px] text-gray-500 dark:text-gray-400">未收單數</div>
-                              <div className="text-sm font-bold text-gray-900 dark:text-gray-100">
-                                {group.unpaid_count}
-                              </div>
-                            </div>
-
-                            <div className="rounded bg-gray-50 dark:bg-gray-800 px-2 py-1">
-                              <div className="text-[10px] text-gray-500 dark:text-gray-400">銷售日期</div>
-                              <div className="text-xs font-semibold text-gray-900 dark:text-gray-100">
-                                {latestSaleDate ? formatDate(latestSaleDate) : '-'}
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* 收款進度條 */}
-                          <div className="mt-1.5">
-                            <div className="flex items-center justify-between text-[10px] text-gray-500 dark:text-gray-400 mb-0.5">
-                              <span>已收 {receivedPercentage.toFixed(0)}%</span>
-                              <span>{formatCurrency(receivedAmount)} / {formatCurrency(totalAmount)}</span>
-                            </div>
-                            <div className="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-green-500 dark:bg-green-600 transition-all duration-300"
-                                style={{ width: `${receivedPercentage}%` }}
-                              />
                             </div>
                           </div>
                         </div>
-
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            const customerSelectedAccounts = unpaidAccounts.filter(a => selectedAccounts.has(a.id))
-                            if (customerSelectedAccounts.length > 0) {
-                              openReceiptModal(group.partner_code)
-                            }
-                          }}
-                          disabled={unpaidAccounts.filter(a => selectedAccounts.has(a.id)).length === 0}
-                          className="rounded bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
-                        >
-                          收款
-                        </button>
                       </div>
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          const customerSelectedAccounts = unpaidAccounts.filter(a => selectedAccounts.has(a.id))
+                          if (customerSelectedAccounts.length > 0) {
+                            openReceiptModal(group.partner_code)
+                          }
+                        }}
+                        disabled={unpaidAccounts.filter(a => selectedAccounts.has(a.id)).length === 0}
+                        className="rounded bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:bg-gray-300"
+                      >
+                        收款
+                      </button>
                     </div>
 
                     {/* Account Details */}
