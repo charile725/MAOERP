@@ -224,11 +224,14 @@ export default function DashboardPage() {
 
       // Calculate total cost
       const costBreakdownMap = new Map<string, { cost: number; quantity: number; name: string }>()
+      let totalStoreCreditGranted = 0
       const totalCost = confirmedSales.reduce((sum: number, s: any) => {
         const saleCost = (s.sale_items || []).reduce(
           (itemSum: number, item: any) => {
             const effectiveQty = item.quantity - (item.store_credit_qty || 0)
             const itemCost = (item.cost || 0) * effectiveQty
+            const storeCreditCost = item.store_credit_amount || 0
+            totalStoreCreditGranted += storeCreditCost
             if (effectiveQty > 0) {
               const key = item.product_id
               if (costBreakdownMap.has(key)) {
@@ -241,7 +244,7 @@ export default function DashboardPage() {
                 })
               }
             }
-            return itemSum + itemCost
+            return itemSum + itemCost + storeCreditCost
           },
           0
         )

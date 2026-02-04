@@ -364,10 +364,10 @@ export default function SalesPage() {
             const grossSales = sale.subtotal || sale.sale_items?.reduce((sum, item) =>
               sum + (item.price * item.quantity), 0) || 0
 
-            // 計算這筆銷售的毛利（扣除已轉購物金的數量）
+            // 計算這筆銷售的毛利（扣除已轉購物金的數量，加上購物金轉換金額作為成本）
             const totalCost = sale.sale_items?.reduce((sum, item) => {
               const effectiveQty = item.quantity - (item.store_credit_qty || 0)
-              return sum + (item.cost || 0) * effectiveQty
+              return sum + (item.cost || 0) * effectiveQty + (item.store_credit_amount || 0)
             }, 0) || 0
             const saleProfit = grossSales - totalCost
             sale.profit = saleProfit
@@ -427,7 +427,7 @@ export default function SalesPage() {
             ? allSales.filter((s: Sale) => getActualFulfillmentStatus(s) !== 'completed')
             : allSales
 
-          // 不分组情況，計算每筆銷售的毛利（扣除已轉購物金的數量）
+          // 不分组情況，計算每筆銷售的毛利（扣除已轉購物金的數量，加上購物金轉換金額作為成本）
           let totalRevenue = 0
           let totalProfit = 0
           const salesWithProfit = filteredSales.map((sale: Sale) => {
@@ -437,7 +437,7 @@ export default function SalesPage() {
 
             const totalCost = sale.sale_items?.reduce((sum: number, item: SaleItem) => {
               const effectiveQty = item.quantity - (item.store_credit_qty || 0)
-              return sum + (item.cost || 0) * effectiveQty
+              return sum + (item.cost || 0) * effectiveQty + (item.store_credit_amount || 0)
             }, 0) || 0
             const saleProfit = grossSales - totalCost
             totalRevenue += grossSales // 使用 Gross Sales
