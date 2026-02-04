@@ -668,7 +668,16 @@ export default function POSPage() {
     Object.keys(ichibanGroups).forEach(kuji_id => {
       const group = ichibanGroups[kuji_id]
       const totalCount = group.items.reduce((sum, item) => sum + item.quantity, 0)
-      const comboPrices = (group.kuji?.combo_prices || []).sort((a: any, b: any) => b.draws - a.draws)
+
+      // Check if the set is untouched (all prizes have remaining === quantity)
+      const isUntouched = group.kuji?.ichiban_kuji_prizes?.every(
+        (p: any) => p.remaining === p.quantity
+      ) ?? false
+
+      // Merge opening combo prices when set is untouched
+      const regularCombos = group.kuji?.combo_prices || []
+      const openingCombos = isUntouched ? (group.kuji?.opening_combo_prices || []) : []
+      const comboPrices = [...regularCombos, ...openingCombos].sort((a: any, b: any) => b.draws - a.draws)
       const originalPrice = group.kuji?.price || 0
 
       if (comboPrices.length === 0) return

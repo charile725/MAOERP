@@ -38,6 +38,7 @@ type IchibanKuji = {
   total_cost?: number
   created_at: string
   combo_prices?: ComboPrice[]
+  opening_combo_prices?: ComboPrice[]
   ichiban_kuji_prizes: Prize[]
 }
 
@@ -296,6 +297,24 @@ export default function IchibanKujiPage() {
                                     {kuji.combo_prices.map((combo, index) => (
                                       <div key={index} className="rounded bg-white dark:bg-gray-800 px-3 py-2 shadow-sm border border-purple-200 dark:border-purple-700">
                                         <span className="font-semibold text-purple-600 dark:text-purple-400">{combo.draws} 抽</span>
+                                        <span className="mx-2 text-gray-500 dark:text-gray-400">→</span>
+                                        <span className="font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(combo.price)}</span>
+                                        <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+                                          (平均 {formatCurrency(combo.price / combo.draws)}/抽)
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {kuji.opening_combo_prices && kuji.opening_combo_prices.length > 0 && (
+                                <div className="rounded-lg border-2 border-amber-300 dark:border-amber-600 bg-amber-50/50 dark:bg-amber-900/30 p-4">
+                                  <h4 className="mb-2 text-sm font-semibold text-amber-700 dark:text-amber-300">開套優惠（僅限未開套）</h4>
+                                  <div className="flex flex-wrap gap-3">
+                                    {kuji.opening_combo_prices.map((combo, index) => (
+                                      <div key={index} className="rounded bg-white dark:bg-gray-800 px-3 py-2 shadow-sm border border-amber-200 dark:border-amber-700">
+                                        <span className="font-semibold text-amber-600 dark:text-amber-400">{combo.draws} 抽</span>
                                         <span className="mx-2 text-gray-500 dark:text-gray-400">→</span>
                                         <span className="font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(combo.price)}</span>
                                         <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">

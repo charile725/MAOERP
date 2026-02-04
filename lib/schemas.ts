@@ -149,6 +149,7 @@ export const ichibanKujiDraftSchema = z.object({
   total_cost: z.number().min(0).optional().default(0),
   prizes: z.array(ichibanKujiPrizeSchema).min(1, 'At least one prize is required'),
   combo_prices: z.array(ichibanKujiComboPriceSchema).optional().default([]),
+  opening_combo_prices: z.array(ichibanKujiComboPriceSchema).optional().default([]),
 })
 
 // Account schemas

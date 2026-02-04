@@ -120,6 +120,7 @@ export async function PUT(
         set_type: draft.set_type || 'custom',
         total_cost: totalCost,
         combo_prices: draft.combo_prices || [],
+        opening_combo_prices: draft.opening_combo_prices || [],
       })
       .eq('id', id)
 

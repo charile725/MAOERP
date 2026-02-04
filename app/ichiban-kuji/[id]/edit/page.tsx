@@ -40,6 +40,7 @@ export default function EditIchibanKujiPage() {
   const [totalCost, setTotalCost] = useState('')
   const [prizes, setPrizes] = useState<Prize[]>([])
   const [comboPrices, setComboPrices] = useState<ComboPrice[]>([])
+  const [openingComboPrices, setOpeningComboPrices] = useState<ComboPrice[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -95,6 +96,7 @@ export default function EditIchibanKujiPage() {
 
         // Set combo prices
         setComboPrices(kuji.combo_prices || [])
+        setOpeningComboPrices(kuji.opening_combo_prices || [])
 
         // Set search inputs to product names (only for custom sets)
         if (loadedSetType === 'custom') {
@@ -142,6 +144,20 @@ export default function EditIchibanKujiPage() {
     const updated = [...comboPrices]
     updated[index] = { ...updated[index], [field]: value }
     setComboPrices(updated)
+  }
+
+  const addOpeningComboPrice = () => {
+    setOpeningComboPrices([...openingComboPrices, { draws: 3, price: 0 }])
+  }
+
+  const removeOpeningComboPrice = (index: number) => {
+    setOpeningComboPrices(openingComboPrices.filter((_, i) => i !== index))
+  }
+
+  const updateOpeningComboPrice = (index: number, field: keyof ComboPrice, value: number) => {
+    const updated = [...openingComboPrices]
+    updated[index] = { ...updated[index], [field]: value }
+    setOpeningComboPrices(updated)
   }
 
   const updatePrize = (index: number, field: keyof Prize, value: string | number) => {
@@ -277,7 +293,8 @@ export default function EditIchibanKujiPage() {
             product_id: isOfficial ? null : p.product_id,
             quantity: p.quantity,
           })),
-          combo_prices: comboPrices
+          combo_prices: comboPrices,
+          opening_combo_prices: openingComboPrices
         })
       })
 
@@ -458,6 +475,67 @@ export default function EditIchibanKujiPage() {
                     <button
                       type="button"
                       onClick={() => removeComboPrice(index)}
+                      className="px-2 text-lg font-bold text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-500"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Opening Combo Prices */}
+          <div className="rounded-lg bg-white p-4 shadow dark:bg-gray-800 md:p-6">
+            <div className="mb-4 flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">開套優惠（選填）</h2>
+              <button
+                type="button"
+                onClick={addOpeningComboPrice}
+                className="rounded bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
+              >
+                + 新增開套優惠
+              </button>
+            </div>
+
+            {openingComboPrices.length === 0 ? (
+              <div className="rounded border-2 border-dashed border-gray-300 p-4 text-center text-sm text-gray-500 dark:border-gray-600 dark:text-gray-400">
+                僅在整套完全未抽過時適用，例如：開套 3抽280元
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-xs text-amber-600 dark:text-amber-400">僅在整套完全未抽過時適用</p>
+                {openingComboPrices.map((combo, index) => (
+                  <div key={index} className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
+                    <div className="flex w-full flex-1 flex-wrap items-center gap-2">
+                      <input
+                        type="number"
+                        min="1"
+                        value={combo.draws}
+                        onChange={(e) => updateOpeningComboPrice(index, 'draws', parseInt(e.target.value) || 1)}
+                        className="w-24 rounded border border-gray-300 bg-white px-3 py-2 text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                        placeholder="抽數"
+                      />
+                      <span className="text-gray-600 dark:text-gray-400">抽</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={combo.price}
+                        onChange={(e) => updateOpeningComboPrice(index, 'price', parseFloat(e.target.value) || 0)}
+                        className="w-32 rounded border border-gray-300 bg-white px-3 py-2 text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                        placeholder="價格"
+                      />
+                      <span className="text-gray-600 dark:text-gray-400">元</span>
+                      {combo.draws > 0 && combo.price > 0 && (
+                        <span className="text-sm text-gray-500 dark:text-gray-400">
+                          (平均每抽 {formatCurrency(combo.price / combo.draws)})
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeOpeningComboPrice(index)}
                       className="px-2 text-lg font-bold text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-500"
                     >
                       ✕
