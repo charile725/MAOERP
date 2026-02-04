@@ -68,6 +68,21 @@ export async function POST(
             )
         }
 
+        // 檢查是否有已出貨的品項 → 已出貨不能轉購物金
+        const { data: confirmedDeliveries } = await (supabaseServer
+            .from('deliveries') as any)
+            .select('id')
+            .eq('sale_id', id)
+            .eq('status', 'confirmed')
+            .limit(1)
+
+        if (confirmedDeliveries && confirmedDeliveries.length > 0) {
+            return NextResponse.json(
+                { ok: false, error: '此銷售單已有出貨記錄，已出貨商品不能轉購物金' },
+                { status: 400 }
+            )
+        }
+
         // 計算轉換金額
         const conversionAmount = requestedAmount ?? sale.total
         if (conversionAmount > sale.total) {

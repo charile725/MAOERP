@@ -793,6 +793,12 @@ export default function SalesPage() {
       return
     }
 
+    // 已出貨不能轉購物金
+    if ((item.delivered_quantity || 0) > 0) {
+      alert('已出貨商品不能轉購物金')
+      return
+    }
+
     // 計算剩餘可轉換數量
     const alreadyConverted = item.store_credit_qty || 0
     const remainingConvertible = item.quantity - alreadyConverted
@@ -1247,7 +1253,7 @@ export default function SalesPage() {
                                             {delivering === item.id ? '...' : '出貨'}
                                           </button>
                                         )}
-                                        {sale.customer_code && item.price === 0 && !isFullyResolved && (
+                                        {sale.customer_code && item.price === 0 && !isFullyResolved && (item.delivered_quantity || 0) === 0 && (
                                           <button
                                             onClick={() => handleItemToStoreCredit(item, sale)}
                                             disabled={convertingItemId === item.id}
@@ -1400,17 +1406,24 @@ export default function SalesPage() {
                                 >
                                   ✏️ 更正
                                 </button>
-                                {sale.customer_code && (
-                                  <button
-                                    onClick={() => {
-                                      setOpenDropdownId(null)
-                                      openStoreCreditModal(sale)
-                                    }}
-                                    className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                                  >
-                                    💰 轉購物金
-                                  </button>
-                                )}
+                                {sale.customer_code && (() => {
+                                  const hasDelivered = sale.sale_items?.some(i => (i.delivered_quantity || 0) > 0)
+                                  return hasDelivered ? (
+                                    <span className="block w-full px-4 py-2 text-left text-sm text-gray-400 dark:text-gray-600 cursor-not-allowed">
+                                      💰 轉購物金（已出貨）
+                                    </span>
+                                  ) : (
+                                    <button
+                                      onClick={() => {
+                                        setOpenDropdownId(null)
+                                        openStoreCreditModal(sale)
+                                      }}
+                                      className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                    >
+                                      💰 轉購物金
+                                    </button>
+                                  )
+                                })()}
                                 <button
                                   onClick={() => {
                                     setOpenDropdownId(null)
@@ -1497,6 +1510,7 @@ export default function SalesPage() {
                                                   const alreadyConverted = item.store_credit_qty || 0
                                                   const isFullyConverted = alreadyConverted >= item.quantity
                                                   const isPartiallyConverted = alreadyConverted > 0 && !isFullyConverted
+                                                  const hasDelivered = (item.delivered_quantity || 0) > 0
 
                                                   if (isFullyConverted) {
                                                     return (
@@ -1505,6 +1519,8 @@ export default function SalesPage() {
                                                       </span>
                                                     )
                                                   }
+
+                                                  if (hasDelivered) return null
 
                                                   return (
                                                     <>
