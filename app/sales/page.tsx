@@ -1274,10 +1274,10 @@ export default function SalesPage() {
                                     </td>
                                     <td className="py-2 text-right">
                                       <span className={`font-medium ${isFullyResolved
-                                          ? 'text-green-600 dark:text-green-400'
-                                          : deliveredQty > 0
-                                            ? 'text-yellow-600 dark:text-yellow-400'
-                                            : 'text-gray-600 dark:text-gray-400'
+                                        ? 'text-green-600 dark:text-green-400'
+                                        : deliveredQty > 0
+                                          ? 'text-yellow-600 dark:text-yellow-400'
+                                          : 'text-gray-600 dark:text-gray-400'
                                         }`}>
                                         {deliveredQty}/{item.quantity}
                                       </span>
@@ -1470,7 +1470,7 @@ export default function SalesPage() {
                                   }}
                                   className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-t-lg"
                                 >
-                                  ✏️ 更正
+                                  編輯
                                 </button>
                                 {sale.customer_code && (() => {
                                   const hasDelivered = sale.sale_items?.some(i => (i.delivered_quantity || 0) > 0)
@@ -1478,7 +1478,7 @@ export default function SalesPage() {
                                   if (!allZeroPrice) return null
                                   return hasDelivered ? (
                                     <span className="block w-full px-4 py-2 text-left text-sm text-gray-400 dark:text-gray-600 cursor-not-allowed">
-                                      💰 轉購物金（已出貨）
+                                      轉購物金（已出貨）
                                     </span>
                                   ) : (
                                     <button
@@ -1488,7 +1488,7 @@ export default function SalesPage() {
                                       }}
                                       className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                                     >
-                                      💰 轉購物金
+                                      轉購物金
                                     </button>
                                   )
                                 })()}
@@ -1502,7 +1502,7 @@ export default function SalesPage() {
                                   disabled={deleting === sale.id}
                                   className="w-full px-4 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-b-lg disabled:opacity-50"
                                 >
-                                  {deleting === sale.id ? '處理中...' : '🗑️ 刪除'}
+                                  {deleting === sale.id ? '處理中...' : '刪除'}
                                 </button>
                               </PortalDropdown>
                             </td>

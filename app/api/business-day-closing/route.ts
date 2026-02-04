@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
     // 2. 計算該營業日的銷售統計（用 sale_date 查詢）
     const { data: sales, error: salesError } = await (supabaseServer
       .from('sales') as any)
-      .select('total, payment_method, account_id, is_paid, source, sale_no, created_at')
+      .select('id, total, payment_method, account_id, is_paid, source, sale_no, created_at, store_credit_used')
       .eq('sale_date', businessDate)
       .eq('source', source)
       .eq('status', 'confirmed')
@@ -104,6 +104,8 @@ export async function GET(request: NextRequest) {
       fake_total_sales: 0,
       store_credit_converted: storeCreditOriginalTotal,
       store_credit_count: storeCreditSales?.length || 0,
+      store_credit_used: 0,
+      store_credit_granted: 0,
       paid_count: 0,
       paid_sales: 0,
       paid_cash: 0,
@@ -121,6 +123,7 @@ export async function GET(request: NextRequest) {
 
     sales?.forEach((sale: any) => {
       stats.total_sales += sale.total
+      stats.store_credit_used += sale.store_credit_used || 0
 
       if (sale.payment_method === 'cash') {
         stats.total_cash += sale.total
@@ -167,6 +170,25 @@ export async function GET(request: NextRequest) {
     })
 
     stats.fake_total_sales = stats.total_sales + storeCreditOriginalTotal
+
+    // 計算購物金轉出（從 sale_corrections 查詢）
+    const allStoreCreditSaleIds = [
+      ...(storeCreditSales || []).map((s: any) => s.id),
+      ...(sales || []).map((s: any) => s.id),
+    ]
+    if (allStoreCreditSaleIds.length > 0) {
+      const { data: scCorrections } = await (supabaseServer
+        .from('sale_corrections') as any)
+        .select('store_credit_granted')
+        .in('sale_id', allStoreCreditSaleIds)
+        .eq('correction_type', 'to_store_credit')
+
+      if (scCorrections) {
+        stats.store_credit_granted = scCorrections.reduce(
+          (sum: number, c: any) => sum + (c.store_credit_granted || 0), 0
+        )
+      }
+    }
 
     return NextResponse.json({
       ok: true,

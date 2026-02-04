@@ -51,6 +51,8 @@ type ClosingStats = {
     total_transfer: number
     total_cod: number
     sales_by_account: { [key: string]: number }
+    store_credit_used: number
+    store_credit_granted: number
   }
 }
 
@@ -380,6 +382,21 @@ export default function FinanceDashboardPage() {
                   <div className="text-xs text-gray-600 dark:text-gray-400">貨到付款</div>
                   <div className="text-lg font-bold text-gray-900 dark:text-gray-100">
                     {formatCurrency(closingStats.current_stats.total_cod)}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-700">
+                  <div className="text-xs text-gray-600 dark:text-gray-400">購物金折抵</div>
+                  <div className="text-lg font-bold text-orange-600">
+                    {formatCurrency(closingStats.current_stats.store_credit_used || 0)}
+                  </div>
+                </div>
+                <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-700">
+                  <div className="text-xs text-gray-600 dark:text-gray-400">購物金轉出</div>
+                  <div className="text-lg font-bold text-purple-600">
+                    {formatCurrency(closingStats.current_stats.store_credit_granted || 0)}
                   </div>
                 </div>
               </div>
