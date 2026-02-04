@@ -37,10 +37,10 @@ export async function GET(request: NextRequest) {
       matchingCustomerCodes = (customersResult.data as any[])?.map(c => c.customer_code) || []
     }
 
-    // 首先獲取所有符合條件的 partner_code（不分頁），以確保完整分組
+    // 首先獲取所有符合條件的 partner_code 和 balance（不分頁），以確保完整分組和計算全域總額
     let allQuery = supabaseServer
       .from('partner_accounts')
-      .select('partner_code')
+      .select('partner_code, balance, status')
       .eq('partner_type', 'customer')
       .eq('direction', 'AR')
 
@@ -72,6 +72,13 @@ export async function GET(request: NextRequest) {
 
     const { data: allAccounts } = await allQuery
 
+    // 計算全域未收總額（跨所有頁面）
+    const globalTotalUnpaid = (allAccounts || [])
+      .filter((a: any) => a.status !== 'paid')
+      .reduce((sum: number, a: any) => sum + (a.balance || 0), 0)
+    const globalUnpaidCount = (allAccounts || [])
+      .filter((a: any) => a.status !== 'paid').length
+
     // 取得唯一的 partner_codes 並按照它們分頁
     const uniquePartnerCodes = [...new Set((allAccounts || []).map((a: any) => a.partner_code))]
     const totalCustomers = uniquePartnerCodes.length
@@ -86,7 +93,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         ok: true,
         data: [],
-        pagination: { page, pageSize, total: totalCustomers, totalPages }
+        pagination: { page, pageSize, total: totalCustomers, totalPages },
+        summary: { globalTotalUnpaid, globalUnpaidCount }
       })
     }
 
@@ -120,7 +128,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         ok: true,
         data: [],
-        pagination: { page, pageSize, total: totalCustomers, totalPages }
+        pagination: { page, pageSize, total: totalCustomers, totalPages },
+        summary: { globalTotalUnpaid, globalUnpaidCount }
       })
     }
 
@@ -199,7 +208,8 @@ export async function GET(request: NextRequest) {
         pageSize,
         total: totalCustomers,
         totalPages
-      }
+      },
+      summary: { globalTotalUnpaid, globalUnpaidCount }
     })
   } catch (error) {
     return NextResponse.json(

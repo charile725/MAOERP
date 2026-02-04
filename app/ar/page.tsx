@@ -113,6 +113,10 @@ export default function ARPageV2() {
   const [totalPages, setTotalPages] = useState(0)
   const [totalCount, setTotalCount] = useState(0)
 
+  // 全域總額（跨所有頁面）
+  const [globalTotalUnpaid, setGlobalTotalUnpaid] = useState(0)
+  const [globalUnpaidCount, setGlobalUnpaidCount] = useState(0)
+
   // 工具函數：計算逾期天數
   const getDaysOverdue = (dueDate: string) => {
     const due = new Date(dueDate)
@@ -181,6 +185,11 @@ export default function ARPageV2() {
       if (data.pagination) {
         setTotalPages(data.pagination.totalPages)
         setTotalCount(data.pagination.total)
+      }
+
+      if (data.summary) {
+        setGlobalTotalUnpaid(data.summary.globalTotalUnpaid)
+        setGlobalUnpaidCount(data.summary.globalUnpaidCount)
       }
 
       if (data.ok) {
@@ -510,8 +519,8 @@ export default function ARPageV2() {
     }
   }
 
-  const totalUnpaid = customerGroups.reduce((sum, g) => sum + g.total_balance, 0)
-  const totalCustomers = customerGroups.filter(g => g.unpaid_count > 0).length
+  const totalUnpaid = globalTotalUnpaid
+  const totalCustomers = totalCount
 
   // 權限不足時顯示提示
   if (accessDenied) {
@@ -554,7 +563,7 @@ export default function ARPageV2() {
           <div className="rounded-lg bg-white dark:bg-gray-800 p-4 shadow">
             <div className="text-sm text-gray-900 dark:text-gray-100">單據總數</div>
             <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-              {customerGroups.reduce((sum, g) => sum + g.unpaid_count, 0)}
+              {globalUnpaidCount}
             </div>
             <div className="text-sm text-gray-900 dark:text-gray-100">筆未收</div>
           </div>
