@@ -4,22 +4,21 @@ import { supabaseServer } from '@/lib/supabase/server'
 // GET /api/shortage-stats - 獲取欠貨統計
 export async function GET(request: NextRequest) {
   try {
-    // 1. 獲取所有 active 銷售明細
+    // 1. 跟 sales API 一樣的查詢方式
     const { data: sales, error: salesError } = await (supabaseServer
       .from('sales') as any)
       .select(`
-        id,
-        sale_no,
-        customer_code,
+        *,
         customers:customer_code (
           customer_name
         ),
         sale_items (
           id,
-          product_id,
           quantity,
-          store_credit_qty,
+          price,
           snapshot_name,
+          product_id,
+          store_credit_qty,
           products (
             item_code,
             name,
@@ -28,7 +27,7 @@ export async function GET(request: NextRequest) {
           )
         )
       `)
-      .eq('status', 'active')
+      .eq('status', 'confirmed')
 
     if (salesError) {
       console.error('[Shortage Stats API] Sales query error:', salesError)
@@ -38,12 +37,24 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // 2. 獲取所有 sale_item_ids
-    const allSaleItemIds = sales?.flatMap((sale: any) =>
-      sale.sale_items?.map((item: any) => item.id) || []
-    ) || []
+    console.log('[Shortage Stats API] Found sales:', sales?.length)
 
-    // 3. 查詢已確認出貨的數量（跟 sales API 一樣的邏輯）
+    if (!sales || sales.length === 0) {
+      return NextResponse.json({
+        ok: true,
+        data: [],
+        summary: { totalProducts: 0, shortageProducts: 0, totalPendingQty: 0, totalShortageQty: 0 }
+      })
+    }
+
+    // 2. 獲取所有 sale_item ids
+    const allSaleItemIds = sales.flatMap((sale: any) =>
+      sale.sale_items?.map((item: any) => item.id) || []
+    )
+
+    console.log('[Shortage Stats API] Total sale_items:', allSaleItemIds.length)
+
+    // 3. 獲取已確認出貨的數量
     const deliveryQuantityMap: { [key: string]: number } = {}
 
     if (allSaleItemIds.length > 0) {
@@ -71,6 +82,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    console.log('[Shortage Stats API] Delivery map entries:', Object.keys(deliveryQuantityMap).length)
+
     // 4. 計算每個商品的欠貨狀態
     type CustomerOwed = {
       customerCode: string | null
@@ -91,14 +104,12 @@ export async function GET(request: NextRequest) {
       customers: CustomerOwed[]
     }
 
-    const productMap = new Map<string, ProductShortage>()
+    const shortageMap = new Map<string, ProductShortage>()
 
-    sales?.forEach((sale: any) => {
+    sales.forEach((sale: any) => {
       const customerName = sale.customers?.customer_name || sale.customer_code || '散客'
 
       sale.sale_items?.forEach((item: any) => {
-        if (!item.products) return
-
         const deliveredQty = deliveryQuantityMap[item.id] || 0
         const storeCreditQty = item.store_credit_qty || 0
         const pendingQty = item.quantity - deliveredQty - storeCreditQty
@@ -106,8 +117,10 @@ export async function GET(request: NextRequest) {
         // 只處理有未出貨數量的
         if (pendingQty <= 0) return
 
-        const productId = item.product_id
-        const existing = productMap.get(productId)
+        const product = item.products
+        if (!product) return
+
+        const existing = shortageMap.get(item.product_id)
 
         if (existing) {
           existing.totalPending += pendingQty
@@ -120,12 +133,12 @@ export async function GET(request: NextRequest) {
             pendingQuantity: pendingQty
           })
         } else {
-          const stock = item.products.stock ?? 0
-          productMap.set(productId, {
-            productId,
-            itemCode: item.products.item_code,
-            name: item.products.name || item.snapshot_name,
-            unit: item.products.unit,
+          const stock = product.stock ?? 0
+          shortageMap.set(item.product_id, {
+            productId: item.product_id,
+            itemCode: product.item_code,
+            name: product.name || item.snapshot_name,
+            unit: product.unit,
             stock,
             totalPending: pendingQty,
             shortage: Math.max(0, pendingQty - stock),
@@ -141,8 +154,8 @@ export async function GET(request: NextRequest) {
       })
     })
 
-    // 5. 轉換為陣列並排序（欠貨數量大的在前）
-    const shortageStats = Array.from(productMap.values())
+    // 5. 轉換為陣列並排序
+    const shortageStats = Array.from(shortageMap.values())
       .sort((a, b) => b.shortage - a.shortage)
 
     // 6. 計算總統計
