@@ -21,15 +21,12 @@ export default function ProductsPage() {
   const menuButtonRefs = useRef<{ [key: string]: HTMLButtonElement | null }>({})
   const [pagination, setPagination] = useState({
     page: 1,
-    pageSize: 50,
+    pageSize: 20,
     total: 0,
     totalPages: 0
   })
   const [sortBy, setSortBy] = useState<SortField>('updated_at')
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
-  const [lowStockProducts, setLowStockProducts] = useState<Product[]>([])
-  const [loadingLowStock, setLoadingLowStock] = useState(true)
-  const [showLowStock, setShowLowStock] = useState(false)
   const [userRole, setUserRole] = useState<'admin' | 'staff' | null>(null)
   const [showImportModal, setShowImportModal] = useState(false)
 
@@ -68,51 +65,10 @@ export default function ProductsPage() {
     }
   }
 
-  const fetchLowStockProducts = async () => {
-    setLoadingLowStock(true)
-    try {
-      // 快取機制：5 分鐘
-      const CACHE_KEY = 'products_low_stock_cache'
-      const CACHE_EXPIRY_KEY = 'products_low_stock_cache_expiry'
-      const CACHE_DURATION = 5 * 60 * 1000 // 5 分鐘
-
-      const cached = localStorage.getItem(CACHE_KEY)
-      const expiry = localStorage.getItem(CACHE_EXPIRY_KEY)
-
-      if (cached && expiry && Date.now() < parseInt(expiry)) {
-        setLowStockProducts(JSON.parse(cached))
-        setLoadingLowStock(false)
-        return
-      }
-
-      // 使用分頁 API 並按庫存排序，只取庫存 < 10 的前 10 筆
-      const res = await fetch('/api/products?active=true&sortBy=stock&sortOrder=asc')
-      const data = await res.json()
-      if (data.ok) {
-        const allProducts = data.data || []
-        const lowStock = allProducts
-          .filter((p: Product) => p.stock < 10)
-          .slice(0, 10)
-        setLowStockProducts(lowStock)
-        // 更新快取
-        localStorage.setItem(CACHE_KEY, JSON.stringify(lowStock))
-        localStorage.setItem(CACHE_EXPIRY_KEY, String(Date.now() + CACHE_DURATION))
-      }
-    } catch (err) {
-      console.error('Failed to fetch low stock products:', err)
-    } finally {
-      setLoadingLowStock(false)
-    }
-  }
-
   useEffect(() => {
     setPage(1)
     fetchProducts(1)
   }, [activeFilter, sortBy, sortOrder])
-
-  useEffect(() => {
-    fetchLowStockProducts()
-  }, [])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
@@ -258,79 +214,6 @@ export default function ProductsPage() {
             </button>
           </div>
         </div>
-
-        {/* Low Stock Products Alert */}
-        {!loadingLowStock && lowStockProducts.length > 0 && (
-          <div className="mb-6 rounded-lg bg-white dark:bg-gray-800 shadow">
-            <button
-              onClick={() => setShowLowStock(!showLowStock)}
-              className="flex w-full items-center justify-between p-4 text-left hover:bg-gray-50 dark:hover:bg-gray-700"
-            >
-              <div className="flex items-center gap-3">
-                <span className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                  低庫存商品提醒
-                </span>
-                <span className="rounded bg-red-100 dark:bg-red-900 px-3 py-1 text-sm font-medium text-red-800 dark:text-red-200">
-                  {lowStockProducts.length} 項
-                </span>
-              </div>
-              <span className="text-2xl text-gray-900 dark:text-gray-100">
-                {showLowStock ? '−' : '+'}
-              </span>
-            </button>
-
-            {showLowStock && (
-              <div className="border-t border-gray-200 dark:border-gray-700 p-4">
-                <div className="space-y-3">
-                  {lowStockProducts.map((product) => (
-                    <div
-                      key={product.id}
-                      className="flex items-center justify-between rounded border border-gray-200 dark:border-gray-700 p-3 hover:bg-gray-50 dark:hover:bg-gray-700"
-                    >
-                      <div>
-                        <div className="font-medium text-gray-900 dark:text-gray-100">
-                          {product.name}
-                        </div>
-                        <div className="text-sm text-gray-900 dark:text-gray-400">
-                          品號: {product.item_code}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <div
-                          className={`text-right font-semibold ${product.stock <= 3
-                            ? 'text-red-600 dark:text-red-400'
-                            : product.stock <= 9
-                              ? 'text-orange-600 dark:text-orange-400'
-                              : 'text-gray-900 dark:text-gray-100'
-                            }`}
-                        >
-                          <div className="text-lg">{product.stock <= 3 && '⚠ '}剩餘 {product.stock}</div>
-                          <div className="text-xs font-normal text-gray-900 dark:text-gray-400">
-                            {product.stock === 0 ? '缺貨' : '庫存不足'}
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <Link
-                            href={`/products/${product.id}/edit`}
-                            className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700"
-                          >
-                            補貨
-                          </Link>
-                          <button
-                            onClick={() => toggleActive(product.id, product.is_active)}
-                            className="rounded bg-red-600 px-3 py-1 text-sm font-medium text-white hover:bg-red-700"
-                          >
-                            下架
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
 
         {/* Products table */}
         <div className="rounded-lg bg-white dark:bg-gray-800 shadow overflow-x-auto">

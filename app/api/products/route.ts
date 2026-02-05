@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     const active = searchParams.get('active')
     const all = searchParams.get('all') === 'true' // New parameter to get all products
     const page = parseInt(searchParams.get('page') || '1')
-    const pageSize = 50
+    const pageSize = 20
     const sortBy = searchParams.get('sortBy') || 'updated_at'
     const sortOrder = searchParams.get('sortOrder') || 'desc'
 
@@ -38,6 +38,9 @@ export async function GET(request: NextRequest) {
       const from = (page - 1) * pageSize
       const to = from + pageSize - 1
       query = query.range(from, to)
+    } else {
+      // Supabase 預設限制 1000 筆，需要明確設置更大的 limit
+      query = query.limit(10000)
     }
 
     const { data, error, count } = await query
