@@ -283,11 +283,10 @@ export default function IchibanKujiPage() {
                           <div className="flex flex-col items-center gap-1">
                             {/* 收貨狀態（僅官方套顯示） */}
                             {kuji.set_type === 'official' && (
-                              <span className={`inline-block rounded px-1.5 py-0.5 text-xs ${
-                                kuji.is_received === false
+                              <span className={`inline-block rounded px-1.5 py-0.5 text-xs ${kuji.is_received === false
                                   ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
                                   : 'bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-400'
-                              }`}>
+                                }`}>
                                 {kuji.is_received === false ? '未收貨' : '已收貨'}
                               </span>
                             )}
@@ -296,13 +295,12 @@ export default function IchibanKujiPage() {
                               onClick={() => handleToggleActive(kuji)}
                               disabled={kuji.set_type === 'official' && kuji.is_received === false && !kuji.is_active}
                               title={kuji.set_type === 'official' && kuji.is_received === false && !kuji.is_active ? '尚未收貨，無法啟用' : ''}
-                              className={`inline-block rounded px-2 py-1 text-xs font-medium transition-colors ${
-                                kuji.is_active
+                              className={`inline-block rounded px-2 py-1 text-xs font-medium transition-colors ${kuji.is_active
                                   ? 'bg-green-100 text-green-800 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50'
                                   : kuji.set_type === 'official' && kuji.is_received === false
                                     ? 'bg-gray-100 text-gray-400 cursor-not-allowed dark:bg-gray-700 dark:text-gray-500'
                                     : 'bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
-                              }`}
+                                }`}
                             >
                               {kuji.is_active ? '啟用' : '停用'}
                             </button>
@@ -312,13 +310,7 @@ export default function IchibanKujiPage() {
                           {formatDate(kuji.created_at)}
                         </td>
                         <td className="px-6 py-4 text-center text-sm" onClick={(e) => e.stopPropagation()}>
-                          <div className="relative flex items-center justify-center gap-2">
-                            <button
-                              onClick={() => router.push(`/ichiban-kuji/${kuji.id}/edit`)}
-                              className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700"
-                            >
-                              編輯
-                            </button>
+                          <div className="relative flex items-center justify-center">
                             <button
                               onClick={(e) => {
                                 e.stopPropagation()
@@ -339,6 +331,16 @@ export default function IchibanKujiPage() {
                                   }}
                                 />
                                 <div className="absolute right-0 top-8 z-20 w-36 rounded-lg bg-white dark:bg-gray-700 shadow-lg border border-gray-200 dark:border-gray-600 py-1">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      router.push(`/ichiban-kuji/${kuji.id}/edit`)
+                                      setOpenMenuId(null)
+                                    }}
+                                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
+                                  >
+                                    編輯
+                                  </button>
                                   {/* 標記已收貨（僅官方套且未收貨時顯示） */}
                                   {kuji.set_type === 'official' && kuji.is_received === false && (
                                     <button
@@ -493,9 +495,9 @@ export default function IchibanKujiPage() {
                                             kuji.set_type === 'official'
                                               ? (kuji.total_cost || 0)
                                               : kuji.ichiban_kuji_prizes.reduce(
-                                                  (sum, prize) => sum + (prize.products?.cost || 0) * prize.quantity,
-                                                  0
-                                                )
+                                                (sum, prize) => sum + (prize.products?.cost || 0) * prize.quantity,
+                                                0
+                                              )
                                           )}
                                         </td>
                                       </tr>
