@@ -214,7 +214,7 @@ export default function SalesPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalRecords, setTotalRecords] = useState(0)
-  const itemsPerPage = 50
+  const [itemsPerPage, setItemsPerPage] = useState(20)
   const [productStats, setProductStats] = useState<ProductStats | null>(null)
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set())
   const [batchDelivering, setBatchDelivering] = useState(false)
@@ -467,7 +467,7 @@ export default function SalesPage() {
 
   useEffect(() => {
     fetchSales(1) // 篩選條件變更時重置到第一頁
-  }, [showUndeliveredOnly, groupByCustomer, sourceFilter])
+  }, [showUndeliveredOnly, groupByCustomer, sourceFilter, itemsPerPage])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
@@ -1362,12 +1362,27 @@ export default function SalesPage() {
             <>
               {/* 分頁資訊 */}
               {customerGroups[0]?.sales && customerGroups[0].sales.length > 0 && (
-                <div className="mb-4 flex items-center justify-between">
+                <div className="mb-4 flex items-center justify-between px-6 py-3 border-b border-gray-200 dark:border-gray-700">
                   <div className="text-sm text-gray-600 dark:text-gray-400">
                     共 {totalRecords} 筆記錄
                     {totalRecords > itemsPerPage && (
                       <span> · 顯示第 {(currentPage - 1) * itemsPerPage + 1} - {Math.min(currentPage * itemsPerPage, totalRecords)} 筆</span>
                     )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-600 dark:text-gray-400">每頁</span>
+                    <select
+                      value={itemsPerPage}
+                      onChange={(e) => {
+                        setItemsPerPage(Number(e.target.value))
+                        setCurrentPage(1)
+                      }}
+                      className="rounded border border-gray-300 dark:border-gray-600 px-2 py-1 text-sm text-gray-900 dark:text-gray-100 dark:bg-gray-700"
+                    >
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                    </select>
+                    <span className="text-sm text-gray-600 dark:text-gray-400">筆</span>
                   </div>
                 </div>
               )}

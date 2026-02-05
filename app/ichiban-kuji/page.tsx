@@ -52,6 +52,13 @@ export default function IchibanKujiPage() {
   const [deleting, setDeleting] = useState<string | null>(null)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [userRole, setUserRole] = useState<'admin' | 'staff' | null>(null)
+  const [page, setPage] = useState(1)
+  const [pagination, setPagination] = useState({
+    page: 1,
+    pageSize: 20,
+    total: 0,
+    totalPages: 0
+  })
 
   useEffect(() => {
     fetch('/api/auth/me')
@@ -65,22 +72,30 @@ export default function IchibanKujiPage() {
   }, [])
 
   useEffect(() => {
-    fetchKujis()
-  }, [])
+    fetchKujis(page)
+  }, [page])
 
-  const fetchKujis = async () => {
+  const fetchKujis = async (currentPage: number = page) => {
     setLoading(true)
     try {
-      const res = await fetch('/api/ichiban-kuji')
+      const res = await fetch(`/api/ichiban-kuji?page=${currentPage}`)
       const data = await res.json()
       if (data.ok) {
         setKujis(data.data || [])
+        if (data.pagination) {
+          setPagination(data.pagination)
+        }
       }
     } catch (err) {
       console.error('Failed to fetch ichiban kuji:', err)
     } finally {
       setLoading(false)
     }
+  }
+
+  const handlePageChange = (newPage: number) => {
+    setPage(newPage)
+    setExpandedRows(new Set()) // 換頁時收合所有展開的列
   }
 
   const toggleRow = (id: string) => {
@@ -115,7 +130,7 @@ export default function IchibanKujiPage() {
 
       if (data.ok) {
         alert('刪除成功！')
-        fetchKujis()
+        fetchKujis(page)
       } else {
         alert(`刪除失敗：${data.error}`)
       }
@@ -136,7 +151,7 @@ export default function IchibanKujiPage() {
       })
       const data = await res.json()
       if (data.ok) {
-        fetchKujis()
+        fetchKujis(page)
       } else {
         alert(data.error || '操作失敗')
       }
@@ -156,7 +171,7 @@ export default function IchibanKujiPage() {
       const data = await res.json()
       if (data.ok) {
         alert('已標記為收貨')
-        fetchKujis()
+        fetchKujis(page)
       } else {
         alert(data.error || '操作失敗')
       }
@@ -496,6 +511,61 @@ export default function IchibanKujiPage() {
                   ))}
                 </tbody>
               </table>
+
+              {/* Pagination */}
+              {pagination.totalPages > 1 && (
+                <div className="border-t border-gray-200 dark:border-gray-700 px-6 py-4">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm text-gray-700 dark:text-gray-300">
+                      顯示第 {((pagination.page - 1) * pagination.pageSize) + 1} - {Math.min(pagination.page * pagination.pageSize, pagination.total)} 筆，共 {pagination.total} 筆
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handlePageChange(page - 1)}
+                        disabled={page === 1}
+                        className="rounded border border-gray-300 dark:border-gray-600 px-3 py-1 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        上一頁
+                      </button>
+
+                      {/* Page numbers */}
+                      <div className="flex gap-1">
+                        {Array.from({ length: pagination.totalPages }, (_, i) => i + 1)
+                          .filter(p => {
+                            return p === 1 ||
+                              p === pagination.totalPages ||
+                              (p >= page - 2 && p <= page + 2)
+                          })
+                          .map((p, idx, arr) => {
+                            const showEllipsisBefore = idx > 0 && arr[idx - 1] !== p - 1
+                            return (
+                              <div key={p} className="flex items-center gap-1">
+                                {showEllipsisBefore && <span className="px-2 text-gray-500 dark:text-gray-400">...</span>}
+                                <button
+                                  onClick={() => handlePageChange(p)}
+                                  className={`min-w-[2rem] rounded px-3 py-1 text-sm ${p === page
+                                    ? 'bg-blue-600 text-white'
+                                    : 'border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                    }`}
+                                >
+                                  {p}
+                                </button>
+                              </div>
+                            )
+                          })}
+                      </div>
+
+                      <button
+                        onClick={() => handlePageChange(page + 1)}
+                        disabled={page === pagination.totalPages}
+                        className="rounded border border-gray-300 dark:border-gray-600 px-3 py-1 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        下一頁
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

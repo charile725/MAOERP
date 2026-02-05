@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
 
     // 分頁參數
     const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '50')
+    const limit = parseInt(searchParams.get('limit') || '20')
     const offset = (page - 1) * limit
 
     let query = (supabaseServer

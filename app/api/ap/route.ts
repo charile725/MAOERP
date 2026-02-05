@@ -13,10 +13,12 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status')
     const dueBefore = searchParams.get('due_before')
     const keyword = searchParams.get('keyword')
+    const page = parseInt(searchParams.get('page') || '1')
+    const pageSize = parseInt(searchParams.get('pageSize') || '20')
 
     let query = supabaseServer
       .from('partner_accounts')
-      .select('*')
+      .select('*', { count: 'exact' })
       .eq('partner_type', 'vendor')
       .eq('direction', 'AP')
       .order('created_at', { ascending: false })
@@ -37,7 +39,12 @@ export async function GET(request: NextRequest) {
       query = query.ilike('partner_code', `%${keyword}%`)
     }
 
-    const { data: accounts, error } = await query
+    // Apply pagination
+    const from = (page - 1) * pageSize
+    const to = from + pageSize - 1
+    query = query.range(from, to)
+
+    const { data: accounts, error, count } = await query
 
     if (error) {
       return NextResponse.json(
@@ -95,7 +102,16 @@ export async function GET(request: NextRequest) {
       purchases: account.ref_type === 'purchase' ? purchasesMap.get(account.ref_id) : null
     }))
 
-    return NextResponse.json({ ok: true, data: accountsWithDetails })
+    return NextResponse.json({
+      ok: true,
+      data: accountsWithDetails,
+      pagination: {
+        page,
+        pageSize,
+        total: count || 0,
+        totalPages: Math.ceil((count || 0) / pageSize)
+      }
+    })
   } catch (error) {
     return NextResponse.json(
       { ok: false, error: 'Internal server error' },

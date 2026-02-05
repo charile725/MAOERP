@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     const active = searchParams.get('active')
     const all = searchParams.get('all') === 'true' // New parameter to get all products
     const page = parseInt(searchParams.get('page') || '1')
-    const pageSize = 20
+    const pageSize = Math.min(parseInt(searchParams.get('pageSize') || '20'), 1000)
     const sortBy = searchParams.get('sortBy') || 'updated_at'
     const sortOrder = searchParams.get('sortOrder') || 'desc'
 
@@ -52,39 +52,30 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // 查詢待出貨數量：複用 shortage-stats 的邏輯
+    // 查詢待出貨數量：只查詢當前頁面商品的待出貨
     let pendingMap: Record<string, number> = {}
+    const productIds = (data || []).map((p: any) => p.id)
 
-    // 1. 從 sales 出發，取得已確認銷售及其品項
-    const { data: confirmedSales } = await (supabaseServer
-      .from('sales') as any)
-      .select(`
-        id,
-        sale_items (
+    if (productIds.length > 0) {
+      // 直接查詢這些商品在已確認銷售中的 sale_items
+      const { data: saleItems } = await (supabaseServer
+        .from('sale_items') as any)
+        .select(`
           id,
           product_id,
           quantity,
-          store_credit_qty
-        )
-      `)
-      .eq('status', 'confirmed')
+          store_credit_qty,
+          sales!inner (
+            status
+          )
+        `)
+        .in('product_id', productIds)
+        .eq('sales.status', 'confirmed')
 
-    if (confirmedSales && confirmedSales.length > 0) {
-      // 2. 收集所有 sale_item_ids
-      const allSaleItems: any[] = []
-      const allSaleItemIds: string[] = []
-      for (const sale of confirmedSales as any[]) {
-        for (const si of (sale.sale_items || [])) {
-          allSaleItems.push(si)
-          allSaleItemIds.push(si.id)
-        }
-      }
+      if (saleItems && saleItems.length > 0) {
+        const saleItemIds = saleItems.map((si: any) => si.id)
 
-      // 3. 批次查詢已確認出貨數量
-      const deliveredMap: Record<string, number> = {}
-      const BATCH_SIZE = 50
-      for (let i = 0; i < allSaleItemIds.length; i += BATCH_SIZE) {
-        const batchIds = allSaleItemIds.slice(i, i + BATCH_SIZE)
+        // 查詢已確認出貨數量
         const { data: deliveryItems } = await (supabaseServer
           .from('delivery_items') as any)
           .select(`
@@ -94,23 +85,24 @@ export async function GET(request: NextRequest) {
               status
             )
           `)
-          .in('sale_item_id', batchIds)
+          .in('sale_item_id', saleItemIds)
           .eq('deliveries.status', 'confirmed')
 
+        const deliveredMap: Record<string, number> = {}
         if (deliveryItems) {
           for (const di of deliveryItems as any[]) {
             deliveredMap[di.sale_item_id] = (deliveredMap[di.sale_item_id] || 0) + Number(di.quantity)
           }
         }
-      }
 
-      // 4. 計算每個商品的待出貨數量
-      for (const si of allSaleItems) {
-        const deliveredQty = deliveredMap[si.id] || 0
-        const storeCreditQty = si.store_credit_qty || 0
-        const pendingQty = si.quantity - deliveredQty - storeCreditQty
-        if (pendingQty > 0) {
-          pendingMap[si.product_id] = (pendingMap[si.product_id] || 0) + pendingQty
+        // 計算每個商品的待出貨數量
+        for (const si of saleItems as any[]) {
+          const deliveredQty = deliveredMap[si.id] || 0
+          const storeCreditQty = si.store_credit_qty || 0
+          const pendingQty = si.quantity - deliveredQty - storeCreditQty
+          if (pendingQty > 0) {
+            pendingMap[si.product_id] = (pendingMap[si.product_id] || 0) + pendingQty
+          }
         }
       }
     }

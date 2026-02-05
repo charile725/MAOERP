@@ -8,6 +8,8 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
     const active = searchParams.get('active')
+    const page = parseInt(searchParams.get('page') || '1')
+    const pageSize = 20
 
     let query = (supabaseServer
       .from('ichiban_kuji') as any)
@@ -30,14 +32,19 @@ export async function GET(request: NextRequest) {
             unit
           )
         )
-      `)
+      `, { count: 'exact' })
       .order('created_at', { ascending: false })
 
     if (active !== null) {
       query = query.eq('is_active', active === 'true')
     }
 
-    const { data, error } = await query
+    // Apply pagination
+    const from = (page - 1) * pageSize
+    const to = from + pageSize - 1
+    query = query.range(from, to)
+
+    const { data, error, count } = await query
 
     if (error) {
       return NextResponse.json(
@@ -46,7 +53,16 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    return NextResponse.json({ ok: true, data })
+    return NextResponse.json({
+      ok: true,
+      data,
+      pagination: {
+        page,
+        pageSize,
+        total: count || 0,
+        totalPages: Math.ceil((count || 0) / pageSize)
+      }
+    })
   } catch (error) {
     return NextResponse.json(
       { ok: false, error: 'Internal server error' },

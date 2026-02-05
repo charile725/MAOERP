@@ -56,6 +56,7 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
         startDate: '',
         endDate: ''
     })
+    const [pageSize, setPageSize] = useState(20)
     const [pagination, setPagination] = useState({
         page: 1,
         limit: 20,
@@ -69,7 +70,7 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
 
     useEffect(() => {
         fetchTransactions()
-    }, [id, pagination.page, dateRange])
+    }, [id, pagination.page, pagination.limit, dateRange])
 
     const fetchAccountInfo = async () => {
         try {
@@ -301,10 +302,26 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
                     {/* Pagination Controls */}
                     <div className="flex items-center justify-between border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3 sm:px-6">
                         <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
-                            <div>
+                            <div className="flex items-center gap-4">
                                 <p className="text-sm text-gray-700 dark:text-gray-300">
                                     顯示第 <span className="font-medium">{(pagination.page - 1) * pagination.limit + 1}</span> 到 <span className="font-medium">{Math.min(pagination.page * pagination.limit, pagination.total)}</span> 筆，共 <span className="font-medium">{pagination.total}</span> 筆
                                 </p>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-sm text-gray-600 dark:text-gray-400">每頁</span>
+                                    <select
+                                        value={pageSize}
+                                        onChange={(e) => {
+                                            const newSize = Number(e.target.value)
+                                            setPageSize(newSize)
+                                            setPagination(prev => ({ ...prev, page: 1, limit: newSize }))
+                                        }}
+                                        className="rounded border border-gray-300 dark:border-gray-600 px-2 py-1 text-sm text-gray-900 dark:text-gray-100 dark:bg-gray-700"
+                                    >
+                                        <option value={20}>20</option>
+                                        <option value={50}>50</option>
+                                    </select>
+                                    <span className="text-sm text-gray-600 dark:text-gray-400">筆</span>
+                                </div>
                             </div>
                             <div>
                                 <nav className="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">

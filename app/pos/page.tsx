@@ -335,14 +335,27 @@ export default function POSPage() {
         }
       }
 
-      const res = await fetch('/api/products?all=true&active=true')
-      const data = await res.json()
-      if (data.ok) {
-        setProducts(data.data || [])
-        // 更新快取
-        localStorage.setItem(CACHE_KEY, JSON.stringify(data.data || []))
-        localStorage.setItem(CACHE_EXPIRY_KEY, String(Date.now() + CACHE_DURATION))
+      // Supabase 預設限制 1000 筆，需要分頁取得所有商品
+      const allProducts: Product[] = []
+      let page = 1
+      const pageSize = 1000
+
+      while (true) {
+        const res = await fetch(`/api/products?active=true&page=${page}&pageSize=${pageSize}`)
+        const data = await res.json()
+        if (!data.ok) break
+
+        allProducts.push(...(data.data || []))
+
+        // 如果這頁不滿，表示已經取完
+        if (!data.data || data.data.length < pageSize) break
+        page++
       }
+
+      setProducts(allProducts)
+      // 更新快取
+      localStorage.setItem(CACHE_KEY, JSON.stringify(allProducts))
+      localStorage.setItem(CACHE_EXPIRY_KEY, String(Date.now() + CACHE_DURATION))
     } catch (err) {
       console.error('Failed to fetch products:', err)
     }
