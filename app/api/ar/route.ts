@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     const dueBefore = searchParams.get('due_before')
     const keyword = searchParams.get('keyword')
     const page = parseInt(searchParams.get('page') || '1')
-    const pageSize = parseInt(searchParams.get('pageSize') || '50')
+    const pageSize = parseInt(searchParams.get('pageSize') || '20')
 
     // 如果有 keyword，先搜尋銷貨單號和客戶名稱找出對應的 ID
     let saleRefIds: string[] = []

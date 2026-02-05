@@ -23,7 +23,7 @@ export async function GET(
 
     if (error) {
       return NextResponse.json(
-        { ok: false, error: 'Product not found' },
+        { ok: false, error: '找不到商品' },
         { status: 404 }
       )
     }
@@ -31,7 +31,7 @@ export async function GET(
     return NextResponse.json({ ok: true, data })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }
@@ -93,7 +93,7 @@ export async function PATCH(
     return NextResponse.json({ ok: true, data: product })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }
@@ -212,7 +212,7 @@ export async function DELETE(
     return NextResponse.json({ ok: true, message: '商品已刪除' })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }

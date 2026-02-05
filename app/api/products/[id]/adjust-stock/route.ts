@@ -42,7 +42,7 @@ export async function POST(
 
     if (productError || !product) {
       return NextResponse.json(
-        { ok: false, error: 'Product not found' },
+        { ok: false, error: '找不到商品' },
         { status: 404 }
       )
     }
@@ -96,7 +96,7 @@ export async function POST(
     })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }

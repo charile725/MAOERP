@@ -125,7 +125,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }
@@ -185,7 +185,7 @@ export async function POST(request: NextRequest) {
 
     if (existing) {
       return NextResponse.json(
-        { ok: false, error: 'Item code already exists' },
+        { ok: false, error: '商品編號已存在' },
         { status: 400 }
       )
     }
@@ -200,7 +200,7 @@ export async function POST(request: NextRequest) {
 
       if (existingBarcode) {
         return NextResponse.json(
-          { ok: false, error: 'Barcode already exists' },
+          { ok: false, error: '條碼已存在' },
           { status: 400 }
         )
       }
@@ -235,7 +235,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, data: product }, { status: 201 })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }
