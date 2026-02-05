@@ -25,7 +25,7 @@ export async function GET(
 
     if (error) {
       return NextResponse.json(
-        { ok: false, error: 'Expense not found' },
+        { ok: false, error: '找不到費用記錄' },
         { status: 404 }
       )
     }
@@ -33,7 +33,7 @@ export async function GET(
     return NextResponse.json({ ok: true, data })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }
@@ -69,7 +69,7 @@ export async function PUT(
 
     if (fetchError) {
       return NextResponse.json(
-        { ok: false, error: 'Expense not found' },
+        { ok: false, error: '找不到費用記錄' },
         { status: 404 }
       )
     }
@@ -151,7 +151,7 @@ export async function PUT(
     return NextResponse.json({ ok: true, data })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }
@@ -174,7 +174,7 @@ export async function DELETE(
 
     if (fetchError) {
       return NextResponse.json(
-        { ok: false, error: 'Expense not found' },
+        { ok: false, error: '找不到費用記錄' },
         { status: 404 }
       )
     }
@@ -228,7 +228,7 @@ export async function DELETE(
     return NextResponse.json({ ok: true })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }

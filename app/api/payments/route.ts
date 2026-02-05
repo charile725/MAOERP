@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     const allocationsTotal = draft.allocations.reduce((sum, a) => sum + a.amount, 0)
     if (Math.abs(allocationsTotal - draft.amount) > 0.01) {
       return NextResponse.json(
-        { ok: false, error: 'Allocation total does not match settlement amount' },
+        { ok: false, error: '分配金額與付款金額不符' },
         { status: 400 }
       )
     }
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
 
       if (account.direction !== 'AP') {
         return NextResponse.json(
-          { ok: false, error: 'Can only apply payments to AP accounts' },
+          { ok: false, error: '只能沖銷應付帳款' },
           { status: 400 }
         )
       }
@@ -193,7 +193,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, data: settlement }, { status: 201 })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }

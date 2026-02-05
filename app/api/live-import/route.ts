@@ -358,7 +358,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (error: any) {
     return NextResponse.json(
-      { ok: false, error: error.message || 'Internal server error' },
+      { ok: false, error: error.message || '系統錯誤' },
       { status: 500 }
     )
   }

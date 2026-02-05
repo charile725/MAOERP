@@ -26,7 +26,7 @@ export async function DELETE(
 
     if (fetchError || !item) {
       return NextResponse.json(
-        { ok: false, error: 'Purchase item not found' },
+        { ok: false, error: '找不到進貨明細' },
         { status: 404 }
       )
     }
@@ -247,7 +247,7 @@ export async function DELETE(
     return NextResponse.json({ ok: true })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }

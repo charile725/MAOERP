@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
 
     if (!source) {
       return NextResponse.json(
-        { ok: false, error: 'Missing source parameter' },
+        { ok: false, error: '缺少來源參數' },
         { status: 400 }
       )
     }
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('[Business Day Settings] Error:', error)
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
 
     if (!source || !business_date) {
       return NextResponse.json(
-        { ok: false, error: 'Missing source or business_date' },
+        { ok: false, error: '缺少來源或營業日期' },
         { status: 400 }
       )
     }
@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('[Business Day Settings] Error:', error)
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }

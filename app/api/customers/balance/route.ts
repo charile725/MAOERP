@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Balance adjustment error:', error)
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }
@@ -134,7 +134,7 @@ export async function GET(request: NextRequest) {
 
     if (!customer_code) {
       return NextResponse.json(
-        { ok: false, error: 'Customer code is required' },
+        { ok: false, error: '請提供客戶編號' },
         { status: 400 }
       )
     }
@@ -155,7 +155,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: true, data })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }

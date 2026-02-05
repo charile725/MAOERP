@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ ok: true, data: assetsWithCalculations })
     } catch (error) {
         console.error('[Fixed Assets] GET error:', error)
-        return NextResponse.json({ ok: false, error: 'Internal server error' }, { status: 500 })
+        return NextResponse.json({ ok: false, error: '系統錯誤' }, { status: 500 })
     }
 }
 
@@ -134,6 +134,6 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ ok: true, data }, { status: 201 })
     } catch (error) {
         console.error('[Fixed Assets] POST error:', error)
-        return NextResponse.json({ ok: false, error: 'Internal server error' }, { status: 500 })
+        return NextResponse.json({ ok: false, error: '系統錯誤' }, { status: 500 })
     }
 }

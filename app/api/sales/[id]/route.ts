@@ -25,7 +25,7 @@ export async function GET(
 
     if (saleError) {
       return NextResponse.json(
-        { ok: false, error: 'Sale not found' },
+        { ok: false, error: '找不到銷售單' },
         { status: 404 }
       )
     }
@@ -60,7 +60,7 @@ export async function GET(
     })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }
@@ -96,7 +96,7 @@ export async function PATCH(
 
     if (fetchError) {
       return NextResponse.json(
-        { ok: false, error: 'Sale not found' },
+        { ok: false, error: '找不到銷售單' },
         { status: 404 }
       )
     }
@@ -232,7 +232,7 @@ export async function PATCH(
     return NextResponse.json({ ok: true, data: sale })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }
@@ -255,7 +255,7 @@ export async function DELETE(
 
     if (fetchError || !sale) {
       return NextResponse.json(
-        { ok: false, error: 'Sale not found' },
+        { ok: false, error: '找不到銷售單' },
         { status: 404 }
       )
     }
@@ -306,44 +306,8 @@ export async function DELETE(
       }
     }
 
-    // 1.6. 如果是已付款的銷售，需要退款到帳戶
-    if (sale.is_paid && sale.account_id && sale.total > 0) {
-      // 獲取帳戶餘額
-      const { data: account } = await (supabaseServer
-        .from('accounts') as any)
-        .select('balance')
-        .eq('id', sale.account_id)
-        .single()
-
-      if (account) {
-        const newBalance = account.balance - sale.total
-
-        // 更新帳戶餘額
-        await (supabaseServer
-          .from('accounts') as any)
-          .update({
-            balance: newBalance,
-            updated_at: getTaiwanTime(),
-          })
-          .eq('id', sale.account_id)
-
-        // 記錄帳戶交易
-        await (supabaseServer
-          .from('account_transactions') as any)
-          .insert({
-            account_id: sale.account_id,
-            transaction_type: 'sale_delete',
-            amount: -sale.total,
-            balance_before: account.balance,
-            balance_after: newBalance,
-            ref_type: 'sale_delete',
-            ref_id: id,
-            note: `刪除銷售單 ${sale.sale_no}，退款至帳戶`,
-          })
-
-        console.log(`[Delete Sale ${id}] Refunded ${sale.total} to account ${sale.account_id}`)
-      }
-    }
+    // 1.6. 帳戶餘額還原已移至第 3 節統一處理（根據 account_transactions 記錄）
+    // 避免重複扣減
 
     // 1.7. 如果是轉購物金的銷售，需要扣回購物金
     if (sale.status === 'store_credit' && sale.customer_code) {
@@ -611,6 +575,8 @@ export async function DELETE(
       .eq('ref_type', 'sale')
       .eq('ref_id', id.toString())
 
+    console.log(`[Delete Sale ${id}] 3.1 找到 ref_type=sale 的交易記錄:`, accountTransactions?.length || 0)
+
     if (accountTransactions && accountTransactions.length > 0) {
       for (const accountTransaction of accountTransactions) {
         const { data: account } = await (supabaseServer
@@ -650,6 +616,8 @@ export async function DELETE(
       .select('id')
       .eq('ref_type', 'sale')
       .eq('ref_id', id.toString())
+
+    console.log(`[Delete Sale ${id}] 3.2 找到 AR 記錄:`, arRecords?.length || 0)
 
     if (arRecords && arRecords.length > 0) {
       const arIds = arRecords.map((ar: any) => ar.id)
@@ -702,12 +670,17 @@ export async function DELETE(
               }
             } else if (settlement.account_id) {
               // 非購物金收款，還原帳戶餘額
+              console.log(`[Delete Sale ${id}] 3.2 處理 settlement ${settlementId}，金額: ${settlement.amount}，帳戶: ${settlement.account_id}`)
+
               // 刪除 account_transactions 記錄
-              await (supabaseServer
+              const { data: deletedTxs } = await (supabaseServer
                 .from('account_transactions') as any)
                 .delete()
                 .eq('ref_type', 'settlement')
                 .eq('ref_id', settlementId)
+                .select()
+
+              console.log(`[Delete Sale ${id}] 刪除 settlement 交易記錄:`, deletedTxs?.length || 0)
 
               // 還原帳戶餘額（減去收款金額）
               const { data: account } = await (supabaseServer
@@ -718,6 +691,8 @@ export async function DELETE(
 
               if (account) {
                 const newBalance = Number(account.balance) - settlement.amount
+                console.log(`[Delete Sale ${id}] 帳戶 ${settlement.account_id} 餘額: ${account.balance} -> ${newBalance}`)
+
                 await (supabaseServer
                   .from('accounts') as any)
                   .update({
@@ -772,7 +747,7 @@ export async function DELETE(
     return NextResponse.json({ ok: true })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }

@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
 
     if (source !== 'pos' && source !== 'live') {
       return NextResponse.json(
-        { ok: false, error: 'Invalid source. Must be "pos" or "live"' },
+        { ok: false, error: '來源參數無效，必須是 "pos" 或 "live"' },
         { status: 400 }
       )
     }
@@ -204,7 +204,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Business day closing GET error:', error)
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }
@@ -218,7 +218,7 @@ export async function POST(request: NextRequest) {
 
     if (!source || (source !== 'pos' && source !== 'live')) {
       return NextResponse.json(
-        { ok: false, error: 'Invalid source. Must be "pos" or "live"' },
+        { ok: false, error: '來源參數無效，必須是 "pos" 或 "live"' },
         { status: 400 }
       )
     }
@@ -407,7 +407,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Business day closing POST error:', error)
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }

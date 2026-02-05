@@ -51,7 +51,7 @@ export async function GET(
 
     if (purchaseError) {
       return NextResponse.json(
-        { ok: false, error: 'Purchase not found' },
+        { ok: false, error: '找不到進貨單' },
         { status: 404 }
       )
     }
@@ -62,7 +62,7 @@ export async function GET(
     })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }
@@ -145,7 +145,7 @@ export async function PUT(
     })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }
@@ -581,7 +581,7 @@ export async function DELETE(
     return NextResponse.json({ ok: true })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }

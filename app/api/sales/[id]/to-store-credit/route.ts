@@ -439,7 +439,7 @@ export async function POST(
     } catch (error) {
         console.error('Sale to store credit error:', error)
         return NextResponse.json(
-            { ok: false, error: 'Internal server error' },
+            { ok: false, error: '系統錯誤' },
             { status: 500 }
         )
     }

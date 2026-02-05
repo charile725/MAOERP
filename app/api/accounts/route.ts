@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: true, data })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }
@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, data }, { status: 201 })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }

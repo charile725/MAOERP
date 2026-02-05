@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: true, data })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
 
     if (existing) {
       return NextResponse.json(
-        { ok: false, error: 'Vendor code already exists' },
+        { ok: false, error: '廠商編號已存在' },
         { status: 400 }
       )
     }
@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, data: vendor }, { status: 201 })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }
@@ -127,7 +127,7 @@ export async function PUT(request: NextRequest) {
 
     if (!id) {
       return NextResponse.json(
-        { ok: false, error: 'Vendor ID is required' },
+        { ok: false, error: '請提供廠商 ID' },
         { status: 400 }
       )
     }
@@ -157,7 +157,7 @@ export async function PUT(request: NextRequest) {
 
       if (existing) {
         return NextResponse.json(
-          { ok: false, error: 'Vendor code already exists' },
+          { ok: false, error: '廠商編號已存在' },
           { status: 400 }
         )
       }
@@ -181,7 +181,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ ok: true, data: vendor })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }
@@ -195,7 +195,7 @@ export async function DELETE(request: NextRequest) {
 
     if (!id) {
       return NextResponse.json(
-        { ok: false, error: 'Vendor ID is required' },
+        { ok: false, error: '請提供廠商 ID' },
         { status: 400 }
       )
     }
@@ -230,7 +230,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ ok: true })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }

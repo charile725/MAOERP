@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
 
     if (!text) {
       return NextResponse.json(
-        { ok: false, error: 'Missing text parameter' },
+        { ok: false, error: '缺少 text 參數' },
         { status: 400 }
       )
     }
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('Barcode generation error:', error)
     return NextResponse.json(
-      { ok: false, error: error.message || 'Failed to generate barcode' },
+      { ok: false, error: error.message || '條碼產生失敗' },
       { status: 500 }
     )
   }

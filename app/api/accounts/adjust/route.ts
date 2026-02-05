@@ -8,12 +8,12 @@ export async function POST(request: NextRequest) {
         const { accountId, amount, date, note } = body
 
         if (!accountId || amount === undefined) {
-            return NextResponse.json({ ok: false, error: 'Missing required fields' }, { status: 400 })
+            return NextResponse.json({ ok: false, error: '缺少必要欄位' }, { status: 400 })
         }
 
         const numAmount = Number(amount)
         if (numAmount === 0) {
-            return NextResponse.json({ ok: false, error: 'Adjustment amount cannot be zero' }, { status: 400 })
+            return NextResponse.json({ ok: false, error: '調整金額不可為零' }, { status: 400 })
         }
 
         const direction = numAmount > 0 ? 'increase' : 'decrease'

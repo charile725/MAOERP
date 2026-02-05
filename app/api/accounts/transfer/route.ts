@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
         const { fromAccountId, toAccountId, amount, date, note } = body
 
         if (!fromAccountId || !toAccountId || !amount) {
-            return NextResponse.json({ ok: false, error: 'Missing required fields' }, { status: 400 })
+            return NextResponse.json({ ok: false, error: '缺少必要欄位' }, { status: 400 })
         }
 
         const { success, error } = await transferFunds({

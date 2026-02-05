@@ -342,45 +342,45 @@ export default function APPageV2() {
         </div>
 
         {/* Summary */}
-        <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-          <div className="rounded-lg bg-white dark:bg-gray-800 p-4 shadow">
-            <div className="text-sm text-gray-900 dark:text-gray-100">未付總額</div>
-            <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+        <div className="mb-4 sm:mb-6 grid grid-cols-3 gap-2 sm:gap-4">
+          <div className="rounded-lg bg-white dark:bg-gray-800 p-3 sm:p-4 shadow">
+            <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">未付總額</div>
+            <div className="text-base sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">
               {formatCurrency(totalUnpaid)}
             </div>
-            <div className="text-sm text-gray-900 dark:text-gray-100">{totalVendors} 家廠商</div>
+            <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">{totalVendors} 家廠商</div>
           </div>
 
-          <div className="rounded-lg bg-white dark:bg-gray-800 p-4 shadow">
-            <div className="text-sm text-gray-900 dark:text-gray-100">已選擇</div>
-            <div className="text-2xl font-bold text-blue-600">
+          <div className="rounded-lg bg-white dark:bg-gray-800 p-3 sm:p-4 shadow">
+            <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">已選擇</div>
+            <div className="text-base sm:text-2xl font-bold text-blue-600 truncate">
               {formatCurrency(getSelectedTotal())}
             </div>
-            <div className="text-sm text-gray-900 dark:text-gray-100">{selectedAccounts.size} 筆</div>
+            <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">{selectedAccounts.size} 筆</div>
           </div>
 
-          <div className="rounded-lg bg-white dark:bg-gray-800 p-4 shadow">
-            <div className="text-sm text-gray-900 dark:text-gray-100">單據總數</div>
-            <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+          <div className="rounded-lg bg-white dark:bg-gray-800 p-3 sm:p-4 shadow">
+            <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">單據總數</div>
+            <div className="text-base sm:text-2xl font-bold text-gray-900 dark:text-gray-100">
               {vendorGroups.reduce((sum, g) => sum + g.unpaid_count, 0)}
             </div>
-            <div className="text-sm text-gray-900 dark:text-gray-100">筆未付</div>
+            <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">筆未付</div>
           </div>
         </div>
 
         {/* Search */}
-        <div className="mb-6 rounded-lg bg-white dark:bg-gray-800 p-4 shadow">
-          <form onSubmit={handleSearch} className="flex gap-2">
+        <div className="mb-4 sm:mb-6 rounded-lg bg-white dark:bg-gray-800 p-3 sm:p-4 shadow">
+          <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-2">
             <input
               type="text"
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
               placeholder="搜尋廠商名稱或代碼"
-              className="flex-1 rounded border border-gray-300 dark:border-gray-600 px-4 py-2 text-gray-900 dark:text-gray-100 dark:bg-gray-700 placeholder:text-gray-900 dark:placeholder:text-gray-400"
+              className="flex-1 rounded border border-gray-300 dark:border-gray-600 px-3 sm:px-4 py-2 text-gray-900 dark:text-gray-100 dark:bg-gray-700 placeholder:text-gray-500 dark:placeholder:text-gray-400 min-h-[44px]"
             />
             <button
               type="submit"
-              className="rounded bg-blue-600 px-6 py-2 font-medium text-white hover:bg-blue-700"
+              className="rounded bg-blue-600 px-6 py-2 font-medium text-white hover:bg-blue-700 min-h-[44px]"
             >
               搜尋
             </button>
@@ -453,101 +453,165 @@ export default function APPageV2() {
 
                     {/* Account Details */}
                     {isExpanded && (
-                      <div className="bg-gray-50 dark:bg-gray-900 px-4 pb-4">
-                        <table className="w-full">
-                          <thead className="border-b">
-                            <tr>
-                              <th className="pb-2 text-left text-xs font-semibold text-gray-900 dark:text-gray-100"></th>
-                              <th className="pb-2 text-left text-xs font-semibold text-gray-900 dark:text-gray-100">進貨單號</th>
-                              <th className="pb-2 text-left text-xs font-semibold text-gray-900 dark:text-gray-100">商品</th>
-                              <th className="pb-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">數量</th>
-                              <th className="pb-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">應付金額</th>
-                              <th className="pb-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">已付金額</th>
-                              <th className="pb-2 pr-4 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">餘額</th>
-                              <th className="pb-2 pl-4 text-left text-xs font-semibold text-gray-900 dark:text-gray-100">到期日</th>
-                              <th className="pb-2 text-center text-xs font-semibold text-gray-900 dark:text-gray-100">狀態</th>
-                              <th className="pb-2 text-center text-xs font-semibold text-gray-900 dark:text-gray-100">操作</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y">
-                            {group.accounts.map((account) => {
-                              const isOverdue = account.status !== 'paid' &&
-                                new Date(account.due_date) < new Date()
+                      <div className="bg-gray-50 dark:bg-gray-900 px-2 sm:px-4 pb-4">
+                        {/* Mobile Card Layout */}
+                        <div className="sm:hidden space-y-3">
+                          {group.accounts.map((account) => {
+                            const isOverdue = account.status !== 'paid' &&
+                              new Date(account.due_date) < new Date()
 
-                              return (
-                                <tr key={account.id} className="hover:bg-white dark:hover:bg-gray-800">
-                                  <td className="py-2">
+                            return (
+                              <div key={account.id} className="bg-white dark:bg-gray-800 rounded-lg p-3 shadow-sm border border-gray-200 dark:border-gray-700">
+                                <div className="flex items-start justify-between mb-2">
+                                  <div className="flex items-center gap-2">
                                     <input
                                       type="checkbox"
                                       checked={selectedAccounts.has(account.id)}
                                       onChange={() => toggleAccount(account.id)}
                                       disabled={account.status === 'paid'}
-                                      className="h-4 w-4"
+                                      className="h-5 w-5"
                                     />
-                                  </td>
-                                  <td className="py-2 text-sm text-gray-900 dark:text-gray-100">
-                                    {account.ref_no}
-                                  </td>
-                                  <td className="py-2 text-sm text-gray-900 dark:text-gray-100">
-                                    {account.purchase_item ? (
-                                      <div>
-                                        <div className="font-medium">{account.purchase_item.products.name}</div>
-                                        <div className="text-xs text-gray-500 dark:text-gray-400">{account.purchase_item.products.item_code}</div>
-                                      </div>
-                                    ) : (
-                                      <span className="text-gray-400">-</span>
-                                    )}
-                                  </td>
-                                  <td className="py-2 text-right text-sm text-gray-900 dark:text-gray-100">
-                                    {account.purchase_item ? (
-                                      `${account.purchase_item.quantity} ${account.purchase_item.products.unit}`
-                                    ) : (
-                                      <span className="text-gray-400">-</span>
-                                    )}
-                                  </td>
-                                  <td className="py-2 text-right text-sm text-gray-900 dark:text-gray-100">
-                                    {formatCurrency(account.amount)}
-                                  </td>
-                                  <td className="py-2 text-right text-sm text-gray-900 dark:text-gray-100">
-                                    {formatCurrency(account.received_paid)}
-                                  </td>
-                                  <td className="py-2 pr-4 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">
-                                    {formatCurrency(account.balance)}
-                                  </td>
-                                  <td className={`py-2 pl-4 text-sm ${isOverdue ? 'font-semibold text-red-400' : 'text-gray-100 dark:text-gray-100'}`}>
-                                    {formatDate(account.due_date)}
-                                    {isOverdue && ' (逾期)'}
-                                  </td>
-                                  <td className="py-2 text-center">
-                                    <span className={`inline-block rounded px-2 py-1 text-xs ${
-                                      account.status === 'paid'
-                                        ? 'bg-green-100 text-green-800'
-                                        : account.status === 'partial'
-                                        ? 'bg-yellow-100 text-yellow-800'
-                                        : 'bg-red-100 text-red-800'
-                                    }`}>
-                                      {account.status === 'paid' ? '已付清' :
-                                       account.status === 'partial' ? '部分付款' : '未付'}
+                                    <div>
+                                      <div className="font-medium text-gray-900 dark:text-gray-100">{account.ref_no}</div>
+                                      {account.purchase_item && (
+                                        <div className="text-xs text-gray-500">{account.purchase_item.products.name}</div>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <span className={`inline-block rounded px-2 py-1 text-xs ${
+                                    account.status === 'paid'
+                                      ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                                      : account.status === 'partial'
+                                      ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                                      : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                                  }`}>
+                                    {account.status === 'paid' ? '已付清' :
+                                     account.status === 'partial' ? '部分' : '未付'}
+                                  </span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 text-sm mb-3">
+                                  <div>
+                                    <span className="text-gray-500 dark:text-gray-400">餘額：</span>
+                                    <span className="font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(account.balance)}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-gray-500 dark:text-gray-400">到期：</span>
+                                    <span className={isOverdue ? 'text-red-500 font-medium' : 'text-gray-900 dark:text-gray-100'}>
+                                      {formatDate(account.due_date)}
                                     </span>
-                                  </td>
-                                  <td className="py-2 text-center">
-                                    <button
-                                      onClick={() => {
-                                        // 只选中这一笔
-                                        setSelectedAccounts(new Set([account.id]))
-                                        openPaymentModal(group.partner_code)
-                                      }}
-                                      disabled={account.status === 'paid'}
-                                      className="rounded bg-blue-500 px-3 py-1 text-xs font-medium text-white hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
-                                    >
-                                      付款
-                                    </button>
-                                  </td>
-                                </tr>
-                              )
-                            })}
-                          </tbody>
-                        </table>
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => {
+                                    setSelectedAccounts(new Set([account.id]))
+                                    openPaymentModal(group.partner_code)
+                                  }}
+                                  disabled={account.status === 'paid'}
+                                  className="w-full rounded bg-blue-500 px-3 py-2 text-sm font-medium text-white hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed min-h-[44px]"
+                                >
+                                  付款
+                                </button>
+                              </div>
+                            )
+                          })}
+                        </div>
+
+                        {/* Desktop Table Layout */}
+                        <div className="hidden sm:block overflow-x-auto">
+                          <table className="w-full">
+                            <thead className="border-b border-gray-200 dark:border-gray-700">
+                              <tr>
+                                <th className="pb-2 text-left text-xs font-semibold text-gray-900 dark:text-gray-100"></th>
+                                <th className="pb-2 text-left text-xs font-semibold text-gray-900 dark:text-gray-100">進貨單號</th>
+                                <th className="pb-2 text-left text-xs font-semibold text-gray-900 dark:text-gray-100">商品</th>
+                                <th className="pb-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">數量</th>
+                                <th className="pb-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">應付金額</th>
+                                <th className="pb-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">已付金額</th>
+                                <th className="pb-2 pr-4 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">餘額</th>
+                                <th className="pb-2 pl-4 text-left text-xs font-semibold text-gray-900 dark:text-gray-100">到期日</th>
+                                <th className="pb-2 text-center text-xs font-semibold text-gray-900 dark:text-gray-100">狀態</th>
+                                <th className="pb-2 text-center text-xs font-semibold text-gray-900 dark:text-gray-100">操作</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                              {group.accounts.map((account) => {
+                                const isOverdue = account.status !== 'paid' &&
+                                  new Date(account.due_date) < new Date()
+
+                                return (
+                                  <tr key={account.id} className="hover:bg-white dark:hover:bg-gray-800">
+                                    <td className="py-2">
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedAccounts.has(account.id)}
+                                        onChange={() => toggleAccount(account.id)}
+                                        disabled={account.status === 'paid'}
+                                        className="h-4 w-4"
+                                      />
+                                    </td>
+                                    <td className="py-2 text-sm text-gray-900 dark:text-gray-100">
+                                      {account.ref_no}
+                                    </td>
+                                    <td className="py-2 text-sm text-gray-900 dark:text-gray-100">
+                                      {account.purchase_item ? (
+                                        <div>
+                                          <div className="font-medium">{account.purchase_item.products.name}</div>
+                                          <div className="text-xs text-gray-500 dark:text-gray-400">{account.purchase_item.products.item_code}</div>
+                                        </div>
+                                      ) : (
+                                        <span className="text-gray-400">-</span>
+                                      )}
+                                    </td>
+                                    <td className="py-2 text-right text-sm text-gray-900 dark:text-gray-100">
+                                      {account.purchase_item ? (
+                                        `${account.purchase_item.quantity} ${account.purchase_item.products.unit}`
+                                      ) : (
+                                        <span className="text-gray-400">-</span>
+                                      )}
+                                    </td>
+                                    <td className="py-2 text-right text-sm text-gray-900 dark:text-gray-100">
+                                      {formatCurrency(account.amount)}
+                                    </td>
+                                    <td className="py-2 text-right text-sm text-gray-900 dark:text-gray-100">
+                                      {formatCurrency(account.received_paid)}
+                                    </td>
+                                    <td className="py-2 pr-4 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">
+                                      {formatCurrency(account.balance)}
+                                    </td>
+                                    <td className={`py-2 pl-4 text-sm ${isOverdue ? 'font-semibold text-red-500' : 'text-gray-900 dark:text-gray-100'}`}>
+                                      {formatDate(account.due_date)}
+                                      {isOverdue && ' (逾期)'}
+                                    </td>
+                                    <td className="py-2 text-center">
+                                      <span className={`inline-block rounded px-2 py-1 text-xs ${
+                                        account.status === 'paid'
+                                          ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                                          : account.status === 'partial'
+                                          ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                                          : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                                      }`}>
+                                        {account.status === 'paid' ? '已付清' :
+                                         account.status === 'partial' ? '部分付款' : '未付'}
+                                      </span>
+                                    </td>
+                                    <td className="py-2 text-center">
+                                      <button
+                                        onClick={() => {
+                                          setSelectedAccounts(new Set([account.id]))
+                                          openPaymentModal(group.partner_code)
+                                        }}
+                                        disabled={account.status === 'paid'}
+                                        className="rounded bg-blue-500 px-3 py-1 text-xs font-medium text-white hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                                      >
+                                        付款
+                                      </button>
+                                    </td>
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -559,10 +623,10 @@ export default function APPageV2() {
 
         {/* 分頁控制 */}
         {!loading && totalPages > 1 && (
-          <div className="mt-4 rounded-lg bg-white dark:bg-gray-800 p-4 shadow flex items-center justify-between">
-            <div className="flex items-center gap-4">
+          <div className="mt-4 rounded-lg bg-white dark:bg-gray-800 p-3 sm:p-4 shadow flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 w-full sm:w-auto">
               <div className="text-sm text-gray-600 dark:text-gray-400">
-                共 {totalCount} 筆資料，第 {currentPage} / {totalPages} 頁
+                共 {totalCount} 筆，第 {currentPage}/{totalPages} 頁
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-sm text-gray-600 dark:text-gray-400">每頁</span>
@@ -573,7 +637,7 @@ export default function APPageV2() {
                     setCurrentPage(1)
                     fetchAccounts(1)
                   }}
-                  className="rounded border border-gray-300 dark:border-gray-600 px-2 py-1 text-sm text-gray-900 dark:text-gray-100 dark:bg-gray-700"
+                  className="rounded border border-gray-300 dark:border-gray-600 px-2 py-2 text-sm text-gray-900 dark:text-gray-100 dark:bg-gray-700 min-h-[44px]"
                 >
                   <option value={20}>20</option>
                   <option value={50}>50</option>
@@ -581,7 +645,7 @@ export default function APPageV2() {
                 <span className="text-sm text-gray-600 dark:text-gray-400">筆</span>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-center">
               <button
                 onClick={() => {
                   const newPage = currentPage - 1
@@ -589,11 +653,11 @@ export default function APPageV2() {
                   fetchAccounts(newPage)
                 }}
                 disabled={currentPage === 1}
-                className="rounded px-3 py-1 text-sm font-medium bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 sm:flex-none rounded px-4 py-2 text-sm font-medium bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
               >
                 上一頁
               </button>
-              <span className="text-sm text-gray-600 dark:text-gray-400">
+              <span className="text-sm text-gray-600 dark:text-gray-400 px-2">
                 {currentPage} / {totalPages}
               </span>
               <button
@@ -603,7 +667,7 @@ export default function APPageV2() {
                   fetchAccounts(newPage)
                 }}
                 disabled={currentPage === totalPages}
-                className="rounded px-3 py-1 text-sm font-medium bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 sm:flex-none rounded px-4 py-2 text-sm font-medium bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
               >
                 下一頁
               </button>

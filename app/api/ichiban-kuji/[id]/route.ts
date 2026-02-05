@@ -43,7 +43,7 @@ export async function GET(
 
     if (error) {
       return NextResponse.json(
-        { ok: false, error: 'Ichiban kuji not found' },
+        { ok: false, error: '找不到一番賞' },
         { status: 404 }
       )
     }
@@ -51,7 +51,7 @@ export async function GET(
     return NextResponse.json({ ok: true, data: kuji })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }
@@ -265,7 +265,7 @@ export async function PUT(
     })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }
@@ -337,7 +337,7 @@ export async function PATCH(
     return NextResponse.json({ ok: true, data: updated })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }
@@ -373,7 +373,7 @@ export async function DELETE(
     return NextResponse.json({ ok: true })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }

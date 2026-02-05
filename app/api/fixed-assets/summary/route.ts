@@ -103,6 +103,6 @@ export async function GET(request: NextRequest) {
         })
     } catch (error) {
         console.error('[Fixed Assets Summary] Error:', error)
-        return NextResponse.json({ ok: false, error: 'Internal server error' }, { status: 500 })
+        return NextResponse.json({ ok: false, error: '系統錯誤' }, { status: 500 })
     }
 }

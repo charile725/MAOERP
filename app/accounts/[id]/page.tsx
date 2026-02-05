@@ -160,45 +160,90 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
                 </div>
 
                 {/* Filters */}
-                <div className="mb-6 flex flex-wrap items-end gap-4 rounded-lg bg-white dark:bg-gray-800 p-4 shadow">
-                    <div>
-                        <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                            開始日期
-                        </label>
-                        <div className="relative">
+                <div className="mb-4 sm:mb-6 rounded-lg bg-white dark:bg-gray-800 p-3 sm:p-4 shadow">
+                    <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-3 sm:gap-4">
+                        <div className="flex-1 sm:flex-none sm:min-w-[140px]">
+                            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                開始日期
+                            </label>
                             <input
                                 type="date"
                                 name="startDate"
                                 value={dateRange.startDate}
                                 onChange={handleDateChange}
-                                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm placeholder-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm placeholder-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white min-h-[44px]"
                             />
                         </div>
-                    </div>
-                    <div>
-                        <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                            結束日期
-                        </label>
-                        <div className="relative">
+                        <div className="flex-1 sm:flex-none sm:min-w-[140px]">
+                            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                結束日期
+                            </label>
                             <input
                                 type="date"
                                 name="endDate"
                                 value={dateRange.endDate}
                                 onChange={handleDateChange}
-                                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm placeholder-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm placeholder-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white min-h-[44px]"
                             />
                         </div>
+                        {(dateRange.startDate || dateRange.endDate) && (
+                            <Button variant="outline" onClick={clearDates} className="min-h-[44px]">
+                                清除篩選
+                            </Button>
+                        )}
                     </div>
-                    {(dateRange.startDate || dateRange.endDate) && (
-                        <Button variant="outline" onClick={clearDates} className="mb-[1px]">
-                            清除篩選
-                        </Button>
-                    )}
                 </div>
 
-                {/* Transactions Table */}
+                {/* Transactions */}
                 <div className="rounded-lg bg-white dark:bg-gray-800 shadow overflow-hidden">
-                    <div className="overflow-x-auto">
+                    {/* Mobile Card Layout */}
+                    <div className="sm:hidden">
+                        {loading && transactions.length === 0 ? (
+                            <div className="px-4 py-8 text-center text-gray-500">載入中...</div>
+                        ) : transactions.length === 0 ? (
+                            <div className="px-4 py-8 text-center text-gray-500">尚無符合條件的交易記錄</div>
+                        ) : (
+                            <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                                {transactions.map((tx) => {
+                                    const isPositive = ['sale', 'customer_payment', 'adjustment_increase', 'transfer_in'].includes(tx.transaction_type) || (tx.balance_after - tx.balance_before) >= 0;
+                                    const partyName = tx.customer_name || tx.vendor_name || null
+
+                                    return (
+                                        <div key={tx.id} className="p-3 hover:bg-gray-50 dark:hover:bg-gray-700">
+                                            <div className="flex items-start justify-between mb-2">
+                                                <div>
+                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${['sale', 'customer_payment', 'transfer_in'].includes(tx.transaction_type)
+                                                        ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
+                                                        : ['expense', 'purchase_payment', 'transfer_out'].includes(tx.transaction_type)
+                                                            ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300'
+                                                            : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                                                        }`}>
+                                                        {TRANSACTION_TYPE_LABELS[tx.transaction_type] || tx.transaction_type}
+                                                    </span>
+                                                    <div className="text-xs text-gray-500 mt-1">{formatDate(tx.created_at)}</div>
+                                                </div>
+                                                <div className="text-right">
+                                                    <div className={`font-semibold ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                                                        {isPositive ? '+' : ''}{formatCurrency(tx.amount)}
+                                                    </div>
+                                                    <div className="text-xs text-gray-500">餘額: {formatCurrency(tx.balance_after)}</div>
+                                                </div>
+                                            </div>
+                                            {(tx.ref_no || partyName) && (
+                                                <div className="text-sm text-gray-600 dark:text-gray-400">
+                                                    {tx.ref_no && <span className="mr-2">{tx.ref_no}</span>}
+                                                    {partyName && <span className="text-gray-500">· {partyName}</span>}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Desktop Table Layout */}
+                    <div className="hidden sm:block overflow-x-auto">
                         <table className="w-full text-left text-sm text-gray-500 dark:text-gray-400">
                             <thead className="bg-gray-50 dark:bg-gray-900 text-xs uppercase text-gray-700 dark:text-gray-300">
                                 <tr>
@@ -228,10 +273,7 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
                                     transactions.map((tx) => {
                                         const balanceBefore = tx.balance_before;
                                         const change = tx.balance_after - balanceBefore;
-                                        // Fallback logic if balance_before is missing: assume sale/customer_payment is +
                                         const isPositive = ['sale', 'customer_payment', 'adjustment_increase', 'transfer_in'].includes(tx.transaction_type) || change >= 0;
-
-                                        // Determine customer or vendor display
                                         const partyName = tx.customer_name || tx.vendor_name || null
                                         const partyCode = tx.customer_code || tx.vendor_code || null
 
@@ -300,7 +342,51 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
                     </div>
 
                     {/* Pagination Controls */}
-                    <div className="flex items-center justify-between border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3 sm:px-6">
+                    <div className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 sm:px-6 py-3">
+                        {/* Mobile Pagination */}
+                        <div className="flex flex-col gap-3 sm:hidden">
+                            <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
+                                <span>共 {pagination.total} 筆</span>
+                                <div className="flex items-center gap-2">
+                                    <span>每頁</span>
+                                    <select
+                                        value={pageSize}
+                                        onChange={(e) => {
+                                            const newSize = Number(e.target.value)
+                                            setPageSize(newSize)
+                                            setPagination(prev => ({ ...prev, page: 1, limit: newSize }))
+                                        }}
+                                        className="rounded border border-gray-300 dark:border-gray-600 px-2 py-2 text-sm text-gray-900 dark:text-gray-100 dark:bg-gray-700 min-h-[44px]"
+                                    >
+                                        <option value={20}>20</option>
+                                        <option value={50}>50</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setPagination(prev => ({ ...prev, page: Math.max(1, prev.page - 1) }))}
+                                    disabled={pagination.page === 1}
+                                    className="flex-1 min-h-[44px]"
+                                >
+                                    上一頁
+                                </Button>
+                                <span className="text-sm text-gray-600 dark:text-gray-400 px-2">
+                                    {pagination.page} / {pagination.totalPages || 1}
+                                </span>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setPagination(prev => ({ ...prev, page: Math.min(prev.totalPages, prev.page + 1) }))}
+                                    disabled={pagination.page >= pagination.totalPages}
+                                    className="flex-1 min-h-[44px]"
+                                >
+                                    下一頁
+                                </Button>
+                            </div>
+                        </div>
+
+                        {/* Desktop Pagination */}
                         <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
                             <div className="flex items-center gap-4">
                                 <p className="text-sm text-gray-700 dark:text-gray-300">
@@ -335,7 +421,6 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
                                         <span className="sr-only">Previous</span>
                                         <ChevronLeft className="h-4 w-4" />
                                     </Button>
-                                    {/* Simplified Pagination showing current page */}
                                     <span className="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 dark:text-white dark:ring-gray-600">
                                         {pagination.page} / {pagination.totalPages || 1}
                                     </span>
@@ -351,23 +436,6 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
                                     </Button>
                                 </nav>
                             </div>
-                        </div>
-                        {/* Mobile Pagination */}
-                        <div className="flex flex-1 justify-between sm:hidden">
-                            <Button
-                                variant="outline"
-                                onClick={() => setPagination(prev => ({ ...prev, page: Math.max(1, prev.page - 1) }))}
-                                disabled={pagination.page === 1}
-                            >
-                                上一頁
-                            </Button>
-                            <Button
-                                variant="outline"
-                                onClick={() => setPagination(prev => ({ ...prev, page: Math.min(prev.totalPages, prev.page + 1) }))}
-                                disabled={pagination.page >= pagination.totalPages}
-                            >
-                                下一頁
-                            </Button>
                         </div>
                     </div>
                 </div>

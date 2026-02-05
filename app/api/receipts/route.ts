@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     const allocationsTotal = draft.allocations.reduce((sum, a) => sum + a.amount, 0)
     if (Math.abs(allocationsTotal - draft.amount) > 0.01) {
       return NextResponse.json(
-        { ok: false, error: 'Allocation total does not match settlement amount' },
+        { ok: false, error: '分配金額與收款金額不符' },
         { status: 400 }
       )
     }
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
 
       if (account.direction !== 'AR') {
         return NextResponse.json(
-          { ok: false, error: 'Can only apply receipts to AR accounts' },
+          { ok: false, error: '只能沖銷應收帳款' },
           { status: 400 }
         )
       }
@@ -164,6 +164,13 @@ export async function POST(request: NextRequest) {
       const accountId = draft.account_id || null
       const paymentMethod = draft.method || 'cash'
 
+      console.log('[Receipts] Updating account balance:', {
+        accountId,
+        paymentMethod,
+        amount: draft.amount,
+        settlementId: settlement.id
+      })
+
       const accountUpdate = await updateAccountBalance({
         supabase: supabaseServer,
         accountId,
@@ -174,6 +181,8 @@ export async function POST(request: NextRequest) {
         referenceId: settlement.id,
         note: draft.note
       })
+
+      console.log('[Receipts] Account update result:', accountUpdate)
 
       if (!accountUpdate.success && !accountUpdate.warning) {
         // 更新失敗，回滾 settlement
@@ -242,6 +251,8 @@ export async function POST(request: NextRequest) {
     }
 
     // ===== 檢查銷售單是否已全部收清，同步更新 sales =====
+    console.log('[Receipts] saleIdsToCheck:', Array.from(saleIdsToCheck))
+
     for (const saleId of Array.from(saleIdsToCheck)) {
       const { data: saleARs } = await (supabaseServer
         .from('partner_accounts') as any)
@@ -249,9 +260,12 @@ export async function POST(request: NextRequest) {
         .eq('ref_type', 'sale')
         .eq('ref_id', saleId)
 
+      console.log('[Receipts] saleARs for', saleId, ':', saleARs)
+
       if (!saleARs) continue
 
       const allPaid = saleARs.every((ar: any) => ar.received_paid >= ar.amount)
+      console.log('[Receipts] allPaid:', allPaid)
       if (!allPaid) continue
 
       const { data: currentSale } = await (supabaseServer
@@ -260,11 +274,16 @@ export async function POST(request: NextRequest) {
         .eq('id', saleId)
         .single()
 
-      if (!currentSale || currentSale.is_paid) continue
+      if (!currentSale) continue
 
-      const saleUpdate: Record<string, any> = { is_paid: true }
+      const saleUpdate: Record<string, any> = {}
 
-      // 只有非購物金收款才更新付款方式（避免購物金收款後跳去現金收入）
+      // 如果尚未標記為已付款，設為已付款
+      if (!currentSale.is_paid) {
+        saleUpdate.is_paid = true
+      }
+
+      // 只要原本是「待確定」且非購物金收款，就更新付款方式
       if (currentSale.payment_method === 'pending' && !isStoreCredit) {
         saleUpdate.payment_method = draft.method
 
@@ -284,16 +303,27 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      await (supabaseServer
-        .from('sales') as any)
-        .update(saleUpdate)
-        .eq('id', saleId)
+      // 只有在有需要更新的欄位時才執行更新
+      if (Object.keys(saleUpdate).length > 0) {
+        console.log('[Receipts] Updating sale', saleId, 'with:', saleUpdate)
+        const { error: updateError } = await (supabaseServer
+          .from('sales') as any)
+          .update(saleUpdate)
+          .eq('id', saleId)
+        if (updateError) {
+          console.error('[Receipts] Update sale error:', updateError)
+        } else {
+          console.log('[Receipts] Sale updated successfully')
+        }
+      } else {
+        console.log('[Receipts] No update needed for sale', saleId, '- currentSale:', currentSale)
+      }
     }
 
     return NextResponse.json({ ok: true, data: settlement }, { status: 201 })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }

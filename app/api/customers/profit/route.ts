@@ -82,6 +82,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: true, data: result })
   } catch (err) {
     console.error('[Customers Profit API] Error:', err)
-    return NextResponse.json({ ok: false, error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ ok: false, error: '系統錯誤' }, { status: 500 })
   }
 }

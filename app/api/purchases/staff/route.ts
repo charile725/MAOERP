@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     const user = await getCurrentUser()
     if (!user) {
       return NextResponse.json(
-        { ok: false, error: 'Unauthorized' },
+        { ok: false, error: '無權限' },
         { status: 401 }
       )
     }
@@ -165,7 +165,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Staff purchase submission error:', error)
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }

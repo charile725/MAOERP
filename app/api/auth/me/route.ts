@@ -7,7 +7,7 @@ export async function GET() {
 
     if (!user) {
       const response = NextResponse.json(
-        { ok: false, error: 'Not authenticated' },
+        { ok: false, error: '尚未登入' },
         { status: 401 }
       )
       // 確保未認證的狀態也不會被快取
@@ -30,7 +30,7 @@ export async function GET() {
   } catch (error) {
     console.error('Get session error:', error)
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }

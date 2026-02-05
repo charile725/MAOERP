@@ -468,49 +468,51 @@ export default function PurchasesPage() {
         </div>
 
         {/* Search */}
-        <div className="mb-6 rounded-lg bg-white dark:bg-gray-800 p-4 shadow">
+        <div className="mb-4 sm:mb-6 rounded-lg bg-white dark:bg-gray-800 p-3 sm:p-4 shadow">
           <form onSubmit={handleSearch} className="space-y-3">
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <input
                 type="text"
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
-                placeholder="搜尋單號、廠商名稱、商品名稱或品號"
-                className="flex-1 rounded border border-gray-300 dark:border-gray-600 px-4 py-2 text-gray-900 dark:text-gray-100 dark:bg-gray-700 placeholder:text-gray-900 dark:placeholder:text-gray-400"
+                placeholder="搜尋單號、廠商、商品"
+                className="flex-1 rounded border border-gray-300 dark:border-gray-600 px-3 sm:px-4 py-2 text-gray-900 dark:text-gray-100 dark:bg-gray-700 placeholder:text-gray-500 dark:placeholder:text-gray-400 min-h-[44px]"
               />
               <button
                 type="submit"
-                className="rounded bg-blue-600 px-6 py-2 font-medium text-white hover:bg-blue-700"
+                className="rounded bg-blue-600 px-6 py-2 font-medium text-white hover:bg-blue-700 min-h-[44px]"
               >
                 搜尋
               </button>
             </div>
-            <div className="flex gap-2 items-center">
-              <input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-                className="flex-1 rounded border border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-gray-100 dark:bg-gray-700"
-              />
-              <span className="text-gray-500 dark:text-gray-400">至</span>
-              <input
-                type="date"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-                className="flex-1 rounded border border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-gray-100 dark:bg-gray-700"
-              />
+            <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
+              <div className="flex gap-2 items-center flex-1">
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="flex-1 rounded border border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-gray-100 dark:bg-gray-700 min-h-[44px]"
+                />
+                <span className="text-gray-500 dark:text-gray-400">至</span>
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="flex-1 rounded border border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-gray-100 dark:bg-gray-700 min-h-[44px]"
+                />
+              </div>
               {(dateFrom || dateTo) && (
                 <button
                   type="button"
                   onClick={() => { setDateFrom(''); setDateTo(''); }}
-                  className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                  className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 px-3 py-2"
                 >
                   清除
                 </button>
               )}
             </div>
-            <div className="flex items-center gap-4">
-              <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700 dark:text-gray-300">
+            <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+              <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700 dark:text-gray-300 min-h-[44px]">
                 <input
                   type="checkbox"
                   checked={groupByVendor}
@@ -518,11 +520,11 @@ export default function PurchasesPage() {
                     setGroupByVendor(e.target.checked)
                     setCurrentPage(1)
                   }}
-                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 />
                 按廠商分組
               </label>
-              <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700 dark:text-gray-300">
+              <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700 dark:text-gray-300 min-h-[44px]">
                 <input
                   type="checkbox"
                   checked={showUnreceivedOnly}
@@ -530,13 +532,13 @@ export default function PurchasesPage() {
                     setShowUnreceivedOnly(e.target.checked)
                     setCurrentPage(1)
                   }}
-                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 />
                 顯示未收貨
               </label>
               <Link
                 href="/purchase-receiving"
-                className="text-sm text-red-600 dark:text-red-400 hover:underline"
+                className="text-sm text-red-600 dark:text-red-400 hover:underline min-h-[44px] flex items-center"
               >
                 未收貨統計
               </Link>
@@ -1080,66 +1082,90 @@ export default function PurchasesPage() {
 
               {/* Pagination */}
               {displayedPurchases.length > itemsPerPage && (
-                <div className="mt-4 flex items-center justify-center gap-2 pb-4">
-                  <button
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                    disabled={currentPage === 1}
-                    className="px-3 py-1 text-sm rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    上一頁
-                  </button>
+                <div className="mt-4 flex flex-col sm:flex-row items-center justify-center gap-3 pb-4 px-4">
+                  {/* Mobile: Simple prev/next */}
+                  <div className="flex sm:hidden items-center gap-2 w-full">
+                    <button
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="flex-1 px-4 py-2 text-sm rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
+                    >
+                      上一頁
+                    </button>
+                    <span className="text-sm text-gray-600 dark:text-gray-400 px-2">
+                      {currentPage} / {Math.ceil(displayedPurchases.length / itemsPerPage)}
+                    </span>
+                    <button
+                      onClick={() => setCurrentPage(p => Math.min(Math.ceil(displayedPurchases.length / itemsPerPage), p + 1))}
+                      disabled={currentPage >= Math.ceil(displayedPurchases.length / itemsPerPage)}
+                      className="flex-1 px-4 py-2 text-sm rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
+                    >
+                      下一頁
+                    </button>
+                  </div>
 
-                  {(() => {
-                    const totalPages = Math.ceil(displayedPurchases.length / itemsPerPage)
-                    const pages: (number | string)[] = []
+                  {/* Desktop: Full pagination */}
+                  <div className="hidden sm:flex items-center gap-2">
+                    <button
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="px-3 py-1 text-sm rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      上一頁
+                    </button>
 
-                    if (totalPages <= 7) {
-                      for (let i = 1; i <= totalPages; i++) pages.push(i)
-                    } else {
-                      if (currentPage <= 4) {
-                        for (let i = 1; i <= 5; i++) pages.push(i)
-                        pages.push('...')
-                        pages.push(totalPages)
-                      } else if (currentPage >= totalPages - 3) {
-                        pages.push(1)
-                        pages.push('...')
-                        for (let i = totalPages - 4; i <= totalPages; i++) pages.push(i)
+                    {(() => {
+                      const totalPages = Math.ceil(displayedPurchases.length / itemsPerPage)
+                      const pages: (number | string)[] = []
+
+                      if (totalPages <= 7) {
+                        for (let i = 1; i <= totalPages; i++) pages.push(i)
                       } else {
-                        pages.push(1)
-                        pages.push('...')
-                        for (let i = currentPage - 1; i <= currentPage + 1; i++) pages.push(i)
-                        pages.push('...')
-                        pages.push(totalPages)
+                        if (currentPage <= 4) {
+                          for (let i = 1; i <= 5; i++) pages.push(i)
+                          pages.push('...')
+                          pages.push(totalPages)
+                        } else if (currentPage >= totalPages - 3) {
+                          pages.push(1)
+                          pages.push('...')
+                          for (let i = totalPages - 4; i <= totalPages; i++) pages.push(i)
+                        } else {
+                          pages.push(1)
+                          pages.push('...')
+                          for (let i = currentPage - 1; i <= currentPage + 1; i++) pages.push(i)
+                          pages.push('...')
+                          pages.push(totalPages)
+                        }
                       }
-                    }
 
-                    return pages.map((page, idx) =>
-                      typeof page === 'number' ? (
-                        <button
-                          key={page}
-                          onClick={() => setCurrentPage(page)}
-                          className={`px-3 py-1 text-sm rounded ${currentPage === page
-                            ? 'bg-blue-600 text-white'
-                            : 'border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800'
-                            }`}
-                        >
-                          {page}
-                        </button>
-                      ) : (
-                        <span key={`ellipsis-${idx}`} className="px-2 text-gray-500">
-                          {page}
-                        </span>
+                      return pages.map((page, idx) =>
+                        typeof page === 'number' ? (
+                          <button
+                            key={page}
+                            onClick={() => setCurrentPage(page)}
+                            className={`px-3 py-1 text-sm rounded ${currentPage === page
+                              ? 'bg-blue-600 text-white'
+                              : 'border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800'
+                              }`}
+                          >
+                            {page}
+                          </button>
+                        ) : (
+                          <span key={`ellipsis-${idx}`} className="px-2 text-gray-500">
+                            {page}
+                          </span>
+                        )
                       )
-                    )
-                  })()}
+                    })()}
 
-                  <button
-                    onClick={() => setCurrentPage(p => Math.min(Math.ceil(displayedPurchases.length / itemsPerPage), p + 1))}
-                    disabled={currentPage >= Math.ceil(displayedPurchases.length / itemsPerPage)}
-                    className="px-3 py-1 text-sm rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    下一頁
-                  </button>
+                    <button
+                      onClick={() => setCurrentPage(p => Math.min(Math.ceil(displayedPurchases.length / itemsPerPage), p + 1))}
+                      disabled={currentPage >= Math.ceil(displayedPurchases.length / itemsPerPage)}
+                      className="px-3 py-1 text-sm rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      下一頁
+                    </button>
+                  </div>
                 </div>
               )}
             </>

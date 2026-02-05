@@ -190,7 +190,7 @@ export async function POST(
   } catch (error) {
     console.error('Approve purchase error:', error)
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }

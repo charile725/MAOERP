@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
       .limit(1)
 
     if (!products || products.length === 0) {
-      return NextResponse.json({ ok: false, error: 'No products found' })
+      return NextResponse.json({ ok: false, error: '找不到商品' })
     }
 
     const product = products[0]
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: '系統錯誤' },
       { status: 500 }
     )
   }

@@ -543,70 +543,70 @@ export default function ARPageV2() {
         </div>
 
         {/* Summary */}
-        <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-          <div className="rounded-lg bg-white dark:bg-gray-800 p-4 shadow">
-            <div className="text-sm text-gray-900 dark:text-gray-100">未收總額</div>
-            <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+        <div className="mb-4 sm:mb-6 grid grid-cols-3 gap-2 sm:gap-4">
+          <div className="rounded-lg bg-white dark:bg-gray-800 p-3 sm:p-4 shadow">
+            <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">未收總額</div>
+            <div className="text-base sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">
               {formatCurrency(totalUnpaid)}
             </div>
-            <div className="text-sm text-gray-900 dark:text-gray-100">{totalCustomers} 位客戶</div>
+            <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">{totalCustomers} 位客戶</div>
           </div>
 
-          <div className="rounded-lg bg-white dark:bg-gray-800 p-4 shadow">
-            <div className="text-sm text-gray-900 dark:text-gray-100">已選擇</div>
-            <div className="text-2xl font-bold text-blue-600">
+          <div className="rounded-lg bg-white dark:bg-gray-800 p-3 sm:p-4 shadow">
+            <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">已選擇</div>
+            <div className="text-base sm:text-2xl font-bold text-blue-600 truncate">
               {formatCurrency(getSelectedTotal())}
             </div>
-            <div className="text-sm text-gray-900 dark:text-gray-100">{selectedAccounts.size} 筆</div>
+            <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">{selectedAccounts.size} 筆</div>
           </div>
 
-          <div className="rounded-lg bg-white dark:bg-gray-800 p-4 shadow">
-            <div className="text-sm text-gray-900 dark:text-gray-100">單據總數</div>
-            <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+          <div className="rounded-lg bg-white dark:bg-gray-800 p-3 sm:p-4 shadow">
+            <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">單據總數</div>
+            <div className="text-base sm:text-2xl font-bold text-gray-900 dark:text-gray-100">
               {globalUnpaidCount}
             </div>
-            <div className="text-sm text-gray-900 dark:text-gray-100">筆未收</div>
+            <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">筆未收</div>
           </div>
         </div>
 
         {/* Search */}
-        <div className="mb-6 rounded-lg bg-white dark:bg-gray-800 p-4 shadow">
-          <form onSubmit={handleSearch} className="mb-3 flex gap-2">
+        <div className="mb-4 sm:mb-6 rounded-lg bg-white dark:bg-gray-800 p-3 sm:p-4 shadow">
+          <form onSubmit={handleSearch} className="mb-3 flex flex-col sm:flex-row gap-2">
             <input
               type="text"
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
               placeholder="搜尋客戶名稱、代碼或銷貨單號"
-              className="flex-1 rounded border border-gray-300 dark:border-gray-600 px-4 py-2 text-gray-900 dark:text-gray-100 dark:bg-gray-700 placeholder:text-gray-900 dark:placeholder:text-gray-400"
+              className="flex-1 rounded border border-gray-300 dark:border-gray-600 px-3 sm:px-4 py-2 text-gray-900 dark:text-gray-100 dark:bg-gray-700 placeholder:text-gray-500 dark:placeholder:text-gray-400 min-h-[44px]"
             />
             <button
               type="submit"
-              className="rounded bg-blue-600 px-6 py-2 font-medium text-white hover:bg-blue-700"
+              className="rounded bg-blue-600 px-6 py-2 font-medium text-white hover:bg-blue-700 min-h-[44px]"
             >
               搜尋
             </button>
           </form>
 
           {/* 分組方式切換 */}
-          <div className="mb-3 flex gap-2">
-            <span className="text-sm text-gray-600 dark:text-gray-400 self-center">分組方式：</span>
+          <div className="mb-3 flex flex-wrap gap-2 items-center">
+            <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">分組：</span>
             <button
               onClick={() => setGroupMode('customer')}
-              className={`rounded px-3 py-1 text-sm font-medium transition-colors ${groupMode === 'customer'
+              className={`rounded px-3 py-2 text-sm font-medium transition-colors min-h-[40px] ${groupMode === 'customer'
                 ? 'bg-indigo-600 text-white'
                 : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                 }`}
             >
-              👤 按客戶
+              按客戶
             </button>
             <button
               onClick={() => setGroupMode('sale')}
-              className={`rounded px-3 py-1 text-sm font-medium transition-colors ${groupMode === 'sale'
+              className={`rounded px-3 py-2 text-sm font-medium transition-colors min-h-[40px] ${groupMode === 'sale'
                 ? 'bg-indigo-600 text-white'
                 : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                 }`}
             >
-              🔢 按單號
+              按單號
             </button>
           </div>
 
@@ -794,103 +794,160 @@ export default function ARPageV2() {
 
                     {/* Account Details */}
                     {isExpanded && (
-                      <div className="bg-gray-50 dark:bg-gray-900 px-4 pb-4">
-                        <table className="w-full table-fixed">
-                          <thead className="border-b border-gray-200 dark:border-gray-700">
-                            <tr>
-                              <th className="pb-2 pl-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400" style={{ width: '40px' }}></th>
-                              <th className="pb-2 pl-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400" style={{ width: '100px' }}>銷售單號</th>
-                              <th className="pb-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400">商品</th>
-                              <th className="pb-2 text-right text-xs font-semibold text-gray-600 dark:text-gray-400 pr-4" style={{ width: '80px' }}>數量</th>
-                              <th className="pb-2 text-right text-xs font-semibold text-gray-600 dark:text-gray-400 pr-6" style={{ width: '110px' }}>餘額</th>
-                              <th className="pb-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400" style={{ width: '140px' }}>銷售日</th>
-                              <th className="pb-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-400" style={{ width: '90px' }}>狀態</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                            {group.accounts.map((account) => {
-                              const daysOverdue = getDaysOverdue(account.due_date)
-                              const isOverdue = account.status !== 'paid' && daysOverdue > 0
+                      <div className="bg-gray-50 dark:bg-gray-900 px-2 sm:px-4 pb-4">
+                        {/* Mobile Card Layout */}
+                        <div className="sm:hidden space-y-3">
+                          {group.accounts.map((account) => {
+                            const daysOverdue = getDaysOverdue(account.due_date)
+                            const isOverdue = account.status !== 'paid' && daysOverdue > 0
 
-                              return (
-                                <tr key={account.id} className="hover:bg-white dark:hover:bg-gray-800">
-                                  <td className="py-3 pl-2 align-top">
+                            return (
+                              <div key={account.id} className="bg-white dark:bg-gray-800 rounded-lg p-3 shadow-sm border border-gray-200 dark:border-gray-700">
+                                <div className="flex items-start justify-between mb-2">
+                                  <div className="flex items-center gap-2">
                                     <input
                                       type="checkbox"
                                       checked={selectedAccounts.has(account.id)}
                                       onChange={() => toggleAccount(account.id)}
                                       disabled={account.status === 'paid'}
-                                      className="h-4 w-4"
+                                      className="h-5 w-5"
                                     />
-                                  </td>
-                                  <td className="py-3 pl-2 text-sm text-gray-900 dark:text-gray-100 align-top">
-                                    <div className="font-medium">{account.ref_no}</div>
-                                  </td>
-                                  <td className="py-3 text-sm text-gray-900 dark:text-gray-100 align-top">
-                                    {account.sale_item ? (
-                                      <div className="min-h-[44px] flex flex-col justify-center">
-                                        <div className="font-medium">{account.sale_item.snapshot_name}</div>
-                                        <div className="text-xs text-gray-500 dark:text-gray-400">{account.sale_item.products.item_code}</div>
-                                      </div>
-                                    ) : account.sale_items && account.sale_items.length > 0 ? (
-                                      <div>
-                                        {account.sale_items.map((item, idx) => (
-                                          <div key={item.id} className={`min-h-[44px] flex flex-col justify-center ${idx > 0 ? 'border-t border-gray-200 dark:border-gray-700' : ''}`}>
-                                            <div className="font-medium">{item.snapshot_name}</div>
-                                            <div className="text-xs text-gray-500 dark:text-gray-400">{item.products.item_code}</div>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    ) : (
-                                      <span className="text-gray-400">-</span>
-                                    )}
-                                  </td>
-                                  <td className="py-3 text-right text-sm align-top text-gray-900 dark:text-gray-100 pr-4">
-                                    {account.sale_item ? (
-                                      <div className="min-h-[44px] flex items-center justify-end">{account.sale_item.quantity} {account.sale_item.products.unit}</div>
-                                    ) : account.sale_items && account.sale_items.length > 0 ? (
-                                      <div>
-                                        {account.sale_items.map((item, idx) => (
-                                          <div key={item.id} className={`min-h-[44px] flex items-center justify-end ${idx > 0 ? 'border-t border-gray-200 dark:border-gray-700' : ''}`}>
-                                            {item.quantity} {item.products.unit}
-                                          </div>
-                                        ))}
-                                      </div>
-                                    ) : (
-                                      <span className="text-gray-400">-</span>
-                                    )}
-                                  </td>
-                                  <td className="py-3 text-right align-top pr-6">
-                                    <div className="font-semibold text-base text-gray-900 dark:text-gray-100">
-                                      {formatCurrency(account.balance)}
+                                    <div>
+                                      <div className="font-medium text-gray-900 dark:text-gray-100">{account.ref_no}</div>
+                                      {account.sale_item && (
+                                        <div className="text-xs text-gray-500">{account.sale_item.snapshot_name}</div>
+                                      )}
+                                      {account.sale_items && account.sale_items.length > 0 && !account.sale_item && (
+                                        <div className="text-xs text-gray-500">{account.sale_items.length} 項商品</div>
+                                      )}
                                     </div>
-                                    <div className="text-xs text-gray-500 dark:text-gray-400">
-                                      / {formatCurrency(account.amount)}
-                                    </div>
-                                  </td>
-                                  <td className="py-3 align-top">
-                                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                  </div>
+                                  <span className={`inline-flex items-center gap-1 text-xs font-medium rounded px-2 py-1 ${account.status === 'paid'
+                                    ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                                    : account.status === 'partial'
+                                      ? 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'
+                                      : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                                    }`}>
+                                    {account.status === 'paid' ? '已收清' :
+                                      account.status === 'partial' ? '部分' : '未收'}
+                                  </span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 text-sm">
+                                  <div>
+                                    <span className="text-gray-500 dark:text-gray-400">餘額：</span>
+                                    <span className="font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(account.balance)}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-gray-500 dark:text-gray-400">銷售日：</span>
+                                    <span className="text-gray-900 dark:text-gray-100">
                                       {account.sales?.sale_date ? formatDate(account.sales.sale_date) : '-'}
-                                    </div>
-                                  </td>
-                                  <td className="py-3 text-center align-top">
-                                    <span className={`inline-flex items-center gap-1 text-xs font-medium ${account.status === 'paid'
-                                      ? 'text-green-700 dark:text-green-400'
-                                      : account.status === 'partial'
-                                        ? 'text-orange-600 dark:text-orange-400'
-                                        : 'text-red-600 dark:text-red-400'
-                                      }`}>
-                                      {account.status === 'paid' ? '🟢' :
-                                        account.status === 'partial' ? '🟠' : '🔴'}
-                                      {account.status === 'paid' ? '已收清' :
-                                        account.status === 'partial' ? '部分收款' : '未收'}
                                     </span>
-                                  </td>
-                                </tr>
-                              )
-                            })}
-                          </tbody>
-                        </table>
+                                  </div>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+
+                        {/* Desktop Table Layout */}
+                        <div className="hidden sm:block overflow-x-auto">
+                          <table className="w-full table-fixed">
+                            <thead className="border-b border-gray-200 dark:border-gray-700">
+                              <tr>
+                                <th className="pb-2 pl-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400" style={{ width: '40px' }}></th>
+                                <th className="pb-2 pl-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400" style={{ width: '100px' }}>銷售單號</th>
+                                <th className="pb-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400">商品</th>
+                                <th className="pb-2 text-right text-xs font-semibold text-gray-600 dark:text-gray-400 pr-4" style={{ width: '80px' }}>數量</th>
+                                <th className="pb-2 text-right text-xs font-semibold text-gray-600 dark:text-gray-400 pr-6" style={{ width: '110px' }}>餘額</th>
+                                <th className="pb-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400" style={{ width: '140px' }}>銷售日</th>
+                                <th className="pb-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-400" style={{ width: '90px' }}>狀態</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                              {group.accounts.map((account) => {
+                                const daysOverdue = getDaysOverdue(account.due_date)
+                                const isOverdue = account.status !== 'paid' && daysOverdue > 0
+
+                                return (
+                                  <tr key={account.id} className="hover:bg-white dark:hover:bg-gray-800">
+                                    <td className="py-3 pl-2 align-top">
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedAccounts.has(account.id)}
+                                        onChange={() => toggleAccount(account.id)}
+                                        disabled={account.status === 'paid'}
+                                        className="h-4 w-4"
+                                      />
+                                    </td>
+                                    <td className="py-3 pl-2 text-sm text-gray-900 dark:text-gray-100 align-top">
+                                      <div className="font-medium">{account.ref_no}</div>
+                                    </td>
+                                    <td className="py-3 text-sm text-gray-900 dark:text-gray-100 align-top">
+                                      {account.sale_item ? (
+                                        <div className="min-h-[44px] flex flex-col justify-center">
+                                          <div className="font-medium">{account.sale_item.snapshot_name}</div>
+                                          <div className="text-xs text-gray-500 dark:text-gray-400">{account.sale_item.products.item_code}</div>
+                                        </div>
+                                      ) : account.sale_items && account.sale_items.length > 0 ? (
+                                        <div>
+                                          {account.sale_items.map((item, idx) => (
+                                            <div key={item.id} className={`min-h-[44px] flex flex-col justify-center ${idx > 0 ? 'border-t border-gray-200 dark:border-gray-700' : ''}`}>
+                                              <div className="font-medium">{item.snapshot_name}</div>
+                                              <div className="text-xs text-gray-500 dark:text-gray-400">{item.products.item_code}</div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <span className="text-gray-400">-</span>
+                                      )}
+                                    </td>
+                                    <td className="py-3 text-right text-sm align-top text-gray-900 dark:text-gray-100 pr-4">
+                                      {account.sale_item ? (
+                                        <div className="min-h-[44px] flex items-center justify-end">{account.sale_item.quantity} {account.sale_item.products.unit}</div>
+                                      ) : account.sale_items && account.sale_items.length > 0 ? (
+                                        <div>
+                                          {account.sale_items.map((item, idx) => (
+                                            <div key={item.id} className={`min-h-[44px] flex items-center justify-end ${idx > 0 ? 'border-t border-gray-200 dark:border-gray-700' : ''}`}>
+                                              {item.quantity} {item.products.unit}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <span className="text-gray-400">-</span>
+                                      )}
+                                    </td>
+                                    <td className="py-3 text-right align-top pr-6">
+                                      <div className="font-semibold text-base text-gray-900 dark:text-gray-100">
+                                        {formatCurrency(account.balance)}
+                                      </div>
+                                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                                        / {formatCurrency(account.amount)}
+                                      </div>
+                                    </td>
+                                    <td className="py-3 align-top">
+                                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                        {account.sales?.sale_date ? formatDate(account.sales.sale_date) : '-'}
+                                      </div>
+                                    </td>
+                                    <td className="py-3 text-center align-top">
+                                      <span className={`inline-flex items-center gap-1 text-xs font-medium ${account.status === 'paid'
+                                        ? 'text-green-700 dark:text-green-400'
+                                        : account.status === 'partial'
+                                          ? 'text-orange-600 dark:text-orange-400'
+                                          : 'text-red-600 dark:text-red-400'
+                                        }`}>
+                                        {account.status === 'paid' ? '🟢' :
+                                          account.status === 'partial' ? '🟠' : '🔴'}
+                                        {account.status === 'paid' ? '已收清' :
+                                          account.status === 'partial' ? '部分收款' : '未收'}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -902,10 +959,10 @@ export default function ARPageV2() {
 
         {/* 分頁控制 */}
         {!loading && totalPages > 1 && (
-          <div className="mt-4 rounded-lg bg-white dark:bg-gray-800 p-4 shadow flex items-center justify-between">
-            <div className="flex items-center gap-4">
+          <div className="mt-4 rounded-lg bg-white dark:bg-gray-800 p-3 sm:p-4 shadow flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 w-full sm:w-auto">
               <div className="text-sm text-gray-600 dark:text-gray-400">
-                共 {totalCount} 筆資料，第 {currentPage} / {totalPages} 頁
+                共 {totalCount} 筆，第 {currentPage}/{totalPages} 頁
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-sm text-gray-600 dark:text-gray-400">每頁</span>
@@ -916,7 +973,7 @@ export default function ARPageV2() {
                     setCurrentPage(1)
                     fetchAccounts(1)
                   }}
-                  className="rounded border border-gray-300 dark:border-gray-600 px-2 py-1 text-sm text-gray-900 dark:text-gray-100 dark:bg-gray-700"
+                  className="rounded border border-gray-300 dark:border-gray-600 px-2 py-2 text-sm text-gray-900 dark:text-gray-100 dark:bg-gray-700 min-h-[44px]"
                 >
                   <option value={20}>20</option>
                   <option value={50}>50</option>
@@ -924,7 +981,7 @@ export default function ARPageV2() {
                 <span className="text-sm text-gray-600 dark:text-gray-400">筆</span>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-center">
               <button
                 onClick={() => {
                   const newPage = currentPage - 1
@@ -932,11 +989,11 @@ export default function ARPageV2() {
                   fetchAccounts(newPage)
                 }}
                 disabled={currentPage === 1}
-                className="rounded px-3 py-1 text-sm font-medium bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 sm:flex-none rounded px-4 py-2 text-sm font-medium bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
               >
                 上一頁
               </button>
-              <span className="text-sm text-gray-600 dark:text-gray-400">
+              <span className="text-sm text-gray-600 dark:text-gray-400 px-2">
                 {currentPage} / {totalPages}
               </span>
               <button
@@ -946,7 +1003,7 @@ export default function ARPageV2() {
                   fetchAccounts(newPage)
                 }}
                 disabled={currentPage === totalPages}
-                className="rounded px-3 py-1 text-sm font-medium bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 sm:flex-none rounded px-4 py-2 text-sm font-medium bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
               >
                 下一頁
               </button>
