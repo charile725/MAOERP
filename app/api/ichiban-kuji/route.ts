@@ -31,12 +31,6 @@ export async function GET(request: NextRequest) {
             price,
             unit
           )
-        ),
-        last_prize_product:products!last_prize_product_id (
-          id,
-          name,
-          item_code,
-          cost
         )
       `, { count: 'exact' })
       .order('created_at', { ascending: false })
@@ -53,15 +47,43 @@ export async function GET(request: NextRequest) {
     const { data, error, count } = await query
 
     if (error) {
+      console.error('[GET /api/ichiban-kuji] Supabase error:', error)
       return NextResponse.json(
         { ok: false, error: error.message },
         { status: 500 }
       )
     }
 
+    // 手動查詢最後賞商品（因為 last_prize_product_id 可能缺少 FK 約束）
+    const lastPrizeProductIds = (data as any[])
+      ?.map((k: any) => k.last_prize_product_id)
+      .filter(Boolean) || []
+
+    let lastPrizeProductMap = new Map()
+    if (lastPrizeProductIds.length > 0) {
+      const { data: products } = await (supabaseServer
+        .from('products') as any)
+        .select('id, name, item_code, cost')
+        .in('id', lastPrizeProductIds)
+
+      if (products) {
+        lastPrizeProductMap = new Map(
+          (products as any[]).map((p: any) => [p.id, p])
+        )
+      }
+    }
+
+    // 將 last_prize_product 附加到每筆資料
+    const enrichedData = (data as any[])?.map((kuji: any) => ({
+      ...kuji,
+      last_prize_product: kuji.last_prize_product_id
+        ? lastPrizeProductMap.get(kuji.last_prize_product_id) || null
+        : null,
+    })) || []
+
     return NextResponse.json({
       ok: true,
-      data,
+      data: enrichedData,
       pagination: {
         page,
         pageSize,
@@ -70,6 +92,7 @@ export async function GET(request: NextRequest) {
       }
     })
   } catch (error) {
+    console.error('[GET /api/ichiban-kuji] Error:', error)
     return NextResponse.json(
       { ok: false, error: '系統錯誤' },
       { status: 500 }
