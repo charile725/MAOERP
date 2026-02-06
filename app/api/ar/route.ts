@@ -57,8 +57,12 @@ export async function GET(request: NextRequest) {
     }
 
     if (keyword) {
+      // 清理 keyword，移除 PostgREST filter 特殊字元避免 injection
+      const safeKeyword = keyword.replace(/[(),.*\\]/g, '')
       const conditions: string[] = []
-      conditions.push(`partner_code.ilike.%${keyword}%`)
+      if (safeKeyword) {
+        conditions.push(`partner_code.ilike.%${safeKeyword}%`)
+      }
       if (matchingCustomerCodes.length > 0) {
         conditions.push(`partner_code.in.(${matchingCustomerCodes.join(',')})`)
       }

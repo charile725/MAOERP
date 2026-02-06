@@ -71,7 +71,7 @@ export async function POST(
         // 2. 處理每個更正項目
         const adjustedItems: any[] = []
         let inventoryChanges: { product_id: string; qty_change: number; product_name: string }[] = []
-        let newTotal = 0
+        let newSubtotal = 0
 
         for (const adjustment of items) {
             const originalItem = originalItems.find((item: any) => item.id === adjustment.sale_item_id)
@@ -108,7 +108,7 @@ export async function POST(
 
             // 計算新小計
             if (newQty > 0) {
-                newTotal += newQty * newPrice
+                newSubtotal += newQty * newPrice
             }
         }
 
@@ -116,11 +116,24 @@ export async function POST(
         for (const item of originalItems) {
             const wasAdjusted = items.some(adj => adj.sale_item_id === item.id)
             if (!wasAdjusted) {
-                newTotal += item.subtotal
+                newSubtotal += item.subtotal
             }
         }
 
-        const adjustmentAmount = originalTotal - newTotal // 正數 = 退款
+        // 重新計算折扣和購物金（Bug fix: 原本直接用 newSubtotal 當 total，漏扣購物金/折扣）
+        let newDiscountAmount = 0
+        if (sale.discount_type === 'percent') {
+            newDiscountAmount = Math.round((newSubtotal * (sale.discount_value || 0)) / 100)
+        } else if (sale.discount_type === 'amount') {
+            newDiscountAmount = Math.min(sale.discount_amount || 0, newSubtotal)
+        }
+
+        const newStoreCreditUsed = Math.min(
+            sale.store_credit_used || 0,
+            Math.max(0, newSubtotal - newDiscountAmount)
+        )
+        const newFinalTotal = Math.max(0, newSubtotal - newDiscountAmount - newStoreCreditUsed)
+        const adjustmentAmount = originalTotal - newFinalTotal // 正數 = 退款
 
         // 3. 獲取相關的出貨單（用於確認是否已出貨）
         const { data: deliveries } = await (supabaseServer
@@ -245,14 +258,50 @@ export async function POST(
             }
         }
 
-        // 6. 更新銷售單總額
+        // 6. 更新銷售單總額（含 subtotal、折扣、購物金）
         await (supabaseServer
             .from('sales') as any)
             .update({
-                total: newTotal,
+                subtotal: newSubtotal,
+                discount_amount: newDiscountAmount,
+                store_credit_used: newStoreCreditUsed,
+                total: newFinalTotal,
                 updated_at: getTaiwanTime(),
             })
             .eq('id', id)
+
+        // 6.5. 如果購物金用量減少，退還差額給客戶
+        const storeCreditRefund = (sale.store_credit_used || 0) - newStoreCreditUsed
+        if (storeCreditRefund > 0 && sale.customer_code) {
+            const { data: customer } = await (supabaseServer
+                .from('customers') as any)
+                .select('store_credit')
+                .eq('customer_code', sale.customer_code)
+                .single()
+
+            if (customer) {
+                const newBalance = customer.store_credit + storeCreditRefund
+                await (supabaseServer
+                    .from('customers') as any)
+                    .update({ store_credit: newBalance })
+                    .eq('customer_code', sale.customer_code)
+
+                await (supabaseServer
+                    .from('customer_balance_logs') as any)
+                    .insert({
+                        customer_code: sale.customer_code,
+                        amount: storeCreditRefund,
+                        balance_before: customer.store_credit,
+                        balance_after: newBalance,
+                        type: 'refund',
+                        ref_type: 'sale_correction',
+                        ref_id: id,
+                        ref_no: sale.sale_no,
+                        note: `銷貨更正退還購物金 - ${sale.sale_no}`,
+                        created_at: getTaiwanTime(),
+                    })
+            }
+        }
 
         // 7. 調整應收帳款（如果未付款）
         if (!sale.is_paid && sale.customer_code && adjustmentAmount !== 0) {
@@ -264,32 +313,65 @@ export async function POST(
                 .eq('ref_id', id)
 
             if (arRecords && arRecords.length > 0) {
-                // 按比例調整每筆 AR
-                const totalArAmount = arRecords.reduce((sum: number, ar: any) => sum + ar.amount, 0)
+                // 重新讀取更正後的 sale_items，按比例重算所有 AR
+                const { data: currentItems } = await (supabaseServer
+                    .from('sale_items') as any)
+                    .select('id, subtotal')
+                    .eq('sale_id', id)
 
-                for (const adjustment of items) {
-                    const arRecord = arRecords.find((ar: any) => ar.sale_item_id === adjustment.sale_item_id)
-                    if (arRecord) {
-                        if (adjustment.new_quantity === 0) {
-                            // 刪除該 AR 記錄
-                            await (supabaseServer
-                                .from('partner_accounts') as any)
-                                .delete()
-                                .eq('id', arRecord.id)
-                        } else {
-                            // 重新計算 AR 金額
-                            const originalItem = originalItems.find((item: any) => item.id === adjustment.sale_item_id)
-                            const newPrice = adjustment.new_price ?? originalItem.price
-                            const newAmount = adjustment.new_quantity * newPrice
+                const currentTotalSubtotal = (currentItems || []).reduce(
+                    (sum: number, item: any) => sum + (item.subtotal || 0), 0
+                )
 
-                            await (supabaseServer
-                                .from('partner_accounts') as any)
-                                .update({
-                                    amount: newAmount,
-                                    note: `銷貨更正調整 - 原 ${sale.sale_no}`,
-                                })
-                                .eq('id', arRecord.id)
-                        }
+                // 刪除已被移除品項的 AR
+                const currentItemIds = new Set((currentItems || []).map((item: any) => item.id))
+                for (const ar of arRecords) {
+                    if (ar.sale_item_id && !currentItemIds.has(ar.sale_item_id)) {
+                        await (supabaseServer
+                            .from('partner_accounts') as any)
+                            .delete()
+                            .eq('id', ar.id)
+                    }
+                }
+
+                // 按比例重算剩餘的 AR（用 newFinalTotal 分配，而非全額）
+                const remainingARs = arRecords.filter(
+                    (ar: any) => !ar.sale_item_id || currentItemIds.has(ar.sale_item_id)
+                )
+                let arRemainingAmount = newFinalTotal
+
+                for (let i = 0; i < remainingARs.length; i++) {
+                    const ar = remainingARs[i]
+                    const item = (currentItems || []).find((item: any) => item.id === ar.sale_item_id)
+                    const itemSubtotal = item?.subtotal || 0
+
+                    let newAmount: number
+                    if (i === remainingARs.length - 1) {
+                        newAmount = Math.max(0, arRemainingAmount)
+                    } else {
+                        newAmount = currentTotalSubtotal > 0
+                            ? Math.round(newFinalTotal * (itemSubtotal / currentTotalSubtotal))
+                            : 0
+                        arRemainingAmount -= newAmount
+                    }
+
+                    if (newAmount <= 0) {
+                        await (supabaseServer
+                            .from('partner_accounts') as any)
+                            .delete()
+                            .eq('id', ar.id)
+                    } else {
+                        const newStatus = (ar.received_paid || 0) >= newAmount ? 'paid'
+                            : (ar.received_paid || 0) > 0 ? 'partial' : 'unpaid'
+
+                        await (supabaseServer
+                            .from('partner_accounts') as any)
+                            .update({
+                                amount: newAmount,
+                                status: newStatus,
+                                note: `銷貨更正調整 - 原 ${sale.sale_no}`,
+                            })
+                            .eq('id', ar.id)
                     }
                 }
             }
@@ -361,7 +443,7 @@ export async function POST(
                 sale_id: id,
                 correction_type: items.some(i => i.new_quantity === 0) ? 'item_adjust' : 'item_adjust',
                 original_total: originalTotal,
-                corrected_total: newTotal,
+                corrected_total: newFinalTotal,
                 adjustment_amount: adjustmentAmount,
                 items_adjusted: adjustedItems,
                 note: note || `銷貨更正`,
@@ -374,7 +456,7 @@ export async function POST(
                 sale_id: id,
                 sale_no: sale.sale_no,
                 original_total: originalTotal,
-                corrected_total: newTotal,
+                corrected_total: newFinalTotal,
                 adjustment_amount: adjustmentAmount,
                 items_adjusted: adjustedItems.length,
                 inventory_restored: inventoryChanges.filter(c => c.qty_change > 0).reduce((sum, c) => sum + c.qty_change, 0),

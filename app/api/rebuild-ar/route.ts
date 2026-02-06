@@ -4,10 +4,12 @@ import { supabaseServer } from '@/lib/supabase/server'
 // POST /api/rebuild-ar - Rebuild AR records for all unpaid sales
 export async function POST(request: NextRequest) {
   try {
-    // Get all sales
+    // Get all unpaid sales with customers (skip cash/paid sales without AR needs)
     const { data: sales, error: salesError } = await supabaseServer
       .from('sales')
-      .select('*, sale_items(*)') as any
+      .select('*, sale_items(*)')
+      .not('customer_code', 'is', null)
+      .eq('status', 'confirmed') as any
 
     if (salesError) {
       return NextResponse.json(
