@@ -887,7 +887,10 @@ export default function POSPage() {
           is_paid: isPaid,
           is_delivered: !hasNotDeliveredItems, // 保留向後兼容
           delivery_method: undefined,
-          expected_delivery_date: undefined,
+          // 有未出貨商品時，預設 7 天後到期
+          expected_delivery_date: hasNotDeliveredItems
+            ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+            : undefined,
           delivery_note: undefined,
           note: note || undefined,
           discount_type: discountType,

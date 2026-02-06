@@ -26,6 +26,12 @@ type Prize = {
   quantity: number
 }
 
+type LastPrize = {
+  name: string
+  product_id: string
+  product?: Product | null
+}
+
 type ComboPrice = {
   draws: number
   price: number
@@ -50,6 +56,11 @@ export default function NewIchibanKujiPage() {
   const [error, setError] = useState('')
   const [searchInputs, setSearchInputs] = useState<{ [key: number]: string }>({})
   const [searchResults, setSearchResults] = useState<{ [key: number]: Product[] }>({})
+  // 最後賞
+  const [hasLastPrize, setHasLastPrize] = useState(false)
+  const [lastPrize, setLastPrize] = useState<LastPrize>({ name: '', product_id: '', product: null })
+  const [lastPrizeSearchInput, setLastPrizeSearchInput] = useState('')
+  const [lastPrizeSearchResults, setLastPrizeSearchResults] = useState<Product[]>([])
 
   const isOfficial = setType === 'official'
 
@@ -180,13 +191,49 @@ export default function NewIchibanKujiPage() {
     }, 200)
   }
 
+  // 最後賞搜尋
+  const searchLastPrizeProduct = (keyword: string) => {
+    setLastPrizeSearchInput(keyword)
+
+    if (!keyword.trim()) {
+      setLastPrizeSearchResults([])
+      return
+    }
+
+    const results = products.filter(p =>
+      p.barcode?.toLowerCase().includes(keyword.toLowerCase()) ||
+      p.name.toLowerCase().includes(keyword.toLowerCase()) ||
+      p.item_code.toLowerCase().includes(keyword.toLowerCase())
+    ).slice(0, 8)
+
+    setLastPrizeSearchResults(results)
+  }
+
+  const selectLastPrizeProduct = (product: Product) => {
+    setLastPrize({
+      ...lastPrize,
+      product_id: product.id,
+      product: product
+    })
+    setLastPrizeSearchInput(product.name)
+    setLastPrizeSearchResults([])
+  }
+
+  const clearLastPrizeSearch = () => {
+    setTimeout(() => {
+      setLastPrizeSearchResults([])
+    }, 200)
+  }
+
   const calculateStats = () => {
     let totalDraws = 0
     let computedTotalCost = 0
+    let lastPrizeCostValue = 0
 
     if (isOfficial) {
       totalDraws = prizes.reduce((sum, p) => sum + p.quantity, 0)
       computedTotalCost = parseFloat(totalCost) || 0
+      // 官方套的最後賞成本已包含在 totalCost 中
     } else {
       prizes.forEach(prize => {
         if (prize.product) {
@@ -194,11 +241,16 @@ export default function NewIchibanKujiPage() {
           computedTotalCost += prize.product.cost * prize.quantity
         }
       })
+      // 加入最後賞成本（不計入抽數）
+      if (hasLastPrize && lastPrize.product) {
+        lastPrizeCostValue = lastPrize.product.cost
+        computedTotalCost += lastPrizeCostValue
+      }
     }
 
     const avgCost = totalDraws > 0 ? computedTotalCost / totalDraws : 0
 
-    return { totalDraws, totalCost: computedTotalCost, avgCost }
+    return { totalDraws, totalCost: computedTotalCost, avgCost, lastPrizeCost: lastPrizeCostValue }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -250,6 +302,18 @@ export default function NewIchibanKujiPage() {
       }
     }
 
+    // 驗證最後賞
+    if (hasLastPrize) {
+      if (isOfficial && !lastPrize.name.trim()) {
+        setError('請輸入最後賞名稱')
+        return
+      }
+      if (!isOfficial && !lastPrize.product_id) {
+        setError('請選擇最後賞商品')
+        return
+      }
+    }
+
     setLoading(true)
 
     try {
@@ -270,7 +334,10 @@ export default function NewIchibanKujiPage() {
             quantity: p.quantity,
           })),
           combo_prices: comboPrices,
-          opening_combo_prices: openingComboPrices
+          opening_combo_prices: openingComboPrices,
+          // 最後賞
+          last_prize_name: hasLastPrize ? (isOfficial ? lastPrize.name : lastPrize.product?.name) : null,
+          last_prize_product_id: hasLastPrize && !isOfficial ? lastPrize.product_id : null,
         })
       })
 
@@ -298,6 +365,11 @@ export default function NewIchibanKujiPage() {
     setTotalCost('')
     setVendorCode('')
     setOpeningComboPrices([])
+    // Reset last prize
+    setHasLastPrize(false)
+    setLastPrize({ name: '', product_id: '', product: null })
+    setLastPrizeSearchInput('')
+    setLastPrizeSearchResults([])
   }
 
   const stats = calculateStats()
@@ -737,6 +809,80 @@ export default function NewIchibanKujiPage() {
             )}
           </div>
 
+          {/* 最後賞 */}
+          <div className="rounded-lg bg-white p-4 shadow dark:bg-gray-800 md:p-6">
+            <div className="mb-4 flex items-center gap-4">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">最後賞（選填）</h2>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={hasLastPrize}
+                  onChange={(e) => setHasLastPrize(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-pink-600 focus:ring-pink-500"
+                />
+                <span className="text-sm text-gray-600 dark:text-gray-400">啟用最後賞</span>
+              </label>
+            </div>
+
+            {!hasLastPrize ? (
+              <div className="rounded border-2 border-dashed border-gray-300 p-4 text-center text-sm text-gray-500 dark:border-gray-600 dark:text-gray-400">
+                最後賞是抽完最後一抽時額外送出的獎品，不計入抽數但會計入成本
+              </div>
+            ) : isOfficial ? (
+              /* 官方套：只需輸入名稱 */
+              <div className="flex items-center gap-4">
+                <label className="text-sm font-medium text-gray-900 dark:text-gray-100">最後賞名稱</label>
+                <input
+                  type="text"
+                  value={lastPrize.name}
+                  onChange={(e) => setLastPrize({ ...lastPrize, name: e.target.value })}
+                  className="flex-1 rounded border border-gray-300 bg-white px-3 py-2 text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                  placeholder="例：最後賞特大公仔"
+                />
+              </div>
+            ) : (
+              /* 自製套：搜尋選擇商品 */
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+                <label className="text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">最後賞商品</label>
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={lastPrizeSearchInput}
+                    onChange={(e) => searchLastPrizeProduct(e.target.value)}
+                    onBlur={clearLastPrizeSearch}
+                    className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                    placeholder="掃碼或搜尋商品名稱/品號"
+                    autoComplete="off"
+                  />
+                  {lastPrizeSearchResults.length > 0 && (
+                    <div className="absolute z-[9999] mt-1 w-full max-h-64 overflow-y-auto rounded-md border border-gray-300 bg-white shadow-xl dark:border-gray-600 dark:bg-gray-700">
+                      {lastPrizeSearchResults.map(product => (
+                        <div
+                          key={product.id}
+                          onMouseDown={(e) => {
+                            e.preventDefault()
+                            selectLastPrizeProduct(product)
+                          }}
+                          className="cursor-pointer border-b px-3 py-2 last:border-b-0 hover:bg-blue-50 dark:border-gray-600 dark:hover:bg-gray-600"
+                        >
+                          <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{product.name}</div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">
+                            {product.item_code} | 成本: {formatCurrency(product.cost)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {lastPrize.product && (
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                    成本: <span className="font-semibold text-pink-600 dark:text-pink-400">{formatCurrency(lastPrize.product.cost)}</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Summary */}
           {prizes.length > 0 && (
             <div className="rounded-lg bg-blue-50 p-4 shadow dark:bg-blue-950/30 md:p-6">
@@ -751,6 +897,11 @@ export default function NewIchibanKujiPage() {
                   <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
                     {formatCurrency(stats.totalCost)}
                   </div>
+                  {!isOfficial && hasLastPrize && lastPrize.product && (
+                    <div className="text-xs text-pink-600 dark:text-pink-400">
+                      (含最後賞 {formatCurrency(stats.lastPrizeCost)})
+                    </div>
+                  )}
                 </div>
                 <div>
                   <div className="text-sm text-gray-600 dark:text-gray-400">平均每抽成本</div>

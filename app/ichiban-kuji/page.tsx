@@ -42,6 +42,15 @@ type IchibanKuji = {
   combo_prices?: ComboPrice[]
   opening_combo_prices?: ComboPrice[]
   ichiban_kuji_prizes: Prize[]
+  // 最後賞
+  last_prize_name?: string | null
+  last_prize_product_id?: string | null
+  last_prize_product?: {
+    id: string
+    name: string
+    item_code: string
+    cost: number
+  } | null
 }
 
 export default function IchibanKujiPage() {
@@ -497,13 +506,32 @@ export default function IchibanKujiPage() {
                                               : kuji.ichiban_kuji_prizes.reduce(
                                                 (sum, prize) => sum + (prize.products?.cost || 0) * prize.quantity,
                                                 0
-                                              )
+                                              ) + (kuji.last_prize_product?.cost || 0)
                                           )}
                                         </td>
                                       </tr>
                                     </tfoot>
                                   )}
                                 </table>
+
+                                {/* 最後賞 */}
+                                {(kuji.last_prize_name || kuji.last_prize_product) && (
+                                  <div className="mt-3 rounded border-2 border-pink-300 dark:border-pink-600 bg-pink-50/50 dark:bg-pink-900/30 px-4 py-2">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-sm font-semibold text-pink-700 dark:text-pink-300">最後賞</span>
+                                      <span className="text-sm text-gray-900 dark:text-gray-100">
+                                        {kuji.set_type === 'official'
+                                          ? kuji.last_prize_name
+                                          : kuji.last_prize_product?.name}
+                                      </span>
+                                      {userRole === 'admin' && kuji.set_type !== 'official' && kuji.last_prize_product && (
+                                        <span className="ml-auto text-sm text-gray-600 dark:text-gray-400">
+                                          成本: <span className="font-semibold text-pink-600 dark:text-pink-400">{formatCurrency(kuji.last_prize_product.cost)}</span>
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </td>

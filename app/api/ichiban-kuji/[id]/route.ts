@@ -36,6 +36,12 @@ export async function GET(
             stock,
             unit
           )
+        ),
+        last_prize_product:products!last_prize_product_id (
+          id,
+          name,
+          item_code,
+          cost
         )
       `)
       .eq('id', id)
@@ -87,9 +93,16 @@ export async function PUT(
       // 官方套：成本來自使用者輸入
       totalDraws = draft.prizes.reduce((sum, p) => sum + p.quantity, 0)
       totalCost = draft.total_cost || 0
+      // 官方套的最後賞成本已包含在 total_cost 中
     } else {
       // 自製套：成本從各商品計算
       const productIds = draft.prizes.map(p => p.product_id).filter(Boolean) as string[]
+
+      // 加入最後賞商品ID（如果有）
+      if (draft.last_prize_product_id) {
+        productIds.push(draft.last_prize_product_id)
+      }
+
       const { data: products } = await (supabaseServer
         .from('products') as any)
         .select('id, cost')
@@ -103,6 +116,12 @@ export async function PUT(
         const cost = productCostMap.get(prize.product_id) || 0
         totalDraws += prize.quantity
         totalCost += cost * prize.quantity
+      }
+
+      // 加入最後賞成本（不計入抽數）
+      if (draft.last_prize_product_id) {
+        const lastPrizeCost = productCostMap.get(draft.last_prize_product_id) || 0
+        totalCost += lastPrizeCost
       }
     }
 
@@ -121,6 +140,9 @@ export async function PUT(
         total_cost: totalCost,
         combo_prices: draft.combo_prices || [],
         opening_combo_prices: draft.opening_combo_prices || [],
+        // 最後賞
+        last_prize_name: draft.last_prize_name || null,
+        last_prize_product_id: isOfficial ? null : (draft.last_prize_product_id || null),
       })
       .eq('id', id)
 
