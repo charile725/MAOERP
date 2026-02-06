@@ -137,36 +137,44 @@ export async function POST(request: NextRequest) {
     const createdDeliveries: any[] = []
     const deliveryErrors: string[] = []
 
-    // Helper: 取得下一個 delivery_no
-    const getNextDeliveryNo = async (): Promise<string> => {
+    // Helper: 取得目前最大的 delivery number
+    const getMaxDeliveryNumber = async (): Promise<number> => {
       const { data: allDeliveries } = await (supabaseServer
         .from('deliveries') as any)
         .select('delivery_no')
 
       let maxNumber = 0
       if (allDeliveries && allDeliveries.length > 0) {
-        maxNumber = allDeliveries.reduce((max: number, d: any) => {
-          const match = d.delivery_no.match(/\d+/)
+        for (const d of allDeliveries) {
+          const match = d.delivery_no?.match(/\d+/)
           if (match) {
             const num = parseInt(match[0], 10)
-            return num > max ? num : max
+            if (num > maxNumber) maxNumber = num
           }
-          return max
-        }, 0)
+        }
       }
-      return generateCode('D', maxNumber)
+      return maxNumber
     }
+
+    // 取得初始最大編號（所有銷售單共用，避免重複查詢）
+    let currentNumber = await getMaxDeliveryNumber()
+    console.log(`[Batch Deliver] Current max delivery number: ${currentNumber}`)
 
     for (const [saleId, items] of itemsBySale.entries()) {
       try {
-        // 创建出货单（含 retry 機制）
+        // 创建出货单（含 retry 機制，每次 retry 遞增編號）
         const totalQuantity = items.reduce((sum: number, item: any) => sum + item.requestedQty, 0)
         let delivery: any = null
         let deliveryError: any = null
-        const maxRetries = 3
+        const maxRetries = 10
 
         for (let attempt = 0; attempt < maxRetries; attempt++) {
-          const deliveryNo = await getNextDeliveryNo()
+          // 每次嘗試遞增編號
+          currentNumber++
+          const deliveryNo = generateCode('D', currentNumber - 1)
+
+          console.log(`[Batch Deliver] Attempting delivery_no: ${deliveryNo} (attempt ${attempt + 1}/${maxRetries})`)
+
           const { data, error } = await (supabaseServer
             .from('deliveries') as any)
             .insert({
@@ -184,14 +192,19 @@ export async function POST(request: NextRequest) {
             break
           }
 
-          // 如果是 duplicate key error，retry
-          if (error.code === '23505' && error.message?.includes('delivery_no')) {
-            console.warn(`[Batch Deliver] Delivery no conflict, retry ${attempt + 1}/${maxRetries}`)
-            continue
+          deliveryError = error
+          console.warn(`[Batch Deliver] Insert failed:`, error.code, error.message)
+
+          // 如果是 unique constraint error，繼續 retry（編號已遞增）
+          const isUniqueError = error.code === '23505' ||
+            error.message?.includes('duplicate') ||
+            error.message?.includes('unique')
+
+          if (!isUniqueError) {
+            break
           }
 
-          deliveryError = error
-          break
+          await new Promise(resolve => setTimeout(resolve, 20 * (attempt + 1)))
         }
 
         if (!delivery) {

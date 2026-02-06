@@ -707,33 +707,43 @@ export async function POST(request: NextRequest) {
     }
 
     // 7. 創建出貨單（支援部分出貨）
-    // Helper: 取得下一個 delivery_no（含 retry 避免 race condition）
-    const getNextDeliveryNo = async (): Promise<string> => {
+    // Helper: 取得目前最大的 delivery number
+    const getMaxDeliveryNumber = async (): Promise<number> => {
       const { data: allDeliveries } = await (supabaseServer
         .from('deliveries') as any)
         .select('delivery_no')
 
       let maxNumber = 0
       if (allDeliveries && allDeliveries.length > 0) {
-        maxNumber = allDeliveries.reduce((max: number, delivery: any) => {
-          const match = delivery.delivery_no.match(/\d+/)
+        for (const d of allDeliveries) {
+          const match = d.delivery_no?.match(/\d+/)
           if (match) {
             const num = parseInt(match[0], 10)
-            return num > max ? num : max
+            if (num > maxNumber) maxNumber = num
           }
-          return max
-        }, 0)
+        }
       }
-      return generateCode('D', maxNumber)
+      return maxNumber
     }
 
-    // Helper: 創建出貨單（含 retry 機制）
+    // Helper: 創建出貨單（含 retry 機制，每次 retry 遞增編號）
     const createDeliveryWithRetry = async (
       deliveryData: any,
-      maxRetries = 3
+      maxRetries = 10
     ): Promise<{ data: any; error: any }> => {
+      let lastError: any = null
+
+      // 先查詢一次最大編號
+      let currentNumber = await getMaxDeliveryNumber()
+      console.log(`[Sales API] Current max delivery number: ${currentNumber}`)
+
       for (let attempt = 0; attempt < maxRetries; attempt++) {
-        const deliveryNo = await getNextDeliveryNo()
+        // 每次嘗試遞增編號（首次 +1，之後每次 retry 再 +1）
+        currentNumber++
+        const deliveryNo = generateCode('D', currentNumber - 1)  // generateCode 會 +1
+
+        console.log(`[Sales API] Attempting delivery_no: ${deliveryNo} (attempt ${attempt + 1}/${maxRetries})`)
+
         const { data, error } = await (supabaseServer
           .from('deliveries') as any)
           .insert({ ...deliveryData, delivery_no: deliveryNo })
@@ -741,20 +751,29 @@ export async function POST(request: NextRequest) {
           .single()
 
         if (!error) {
+          console.log(`[Sales API] Created delivery: ${deliveryNo}`)
           return { data, error: null }
         }
 
-        // 如果是 duplicate key error，retry
-        if (error.code === '23505' && error.message?.includes('delivery_no')) {
-          console.warn(`[Sales API] Delivery no conflict, retry ${attempt + 1}/${maxRetries}`)
-          continue
+        lastError = error
+        console.warn(`[Sales API] Insert failed (attempt ${attempt + 1}):`, error.message || error)
+
+        // 如果是 unique constraint error，繼續 retry（編號已遞增）
+        const isUniqueError = error.code === '23505' ||
+          error.message?.includes('duplicate') ||
+          error.message?.includes('unique')
+
+        if (!isUniqueError) {
+          // 非 unique error，直接返回
+          break
         }
 
-        // 其他錯誤直接返回
-        return { data: null, error }
+        // 加入小延遲減少衝突
+        await new Promise(resolve => setTimeout(resolve, 20 * (attempt + 1)))
       }
 
-      return { data: null, error: { message: '無法生成唯一的出貨單號，請重試' } }
+      console.error(`[Sales API] Failed after ${maxRetries} attempts, last error:`, lastError)
+      return { data: null, error: lastError || { message: '無法生成唯一的出貨單號，請重試' } }
     }
 
     // 分離已出貨和未出貨的品項
