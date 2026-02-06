@@ -156,24 +156,22 @@ export async function POST(request: NextRequest) {
       return maxNumber
     }
 
-    // 取得初始最大編號（所有銷售單共用，避免重複查詢）
-    let currentNumber = await getMaxDeliveryNumber()
-    console.log(`[Batch Deliver] Current max delivery number: ${currentNumber}`)
-
     for (const [saleId, items] of itemsBySale.entries()) {
       try {
-        // 创建出货单（含 retry 機制，每次 retry 遞增編號）
+        // 创建出货单（含 retry 機制，失敗後重新查詢最大編號）
         const totalQuantity = items.reduce((sum: number, item: any) => sum + item.requestedQty, 0)
         let delivery: any = null
         let deliveryError: any = null
         const maxRetries = 10
 
         for (let attempt = 0; attempt < maxRetries; attempt++) {
-          // 每次嘗試遞增編號
-          currentNumber++
-          const deliveryNo = generateCode('D', currentNumber - 1)
+          // 每次嘗試都重新查詢最大編號
+          const currentMax = await getMaxDeliveryNumber()
+          const randomOffset = Math.floor(Math.random() * 3)
+          const nextNumber = currentMax + 1 + randomOffset
+          const deliveryNo = generateCode('D', nextNumber - 1)
 
-          console.log(`[Batch Deliver] Attempting delivery_no: ${deliveryNo} (attempt ${attempt + 1}/${maxRetries})`)
+          console.log(`[Batch Deliver] Attempting delivery_no: ${deliveryNo} (attempt ${attempt + 1}/${maxRetries}, max=${currentMax})`)
 
           const { data, error } = await (supabaseServer
             .from('deliveries') as any)
@@ -195,7 +193,6 @@ export async function POST(request: NextRequest) {
           deliveryError = error
           console.warn(`[Batch Deliver] Insert failed:`, error.code, error.message)
 
-          // 如果是 unique constraint error，繼續 retry（編號已遞增）
           const isUniqueError = error.code === '23505' ||
             error.message?.includes('duplicate') ||
             error.message?.includes('unique')
@@ -204,7 +201,8 @@ export async function POST(request: NextRequest) {
             break
           }
 
-          await new Promise(resolve => setTimeout(resolve, 20 * (attempt + 1)))
+          const delay = 50 + Math.floor(Math.random() * 100)
+          await new Promise(resolve => setTimeout(resolve, delay))
         }
 
         if (!delivery) {

@@ -88,21 +88,19 @@ export async function POST(
       return maxNumber
     }
 
-    // 4. 创建delivery记录（含 retry 機制，每次 retry 遞增編號）
+    // 4. 创建delivery记录（含 retry 機制，失敗後重新查詢最大編號）
     let delivery: any = null
     let deliveryError: any = null
     const maxRetries = 10
 
-    // 先查詢一次最大編號
-    let currentNumber = await getMaxDeliveryNumber()
-    console.log(`[Deliver API] Current max delivery number: ${currentNumber}`)
-
     for (let attempt = 0; attempt < maxRetries; attempt++) {
-      // 每次嘗試遞增編號
-      currentNumber++
-      const deliveryNo = generateCode('D', currentNumber - 1)
+      // 每次嘗試都重新查詢最大編號
+      const currentMax = await getMaxDeliveryNumber()
+      const randomOffset = Math.floor(Math.random() * 3)
+      const nextNumber = currentMax + 1 + randomOffset
+      const deliveryNo = generateCode('D', nextNumber - 1)
 
-      console.log(`[Deliver API] Attempting delivery_no: ${deliveryNo} (attempt ${attempt + 1}/${maxRetries})`)
+      console.log(`[Deliver API] Attempting delivery_no: ${deliveryNo} (attempt ${attempt + 1}/${maxRetries}, max=${currentMax})`)
 
       const { data, error } = await (supabaseServer
         .from('deliveries') as any)
@@ -124,7 +122,6 @@ export async function POST(
       deliveryError = error
       console.warn(`[Deliver API] Insert failed:`, error.code, error.message)
 
-      // 如果是 unique constraint error，繼續 retry（編號已遞增）
       const isUniqueError = error.code === '23505' ||
         error.message?.includes('duplicate') ||
         error.message?.includes('unique')
@@ -133,7 +130,8 @@ export async function POST(
         break
       }
 
-      await new Promise(resolve => setTimeout(resolve, 20 * (attempt + 1)))
+      const delay = 50 + Math.floor(Math.random() * 100)
+      await new Promise(resolve => setTimeout(resolve, delay))
     }
 
     if (!delivery) {

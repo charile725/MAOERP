@@ -726,23 +726,22 @@ export async function POST(request: NextRequest) {
       return maxNumber
     }
 
-    // Helper: 創建出貨單（含 retry 機制，每次 retry 遞增編號）
+    // Helper: 創建出貨單（含 retry 機制，失敗後重新查詢最大編號）
     const createDeliveryWithRetry = async (
       deliveryData: any,
       maxRetries = 10
     ): Promise<{ data: any; error: any }> => {
       let lastError: any = null
 
-      // 先查詢一次最大編號
-      let currentNumber = await getMaxDeliveryNumber()
-      console.log(`[Sales API] Current max delivery number: ${currentNumber}`)
-
       for (let attempt = 0; attempt < maxRetries; attempt++) {
-        // 每次嘗試遞增編號（首次 +1，之後每次 retry 再 +1）
-        currentNumber++
-        const deliveryNo = generateCode('D', currentNumber - 1)  // generateCode 會 +1
+        // 每次嘗試都重新查詢最大編號，確保取得最新值
+        const currentMax = await getMaxDeliveryNumber()
+        // 加入隨機偏移減少並發衝突 (0-2)
+        const randomOffset = Math.floor(Math.random() * 3)
+        const nextNumber = currentMax + 1 + randomOffset
+        const deliveryNo = generateCode('D', nextNumber - 1)
 
-        console.log(`[Sales API] Attempting delivery_no: ${deliveryNo} (attempt ${attempt + 1}/${maxRetries})`)
+        console.log(`[Sales API] Attempting delivery_no: ${deliveryNo} (attempt ${attempt + 1}/${maxRetries}, max=${currentMax})`)
 
         const { data, error } = await (supabaseServer
           .from('deliveries') as any)
@@ -758,18 +757,18 @@ export async function POST(request: NextRequest) {
         lastError = error
         console.warn(`[Sales API] Insert failed (attempt ${attempt + 1}):`, error.message || error)
 
-        // 如果是 unique constraint error，繼續 retry（編號已遞增）
+        // 如果是 unique constraint error，繼續 retry
         const isUniqueError = error.code === '23505' ||
           error.message?.includes('duplicate') ||
           error.message?.includes('unique')
 
         if (!isUniqueError) {
-          // 非 unique error，直接返回
           break
         }
 
-        // 加入小延遲減少衝突
-        await new Promise(resolve => setTimeout(resolve, 20 * (attempt + 1)))
+        // 隨機延遲減少衝突 (50-150ms)
+        const delay = 50 + Math.floor(Math.random() * 100)
+        await new Promise(resolve => setTimeout(resolve, delay))
       }
 
       console.error(`[Sales API] Failed after ${maxRetries} attempts, last error:`, lastError)
