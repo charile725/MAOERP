@@ -352,9 +352,17 @@ export default function FinanceDashboardPage() {
                   </div>
                 </div>
                 <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-700">
-                  <div className="text-xs text-gray-600 dark:text-gray-400">總銷售額</div>
-                  <div className="text-lg font-bold text-green-600">
-                    {formatCurrency(closingStats.current_stats.total_sales)}
+                  <div className="text-xs text-gray-600 dark:text-gray-400">原始營業額</div>
+                  <div className="text-lg font-bold text-blue-600">
+                    {formatCurrency(closingStats.current_stats.total_sales + (closingStats.current_stats.store_credit_used || 0))}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    實收: {formatCurrency(closingStats.current_stats.total_sales)}
+                    {(closingStats.current_stats.store_credit_used || 0) > 0 && (
+                      <span className="text-orange-500 ml-1">
+                        (購物金 -{formatCurrency(closingStats.current_stats.store_credit_used)})
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-700">

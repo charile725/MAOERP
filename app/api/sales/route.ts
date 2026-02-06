@@ -89,8 +89,8 @@ export async function GET(request: NextRequest) {
       matchingCustomerCodes = matchingCustomers?.map((c: any) => c.customer_code) || []
     }
 
-    // 有關鍵字、按客戶分組、或查詢特定營業日時不使用服務器端分頁（需要完整資料）
-    const noPagination = keyword || groupByCustomer || businessDate
+    // 有關鍵字、按客戶分組、查詢特定營業日、或日期範圍查詢時不使用服務器端分頁（報表需要完整資料）
+    const noPagination = keyword || groupByCustomer || businessDate || (dateFrom && dateTo)
     if (!noPagination) {
       query = query.range(offset, offset + limit - 1)
     }
@@ -202,7 +202,7 @@ export async function GET(request: NextRequest) {
     })
 
     // 當有 keyword、groupByCustomer 或 businessDate 時，使用過濾後的數據長度作為 total
-    const noServerPagination = keyword || groupByCustomer || businessDate
+    const noServerPagination = keyword || groupByCustomer || businessDate || (dateFrom && dateTo)
     const actualTotal = noServerPagination ? (salesWithSummary?.length || 0) : (count || salesWithSummary?.length || 0)
 
     return NextResponse.json({
