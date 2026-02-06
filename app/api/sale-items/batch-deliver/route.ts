@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase/server'
+import { generateCode } from '@/lib/utils'
 
 // POST /api/sale-items/batch-deliver - 批量出货多个商品明细
 export async function POST(request: NextRequest) {
@@ -136,42 +137,65 @@ export async function POST(request: NextRequest) {
     const createdDeliveries: any[] = []
     const deliveryErrors: string[] = []
 
+    // Helper: 取得下一個 delivery_no
+    const getNextDeliveryNo = async (): Promise<string> => {
+      const { data: allDeliveries } = await (supabaseServer
+        .from('deliveries') as any)
+        .select('delivery_no')
+
+      let maxNumber = 0
+      if (allDeliveries && allDeliveries.length > 0) {
+        maxNumber = allDeliveries.reduce((max: number, d: any) => {
+          const match = d.delivery_no.match(/\d+/)
+          if (match) {
+            const num = parseInt(match[0], 10)
+            return num > max ? num : max
+          }
+          return max
+        }, 0)
+      }
+      return generateCode('D', maxNumber)
+    }
+
     for (const [saleId, items] of itemsBySale.entries()) {
       try {
-        // 生成出货单号
-        const { data: lastDeliveryArray } = await supabaseServer
-          .from('deliveries')
-          .select('delivery_no')
-          .order('created_at', { ascending: false })
-          .limit(1)
+        // 创建出货单（含 retry 機制）
+        const totalQuantity = items.reduce((sum: number, item: any) => sum + item.requestedQty, 0)
+        let delivery: any = null
+        let deliveryError: any = null
+        const maxRetries = 3
 
-        let nextNumber = 1
-        if (lastDeliveryArray && lastDeliveryArray.length > 0) {
-          const lastDelivery = lastDeliveryArray[0] as { delivery_no: string }
-          const match = lastDelivery.delivery_no.match(/\d+/)
-          if (match) {
-            nextNumber = parseInt(match[0], 10) + 1
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+          const deliveryNo = await getNextDeliveryNo()
+          const { data, error } = await (supabaseServer
+            .from('deliveries') as any)
+            .insert({
+              delivery_no: deliveryNo,
+              sale_id: saleId,
+              delivery_date: new Date().toISOString().split('T')[0],
+              status: 'confirmed',
+              note: `批量出貨 - ${items.length} 項商品，共 ${totalQuantity} 件`
+            })
+            .select()
+            .single()
+
+          if (!error) {
+            delivery = data
+            break
           }
+
+          // 如果是 duplicate key error，retry
+          if (error.code === '23505' && error.message?.includes('delivery_no')) {
+            console.warn(`[Batch Deliver] Delivery no conflict, retry ${attempt + 1}/${maxRetries}`)
+            continue
+          }
+
+          deliveryError = error
+          break
         }
 
-        const deliveryNo = `D${String(nextNumber).padStart(4, '0')}`
-
-        // 创建出货单
-        const totalQuantity = items.reduce((sum: number, item: any) => sum + item.requestedQty, 0)
-        const { data: delivery, error: deliveryError } = await (supabaseServer
-          .from('deliveries') as any)
-          .insert({
-            delivery_no: deliveryNo,
-            sale_id: saleId,
-            delivery_date: new Date().toISOString().split('T')[0],
-            status: 'confirmed',
-            note: `批量出貨 - ${items.length} 項商品，共 ${totalQuantity} 件`
-          })
-          .select()
-          .single()
-
-        if (deliveryError) {
-          deliveryErrors.push(`銷售單 ${items[0].sales.sale_no} 建立出貨單失敗: ${deliveryError.message}`)
+        if (!delivery) {
+          deliveryErrors.push(`銷售單 ${items[0].sales.sale_no} 建立出貨單失敗: ${deliveryError?.message || '無法生成唯一單號'}`)
           continue
         }
 
@@ -208,7 +232,7 @@ export async function POST(request: NextRequest) {
               ref_type: 'delivery',
               ref_id: delivery.id,
               qty_change: -item.requestedQty,
-              memo: `批量出貨 - ${deliveryNo} (${item.snapshot_name} x${item.requestedQty})`
+              memo: `批量出貨 - ${delivery.delivery_no} (${item.snapshot_name} x${item.requestedQty})`
             })
         }
 
@@ -268,7 +292,7 @@ export async function POST(request: NextRequest) {
           .eq('id', saleId)
 
         createdDeliveries.push({
-          delivery_no: deliveryNo,
+          delivery_no: delivery.delivery_no,
           sale_no: items[0].sales.sale_no,
           item_count: items.length
         })

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase/server'
+import { generateCode } from '@/lib/utils'
 
 type RouteContext = {
   params: Promise<{ id: string }>
@@ -68,40 +69,63 @@ export async function POST(
       )
     }
 
-    // 3. 生成delivery_no
-    const { data: lastDeliveryArray } = await supabaseServer
-      .from('deliveries')
-      .select('delivery_no')
-      .order('created_at', { ascending: false })
-      .limit(1)
+    // 3. Helper: 取得下一個 delivery_no
+    const getNextDeliveryNo = async (): Promise<string> => {
+      const { data: allDeliveries } = await (supabaseServer
+        .from('deliveries') as any)
+        .select('delivery_no')
 
-    let nextNumber = 1
-    if (lastDeliveryArray && lastDeliveryArray.length > 0) {
-      const lastDelivery = lastDeliveryArray[0] as { delivery_no: string }
-      const match = lastDelivery.delivery_no.match(/\d+/)
-      if (match) {
-        nextNumber = parseInt(match[0], 10) + 1
+      let maxNumber = 0
+      if (allDeliveries && allDeliveries.length > 0) {
+        maxNumber = allDeliveries.reduce((max: number, d: any) => {
+          const match = d.delivery_no.match(/\d+/)
+          if (match) {
+            const num = parseInt(match[0], 10)
+            return num > max ? num : max
+          }
+          return max
+        }, 0)
       }
+      return generateCode('D', maxNumber)
     }
 
-    const deliveryNo = `D${String(nextNumber).padStart(4, '0')}`
+    // 4. 创建delivery记录（含 retry 機制）
+    let delivery: any = null
+    let deliveryError: any = null
+    const maxRetries = 3
 
-    // 4. 创建delivery记录（直接设为confirmed状态）
-    const { data: delivery, error: deliveryError } = await (supabaseServer
-      .from('deliveries') as any)
-      .insert({
-        delivery_no: deliveryNo,
-        sale_id: saleItem.sales.id,
-        delivery_date: new Date().toISOString().split('T')[0],
-        status: 'confirmed',
-        note: `單品出貨 - ${saleItem.snapshot_name}`
-      })
-      .select()
-      .single()
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      const deliveryNo = await getNextDeliveryNo()
+      const { data, error } = await (supabaseServer
+        .from('deliveries') as any)
+        .insert({
+          delivery_no: deliveryNo,
+          sale_id: saleItem.sales.id,
+          delivery_date: new Date().toISOString().split('T')[0],
+          status: 'confirmed',
+          note: `單品出貨 - ${saleItem.snapshot_name}`
+        })
+        .select()
+        .single()
 
-    if (deliveryError) {
+      if (!error) {
+        delivery = data
+        break
+      }
+
+      // 如果是 duplicate key error，retry
+      if (error.code === '23505' && error.message?.includes('delivery_no')) {
+        console.warn(`[Deliver API] Delivery no conflict, retry ${attempt + 1}/${maxRetries}`)
+        continue
+      }
+
+      deliveryError = error
+      break
+    }
+
+    if (!delivery) {
       return NextResponse.json(
-        { ok: false, error: deliveryError.message },
+        { ok: false, error: deliveryError?.message || '無法生成唯一的出貨單號，請重試' },
         { status: 500 }
       )
     }
@@ -133,7 +157,7 @@ export async function POST(
         ref_type: 'delivery',
         ref_id: delivery.id,
         qty_change: -saleItem.quantity,
-        memo: `出貨 - ${deliveryNo} (${saleItem.snapshot_name})`
+        memo: `出貨 - ${delivery.delivery_no} (${saleItem.snapshot_name})`
       })
 
     if (logError) {

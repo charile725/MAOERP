@@ -707,21 +707,54 @@ export async function POST(request: NextRequest) {
     }
 
     // 7. 創建出貨單（支援部分出貨）
-    const { data: allDeliveries } = await (supabaseServer
-      .from('deliveries') as any)
-      .select('delivery_no')
+    // Helper: 取得下一個 delivery_no（含 retry 避免 race condition）
+    const getNextDeliveryNo = async (): Promise<string> => {
+      const { data: allDeliveries } = await (supabaseServer
+        .from('deliveries') as any)
+        .select('delivery_no')
 
-    let deliveryCount = 0
-    if (allDeliveries && allDeliveries.length > 0) {
-      const maxNumber = allDeliveries.reduce((max: number, delivery: any) => {
-        const match = delivery.delivery_no.match(/\d+/)
-        if (match) {
-          const num = parseInt(match[0], 10)
-          return num > max ? num : max
+      let maxNumber = 0
+      if (allDeliveries && allDeliveries.length > 0) {
+        maxNumber = allDeliveries.reduce((max: number, delivery: any) => {
+          const match = delivery.delivery_no.match(/\d+/)
+          if (match) {
+            const num = parseInt(match[0], 10)
+            return num > max ? num : max
+          }
+          return max
+        }, 0)
+      }
+      return generateCode('D', maxNumber)
+    }
+
+    // Helper: 創建出貨單（含 retry 機制）
+    const createDeliveryWithRetry = async (
+      deliveryData: any,
+      maxRetries = 3
+    ): Promise<{ data: any; error: any }> => {
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        const deliveryNo = await getNextDeliveryNo()
+        const { data, error } = await (supabaseServer
+          .from('deliveries') as any)
+          .insert({ ...deliveryData, delivery_no: deliveryNo })
+          .select()
+          .single()
+
+        if (!error) {
+          return { data, error: null }
         }
-        return max
-      }, 0)
-      deliveryCount = maxNumber
+
+        // 如果是 duplicate key error，retry
+        if (error.code === '23505' && error.message?.includes('delivery_no')) {
+          console.warn(`[Sales API] Delivery no conflict, retry ${attempt + 1}/${maxRetries}`)
+          continue
+        }
+
+        // 其他錯誤直接返回
+        return { data: null, error }
+      }
+
+      return { data: null, error: { message: '無法生成唯一的出貨單號，請重試' } }
     }
 
     // 分離已出貨和未出貨的品項
@@ -742,21 +775,13 @@ export async function POST(request: NextRequest) {
 
     // 8a. 創建已出貨的出貨單（如果有已出貨品項）
     if (deliveredItems.length > 0) {
-      const deliveryNo = generateCode('D', deliveryCount)
-      deliveryCount++
-
-      const { data: delivery, error: deliveryError } = await (supabaseServer
-        .from('deliveries') as any)
-        .insert({
-          delivery_no: deliveryNo,
-          sale_id: sale.id,
-          status: 'confirmed',
-          delivery_date: taiwanTime.toISOString(),
-          method: delivery_method || null,
-          note: delivery_note || null,
-        })
-        .select()
-        .single()
+      const { data: delivery, error: deliveryError } = await createDeliveryWithRetry({
+        sale_id: sale.id,
+        status: 'confirmed',
+        delivery_date: taiwanTime.toISOString(),
+        method: delivery_method || null,
+        note: delivery_note || null,
+      })
 
       if (deliveryError) {
         await (supabaseServer.from('sales') as any).delete().eq('id', sale.id)
@@ -799,7 +824,7 @@ export async function POST(request: NextRequest) {
               ref_type: 'delivery',
               ref_id: delivery.id,
               qty_change: -draftItem.quantity,
-              memo: `出貨扣庫存 - ${deliveryNo}`,
+              memo: `出貨扣庫存 - ${delivery.delivery_no}`,
             })
         }
       }
@@ -807,20 +832,13 @@ export async function POST(request: NextRequest) {
 
     // 8b. 創建未出貨的出貨單（如果有未出貨品項）
     if (notDeliveredItems.length > 0) {
-      const deliveryNo = generateCode('D', deliveryCount)
-
-      const { data: delivery, error: deliveryError } = await (supabaseServer
-        .from('deliveries') as any)
-        .insert({
-          delivery_no: deliveryNo,
-          sale_id: sale.id,
-          status: 'draft',
-          delivery_date: null,
-          method: delivery_method || null,
-          note: delivery_note || null,
-        })
-        .select()
-        .single()
+      const { data: delivery, error: deliveryError } = await createDeliveryWithRetry({
+        sale_id: sale.id,
+        status: 'draft',
+        delivery_date: null,
+        method: delivery_method || null,
+        note: delivery_note || null,
+      })
 
       if (deliveryError) {
         if (confirmedDelivery) {

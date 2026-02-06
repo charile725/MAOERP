@@ -75,30 +75,65 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 生成出貨單號
-    const { count } = await supabaseServer
-      .from('deliveries')
-      .select('*', { count: 'exact', head: true })
+    // Helper: 取得下一個 delivery_no
+    const getNextDeliveryNo = async (): Promise<string> => {
+      const { data: allDeliveries } = await (supabaseServer
+        .from('deliveries') as any)
+        .select('delivery_no')
 
-    const deliveryNo = generateCode('D', count || 0)
+      let maxNumber = 0
+      if (allDeliveries && allDeliveries.length > 0) {
+        maxNumber = allDeliveries.reduce((max: number, d: any) => {
+          const match = d.delivery_no.match(/\d+/)
+          if (match) {
+            const num = parseInt(match[0], 10)
+            return num > max ? num : max
+          }
+          return max
+        }, 0)
+      }
+      return generateCode('D', maxNumber)
+    }
 
-    // 創建出貨單
-    const { data: delivery, error: deliveryError } = await (supabaseServer
-      .from('deliveries') as any)
-      .insert({
-        delivery_no: deliveryNo,
-        sale_id,
-        status: auto_confirm ? 'confirmed' : 'draft',
-        delivery_date: auto_confirm ? new Date().toISOString() : null,
-        method: method || null,
-        note: note || null,
-      })
-      .select()
-      .single()
+    // 創建出貨單（含 retry 機制避免 race condition）
+    let delivery: any = null
+    let deliveryError: any = null
+    const maxRetries = 3
 
-    if (deliveryError) {
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      const deliveryNo = await getNextDeliveryNo()
+      const { data, error } = await (supabaseServer
+        .from('deliveries') as any)
+        .insert({
+          delivery_no: deliveryNo,
+          sale_id,
+          status: auto_confirm ? 'confirmed' : 'draft',
+          delivery_date: auto_confirm ? new Date().toISOString() : null,
+          method: method || null,
+          note: note || null,
+        })
+        .select()
+        .single()
+
+      if (!error) {
+        delivery = data
+        break
+      }
+
+      // 如果是 duplicate key error，retry
+      if (error.code === '23505' && error.message?.includes('delivery_no')) {
+        console.warn(`[Deliveries API] Delivery no conflict, retry ${attempt + 1}/${maxRetries}`)
+        continue
+      }
+
+      // 其他錯誤直接返回
+      deliveryError = error
+      break
+    }
+
+    if (!delivery) {
       return NextResponse.json(
-        { ok: false, error: deliveryError.message },
+        { ok: false, error: deliveryError?.message || '無法生成唯一的出貨單號，請重試' },
         { status: 500 }
       )
     }
@@ -158,7 +193,7 @@ export async function POST(request: NextRequest) {
               ref_type: 'delivery',
               ref_id: delivery.id,
               qty_change: -item.quantity,
-              memo: `出貨扣庫存 - ${deliveryNo}`,
+              memo: `出貨扣庫存 - ${delivery.delivery_no}`,
             })
         }
 
