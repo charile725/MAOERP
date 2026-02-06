@@ -1048,10 +1048,27 @@ export default function MobilePOS({
                                     <div className="text-white text-xl font-bold">{closingStats.sales_count} 筆</div>
                                 </div>
                                 <div className="bg-emerald-900/30 rounded-lg p-3">
-                                    <div className="text-emerald-400 text-xs mb-1">總營業額</div>
-                                    <div className="text-white text-xl font-bold">{formatCurrency(closingStats.total_sales)}</div>
+                                    <div className="text-emerald-400 text-xs mb-1">原始營業額</div>
+                                    <div className="text-white text-xl font-bold">{formatCurrency((closingStats.total_sales || 0) + (closingStats.store_credit_used || 0))}</div>
+                                    {(closingStats.store_credit_used || 0) > 0 && (
+                                        <div className="text-emerald-400 text-xs mt-1">實收: {formatCurrency(closingStats.total_sales || 0)}</div>
+                                    )}
                                 </div>
                             </div>
+
+                            {/* 購物金資訊 */}
+                            {((closingStats.store_credit_used || 0) > 0 || (closingStats.store_credit_granted || 0) > 0) && (
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="bg-orange-900/30 border border-orange-700 rounded-lg p-3">
+                                        <div className="text-orange-400 text-xs mb-1">購物金折抵</div>
+                                        <div className="text-white text-lg font-bold">{formatCurrency(closingStats.store_credit_used || 0)}</div>
+                                    </div>
+                                    <div className="bg-purple-900/30 border border-purple-700 rounded-lg p-3">
+                                        <div className="text-purple-400 text-xs mb-1">購物金轉出</div>
+                                        <div className="text-white text-lg font-bold">{formatCurrency(closingStats.store_credit_granted || 0)}</div>
+                                    </div>
+                                </div>
+                            )}
 
                             {/* 假營業額（轉購物金前） */}
                             {closingStats.store_credit_converted > 0 && (
