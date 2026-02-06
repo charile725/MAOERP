@@ -137,23 +137,14 @@ export async function POST(request: NextRequest) {
     const createdDeliveries: any[] = []
     const deliveryErrors: string[] = []
 
-    // Helper: 取得目前最大的 delivery number
+    // Helper: 取得目前最大的 delivery number（使用 RPC 避免 1000 筆限制）
     const getMaxDeliveryNumber = async (): Promise<number> => {
-      const { data: allDeliveries } = await (supabaseServer
-        .from('deliveries') as any)
-        .select('delivery_no')
-
-      let maxNumber = 0
-      if (allDeliveries && allDeliveries.length > 0) {
-        for (const d of allDeliveries) {
-          const match = d.delivery_no?.match(/\d+/)
-          if (match) {
-            const num = parseInt(match[0], 10)
-            if (num > maxNumber) maxNumber = num
-          }
-        }
+      const { data, error } = await supabaseServer.rpc('get_max_delivery_number')
+      if (error) {
+        console.warn('[getMaxDeliveryNumber] RPC error:', error.message)
+        return 0
       }
-      return maxNumber
+      return data || 0
     }
 
     for (const [saleId, items] of itemsBySale.entries()) {
