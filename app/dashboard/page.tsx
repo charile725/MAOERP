@@ -222,23 +222,31 @@ export default function DashboardPage() {
         .reduce((sum: number, s: any) => sum + s.total, 0)
       const uncollected = amountDue - actualCollected
 
-      // Calculate total cost
-      const costBreakdownMap = new Map<string, { cost: number; quantity: number; name: string }>()
+      // Calculate total cost（追蹤實際總成本）
+      const costBreakdownMap = new Map<string, { unitCost: number; totalCost: number; quantity: number; name: string }>()
       let totalStoreCreditGranted = 0
       const totalCost = confirmedSales.reduce((sum: number, s: any) => {
         const saleCost = (s.sale_items || []).reduce(
           (itemSum: number, item: any) => {
             const effectiveQty = item.quantity - (item.store_credit_qty || 0)
-            const itemCost = (item.cost || 0) * effectiveQty
+            const unitCost = item.cost || 0
+            const itemCost = unitCost * effectiveQty
             const storeCreditCost = item.store_credit_amount || 0
             totalStoreCreditGranted += storeCreditCost
             if (effectiveQty > 0) {
-              const key = item.product_id
+              const key = item.product_id || item.snapshot_name || 'unknown'
               if (costBreakdownMap.has(key)) {
-                costBreakdownMap.get(key)!.quantity += effectiveQty
+                const existing = costBreakdownMap.get(key)!
+                existing.quantity += effectiveQty
+                existing.totalCost += itemCost
+                // 如果單位成本不同，用加權平均
+                if (existing.unitCost !== unitCost && unitCost > 0) {
+                  existing.unitCost = existing.totalCost / existing.quantity
+                }
               } else {
                 costBreakdownMap.set(key, {
-                  cost: item.cost || 0,
+                  unitCost: unitCost,
+                  totalCost: itemCost,
                   quantity: effectiveQty,
                   name: item.snapshot_name || '未知商品'
                 })
@@ -253,9 +261,9 @@ export default function DashboardPage() {
 
       const costBreakdown = Array.from(costBreakdownMap.values()).map(item => ({
         product_name: item.name,
-        cost: item.cost,
+        cost: item.unitCost,
         quantity: item.quantity,
-        total_cost: item.cost * item.quantity
+        total_cost: item.totalCost
       }))
 
       const totalExpenses = expensesInRange.reduce((sum: number, e: any) => sum + e.amount, 0)
