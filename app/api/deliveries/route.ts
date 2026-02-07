@@ -170,23 +170,8 @@ export async function POST(request: NextRequest) {
         .limit(1)
 
       if (!existingLogs || existingLogs.length === 0) {
-        // 扣庫存
+        // 寫入庫存日誌（trigger 會自動更新 products.stock）
         for (const item of items) {
-          // 更新庫存
-          const { data: product } = await (supabaseServer
-            .from('products') as any)
-            .select('stock')
-            .eq('id', item.product_id)
-            .single()
-
-          if (product) {
-            await (supabaseServer
-              .from('products') as any)
-              .update({ stock: product.stock - item.quantity })
-              .eq('id', item.product_id)
-          }
-
-          // 寫入庫存日誌
           await (supabaseServer
             .from('inventory_logs') as any)
             .insert({

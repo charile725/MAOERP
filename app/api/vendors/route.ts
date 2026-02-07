@@ -153,7 +153,7 @@ export async function PUT(request: NextRequest) {
         .select('id')
         .eq('vendor_code', data.vendor_code)
         .neq('id', id)
-        .single()
+        .maybeSingle()
 
       if (existing) {
         return NextResponse.json(
@@ -201,10 +201,23 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Check if vendor has related purchases
+    const { data: vendor } = await (supabaseServer
+      .from('vendors') as any)
+      .select('vendor_code')
+      .eq('id', id)
+      .maybeSingle()
+
+    if (!vendor) {
+      return NextResponse.json(
+        { ok: false, error: '找不到該廠商' },
+        { status: 404 }
+      )
+    }
+
     const { data: purchases } = await (supabaseServer
       .from('purchases') as any)
       .select('id')
-      .eq('vendor_code', (await (supabaseServer.from('vendors') as any).select('vendor_code').eq('id', id).single()).data?.vendor_code)
+      .eq('vendor_code', vendor.vendor_code)
       .limit(1)
 
     if (purchases && purchases.length > 0) {

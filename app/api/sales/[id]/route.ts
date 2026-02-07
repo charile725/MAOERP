@@ -292,6 +292,22 @@ export async function DELETE(
               .update({ store_credit: newBalance })
               .eq('customer_code', sale.customer_code)
 
+            // 寫入退還日誌
+            await (supabaseServer
+              .from('customer_balance_logs') as any)
+              .insert({
+                customer_code: sale.customer_code,
+                amount: refundAmount,
+                balance_before: customer.store_credit,
+                balance_after: newBalance,
+                type: 'refund',
+                ref_type: 'sale_delete',
+                ref_id: id.toString(),
+                ref_no: sale.sale_no,
+                note: `刪除銷售單 ${sale.sale_no}，退還購物金`,
+                created_at: getTaiwanTime(),
+              })
+
             // 刪除原使用日誌（避免孤兒記錄）
             await (supabaseServer
               .from('customer_balance_logs') as any)

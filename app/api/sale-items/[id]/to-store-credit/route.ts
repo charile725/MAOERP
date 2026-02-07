@@ -131,10 +131,24 @@ export async function POST(
         }
 
         const conversionAmount = parseFloat(amount)
-        const storeCreditBefore = customer.store_credit || 0
+
+        // 4. 更新客戶購物金餘額（先讀取最新值再更新，避免 race condition）
+        const { data: latestCustomer, error: fetchCustomerError } = await (supabaseServer
+            .from('customers') as any)
+            .select('store_credit')
+            .eq('customer_code', sale.customer_code)
+            .single()
+
+        if (fetchCustomerError || !latestCustomer) {
+            return NextResponse.json(
+                { ok: false, error: '讀取客戶資料失敗' },
+                { status: 500 }
+            )
+        }
+
+        const storeCreditBefore = latestCustomer.store_credit || 0
         const storeCreditAfter = storeCreditBefore + conversionAmount
 
-        // 4. 更新客戶購物金餘額
         const { error: updateCustomerError } = await (supabaseServer
             .from('customers') as any)
             .update({ store_credit: storeCreditAfter })
@@ -266,10 +280,28 @@ export async function POST(
                                     .eq('customer_code', stl.partner_code)
                                     .single()
                                 if (cust) {
+                                    const scBefore = cust.store_credit || 0
+                                    const scAfter = scBefore + refundAmount
                                     await (supabaseServer
                                         .from('customers') as any)
-                                        .update({ store_credit: cust.store_credit + refundAmount })
+                                        .update({ store_credit: scAfter })
                                         .eq('customer_code', stl.partner_code)
+
+                                    // 記錄購物金變動日誌
+                                    await (supabaseServer
+                                        .from('customer_balance_logs') as any)
+                                        .insert({
+                                            customer_code: stl.partner_code,
+                                            amount: refundAmount,
+                                            balance_before: scBefore,
+                                            balance_after: scAfter,
+                                            type: 'refund',
+                                            ref_type: 'sale_item_refund',
+                                            ref_id: saleItem.id,
+                                            ref_no: sale.sale_no,
+                                            note: `轉購物金退還原付款 - ${sale.sale_no}`,
+                                            created_at: getTaiwanTime(),
+                                        })
                                 }
                             } else if (stl.account_id) {
                                 const { data: acct } = await (supabaseServer

@@ -201,10 +201,23 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Check if customer has related sales
+    const { data: customer } = await (supabaseServer
+      .from('customers') as any)
+      .select('customer_code')
+      .eq('id', id)
+      .maybeSingle()
+
+    if (!customer) {
+      return NextResponse.json(
+        { ok: false, error: '找不到該客戶' },
+        { status: 404 }
+      )
+    }
+
     const { data: sales } = await (supabaseServer
       .from('sales') as any)
       .select('id')
-      .eq('customer_code', (await (supabaseServer.from('customers') as any).select('customer_code').eq('id', id).single()).data?.customer_code)
+      .eq('customer_code', customer.customer_code)
       .limit(1)
 
     if (sales && sales.length > 0) {

@@ -35,7 +35,8 @@
       "Bash(npx next lint:*)",
       "Bash(python scripts/search.py:*)",
       "Bash(git diff:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(do echo \"=== $endpoint ===\")"
     ]
   }
 }

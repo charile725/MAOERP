@@ -112,34 +112,13 @@ export async function POST(
           .eq('id', di.id)
       }
 
-      // 寫入庫存日誌並更新庫存 - 只有有 product_id 的商品才需要
+      // 寫入庫存日誌（trigger 會自動更新 products.stock）- 只有有 product_id 的商品才需要
       if (saleItem.product_id) {
-        // 取得目前庫存
-        const { data: product } = await (supabaseServer
-          .from('products') as any)
-          .select('stock')
-          .eq('id', saleItem.product_id)
-          .single()
-
-        const currentStock = product?.stock || 0
-        const newStock = currentStock + undoQty
-
-        // 直接更新庫存
-        const { error: stockError } = await (supabaseServer
-          .from('products') as any)
-          .update({ stock: newStock })
-          .eq('id', saleItem.product_id)
-
-        if (stockError) {
-          console.error('Failed to update stock:', stockError)
-        }
-
-        // 寫入庫存日誌
         const { error: logError } = await (supabaseServer
           .from('inventory_logs') as any)
           .insert({
             product_id: saleItem.product_id,
-            ref_type: 'undo_delivery',
+            ref_type: 'delivery_return',
             ref_id: di.delivery_id,
             qty_change: undoQty,
             memo: `撤銷出貨 - ${di.deliveries?.delivery_no || 'N/A'} (${saleItem.snapshot_name} x${undoQty})`
