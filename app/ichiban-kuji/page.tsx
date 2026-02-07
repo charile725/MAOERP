@@ -62,6 +62,18 @@ export default function IchibanKujiPage() {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [userRole, setUserRole] = useState<'admin' | 'staff' | null>(null)
   const [typeFilter, setTypeFilter] = useState<'all' | 'custom' | 'official'>('all')
+  // 廢套結算
+  const [closeSetDialog, setCloseSetDialog] = useState<{
+    kujiId: string
+    kujiName: string
+    hasLastPrize: boolean
+  } | null>(null)
+  const [closeSetPreview, setCloseSetPreview] = useState<any>(null)
+  const [closeSetLoading, setCloseSetLoading] = useState(false)
+  const [closeSetAccountId, setCloseSetAccountId] = useState<string>('')
+  const [closeSetLastPrize, setCloseSetLastPrize] = useState(false)
+  const [closeSetExecuting, setCloseSetExecuting] = useState(false)
+  const [accounts, setAccounts] = useState<{ id: string; account_name: string }[]>([])
   const [page, setPage] = useState(1)
   const [pagination, setPagination] = useState({
     page: 1,
@@ -77,6 +89,13 @@ export default function IchibanKujiPage() {
         if (data.ok) {
           setUserRole(data.data.role)
         }
+      })
+      .catch(() => { })
+    // 載入帳戶列表（廢套結算用）
+    fetch('/api/accounts?active_only=true')
+      .then(res => res.json())
+      .then(data => {
+        if (data.ok) setAccounts(data.data || [])
       })
       .catch(() => { })
   }, [])
@@ -189,6 +208,86 @@ export default function IchibanKujiPage() {
       }
     } catch (err) {
       alert('操作失敗')
+    }
+  }
+
+  const handleCloseSetPreview = async (kuji: IchibanKuji) => {
+    setCloseSetDialog({
+      kujiId: kuji.id,
+      kujiName: kuji.name,
+      hasLastPrize: !!kuji.last_prize_product_id,
+    })
+    setCloseSetPreview(null)
+    setCloseSetAccountId('')
+    setCloseSetLastPrize(false)
+    setCloseSetLoading(true)
+    try {
+      const res = await fetch(`/api/ichiban-kuji/${kuji.id}/close-set`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ preview: true, last_prize_delivered: false }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setCloseSetPreview(data.data)
+      } else {
+        alert(data.error || '預覽失敗')
+        setCloseSetDialog(null)
+      }
+    } catch {
+      alert('預覽失敗')
+      setCloseSetDialog(null)
+    } finally {
+      setCloseSetLoading(false)
+    }
+  }
+
+  const handleCloseSetRefreshPreview = async (lastPrizeDelivered: boolean) => {
+    if (!closeSetDialog) return
+    setCloseSetLoading(true)
+    try {
+      const res = await fetch(`/api/ichiban-kuji/${closeSetDialog.kujiId}/close-set`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ preview: true, last_prize_delivered: lastPrizeDelivered }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setCloseSetPreview(data.data)
+      }
+    } catch {
+      // ignore
+    } finally {
+      setCloseSetLoading(false)
+    }
+  }
+
+  const handleCloseSetExecute = async () => {
+    if (!closeSetDialog) return
+    if (!confirm(`確定要廢套結算「${closeSetDialog.kujiName}」嗎？\n\n此操作會建立費用記錄並停用此一番賞。`)) return
+    setCloseSetExecuting(true)
+    try {
+      const res = await fetch(`/api/ichiban-kuji/${closeSetDialog.kujiId}/close-set`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          preview: false,
+          account_id: closeSetAccountId || null,
+          last_prize_delivered: closeSetLastPrize,
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        alert('廢套結算完成')
+        setCloseSetDialog(null)
+        fetchKujis(page)
+      } else {
+        alert(data.error || '結算失敗')
+      }
+    } catch {
+      alert('結算失敗')
+    } finally {
+      setCloseSetExecuting(false)
     }
   }
 
@@ -402,6 +501,19 @@ export default function IchibanKujiPage() {
                                       className="block w-full text-left px-4 py-2 text-sm text-teal-600 dark:text-teal-400 hover:bg-gray-100 dark:hover:bg-gray-600"
                                     >
                                       標記已收貨
+                                    </button>
+                                  )}
+                                  {/* 廢套結算（僅自製套 + 啟用中） */}
+                                  {kuji.set_type === 'custom' && kuji.is_active && userRole === 'admin' && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleCloseSetPreview(kuji)
+                                        setOpenMenuId(null)
+                                      }}
+                                      className="block w-full text-left px-4 py-2 text-sm text-orange-600 dark:text-orange-400 hover:bg-gray-100 dark:hover:bg-gray-600"
+                                    >
+                                      廢套結算
                                     </button>
                                   )}
                                   <button
@@ -637,6 +749,160 @@ export default function IchibanKujiPage() {
           )}
         </div>
       </div>
+
+      {/* 廢套結算彈窗 */}
+      {closeSetDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setCloseSetDialog(null)}>
+          <div
+            className="mx-4 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white dark:bg-gray-800 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="border-b border-gray-200 dark:border-gray-700 px-6 py-4">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                廢套結算 - {closeSetDialog.kujiName}
+              </h2>
+            </div>
+
+            <div className="px-6 py-4 space-y-4">
+              {closeSetLoading && !closeSetPreview ? (
+                <div className="py-8 text-center text-gray-500">計算中...</div>
+              ) : closeSetPreview ? (
+                <>
+                  {/* 賞項明細 */}
+                  <div className="rounded border border-gray-200 dark:border-gray-700">
+                    <table className="w-full text-sm">
+                      <thead className="border-b bg-gray-50 dark:bg-gray-900">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-gray-900 dark:text-gray-100">賞別</th>
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-gray-900 dark:text-gray-100">商品</th>
+                          <th className="px-3 py-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">已抽/總數</th>
+                          <th className="px-3 py-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">已抽成本</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                        {closeSetPreview.prize_details.map((p: any, i: number) => (
+                          <tr key={i}>
+                            <td className="px-3 py-1.5 font-medium text-gray-900 dark:text-gray-100">{p.prize_tier}</td>
+                            <td className="px-3 py-1.5 text-gray-600 dark:text-gray-400">{p.product_name}</td>
+                            <td className="px-3 py-1.5 text-right text-gray-900 dark:text-gray-100">
+                              {p.drawn}/{p.quantity}
+                            </td>
+                            <td className="px-3 py-1.5 text-right font-medium text-gray-900 dark:text-gray-100">
+                              {formatCurrency(p.drawn_cost)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* 最後賞勾選 */}
+                  {closeSetDialog.hasLastPrize && (
+                    <label className="flex items-center gap-2 rounded border border-pink-200 dark:border-pink-700 bg-pink-50 dark:bg-pink-900/30 px-4 py-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={closeSetLastPrize}
+                        onChange={(e) => {
+                          setCloseSetLastPrize(e.target.checked)
+                          handleCloseSetRefreshPreview(e.target.checked)
+                        }}
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                      <span className="text-sm font-medium text-pink-700 dark:text-pink-300">
+                        最後賞已送出
+                        {closeSetPreview.last_prize_product_name && (
+                          <span className="ml-1 text-gray-600 dark:text-gray-400">
+                            ({closeSetPreview.last_prize_product_name}, 成本 {formatCurrency(closeSetPreview.last_prize_cost)})
+                          </span>
+                        )}
+                      </span>
+                    </label>
+                  )}
+
+                  {/* 計算摘要 */}
+                  <div className="space-y-2 rounded bg-gray-50 dark:bg-gray-900 p-4">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600 dark:text-gray-400">已售抽數</span>
+                      <span className="font-medium text-gray-900 dark:text-gray-100">
+                        {closeSetPreview.total_draws_sold} / {closeSetPreview.total_draws}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600 dark:text-gray-400">被抽出商品總成本</span>
+                      <span className="font-medium text-gray-900 dark:text-gray-100">
+                        {formatCurrency(closeSetPreview.actual_cost_of_drawn)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600 dark:text-gray-400">
+                        已記錄成本 ({formatCurrency(closeSetPreview.avg_cost)} x {closeSetPreview.total_draws_sold})
+                      </span>
+                      <span className="font-medium text-gray-900 dark:text-gray-100">
+                        {formatCurrency(closeSetPreview.recorded_cost)}
+                      </span>
+                    </div>
+                    <div className="border-t border-gray-300 dark:border-gray-600 pt-2 flex justify-between">
+                      <span className="font-bold text-gray-900 dark:text-gray-100">調整金額</span>
+                      <span className={`text-lg font-bold ${
+                        closeSetPreview.adjustment > 0
+                          ? 'text-red-600 dark:text-red-400'
+                          : closeSetPreview.adjustment < 0
+                            ? 'text-green-600 dark:text-green-400'
+                            : 'text-gray-900 dark:text-gray-100'
+                      }`}>
+                        {closeSetPreview.adjustment >= 0 ? '+' : ''}{formatCurrency(closeSetPreview.adjustment)}
+                      </span>
+                    </div>
+                    {closeSetPreview.adjustment > 0 && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        實際成本高於記錄，需補記費用
+                      </p>
+                    )}
+                    {closeSetPreview.adjustment < 0 && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        實際成本低於記錄，沖回費用
+                      </p>
+                    )}
+                  </div>
+
+                  {/* 帳戶選擇 */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      扣款帳戶（選填）
+                    </label>
+                    <select
+                      value={closeSetAccountId}
+                      onChange={(e) => setCloseSetAccountId(e.target.value)}
+                      className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100"
+                    >
+                      <option value="">不扣帳戶（僅記費用）</option>
+                      {accounts.map((acc) => (
+                        <option key={acc.id} value={acc.id}>{acc.account_name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              ) : null}
+            </div>
+
+            <div className="border-t border-gray-200 dark:border-gray-700 px-6 py-4 flex justify-end gap-3">
+              <button
+                onClick={() => setCloseSetDialog(null)}
+                className="rounded border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleCloseSetExecute}
+                disabled={!closeSetPreview || closeSetExecuting || closeSetLoading}
+                className="rounded bg-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {closeSetExecuting ? '結算中...' : '確認結算'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

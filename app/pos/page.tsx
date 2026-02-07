@@ -574,12 +574,12 @@ export default function POSPage() {
 
     // Add to cart
     const product: Product = {
-      id: prize.product_id,
-      item_code: prize.products.item_code,
-      name: `【${kuji.name}】${prize.prize_tier} - ${prize.products.name}`,
-      unit: prize.products.unit,
+      id: prize.product_id || prize.id,
+      item_code: prize.products?.item_code || prize.prize_tier,
+      name: `【${kuji.name}】${prize.prize_tier} - ${prize.products?.name || prize.prize_name || ''}`,
+      unit: prize.products?.unit || '抽',
       price: kuji.price || 0,
-      cost: prize.products.cost || 0,
+      cost: prize.products?.cost || 0,
       stock: prize.remaining,
       avg_cost: 0,
       allow_negative: false,
@@ -1594,7 +1594,7 @@ export default function POSPage() {
                                     {prize.prize_tier}
                                   </div>
                                   <div className="text-sm font-bold text-center mb-1 line-clamp-2">
-                                    {prize.products.name}
+                                    {prize.products?.name || prize.prize_name || prize.prize_tier}
                                   </div>
                                   <div className="text-lg font-bold">{formatCurrency(selectedKuji.price || 0)}</div>
                                   <div className="text-xs mt-1">剩餘: {prize.remaining}</div>

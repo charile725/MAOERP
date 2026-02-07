@@ -173,6 +173,7 @@ export const expenseSchema = z.object({
     '伙食費',
     '職工福利',
     '傭金支出',
+    '一番賞結損',
   ]),
   amount: z.number().int().positive('Amount must be positive'),
   account_id: z.string().uuid().optional().nullable(),
