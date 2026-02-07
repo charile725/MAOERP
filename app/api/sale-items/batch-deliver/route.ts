@@ -225,18 +225,18 @@ export async function POST(request: NextRequest) {
           continue
         }
 
-        // 寫入庫存日誌（trigger 會自動扣除庫存）
-        for (const item of items) {
-          await (supabaseServer
-            .from('inventory_logs') as any)
-            .insert({
-              product_id: item.product_id,
-              ref_type: 'delivery',
-              ref_id: delivery.id,
-              qty_change: -item.requestedQty,
-              memo: `批量出貨 - ${delivery.delivery_no} (${item.snapshot_name} x${item.requestedQty})`
-            })
-        }
+        // 寫入庫存日誌（批次 insert 優化，trigger 會自動扣除庫存）
+        const inventoryLogs = items.map((item: any) => ({
+          product_id: item.product_id,
+          ref_type: 'delivery',
+          ref_id: delivery.id,
+          qty_change: -item.requestedQty,
+          memo: `批量出貨 - ${delivery.delivery_no} (${item.snapshot_name} x${item.requestedQty})`
+        }))
+
+        await (supabaseServer
+          .from('inventory_logs') as any)
+          .insert(inventoryLogs)
 
         // 更新 sale 的 fulfillment_status（考慮出貨和購物金轉換）
         const { data: allSaleItems } = await (supabaseServer
@@ -314,9 +314,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const message = `成功出貨 ${createdDeliveries.length} 個銷售單，共 ${itemsToDeliver.length} 個商品${
-      deliveryErrors.length > 0 ? `\n\n部分失敗：\n${deliveryErrors.join('\n')}` : ''
-    }`
+    const message = `成功出貨 ${createdDeliveries.length} 個銷售單，共 ${itemsToDeliver.length} 個商品${deliveryErrors.length > 0 ? `\n\n部分失敗：\n${deliveryErrors.join('\n')}` : ''
+      }`
 
     return NextResponse.json({
       ok: true,

@@ -62,13 +62,17 @@ export async function PATCH(
       )
     }
 
-    // 檢查庫存是否足夠
+    // 檢查庫存是否足夠（批次查詢優化）
+    const productIds = delivery.delivery_items.map((item: any) => item.product_id)
+    const { data: products } = await (supabaseServer
+      .from('products') as any)
+      .select('id, stock, allow_negative, name')
+      .in('id', productIds)
+
+    const productMap = new Map((products || []).map((p: any) => [p.id, p]))
+
     for (const item of delivery.delivery_items) {
-      const { data: product } = await (supabaseServer
-        .from('products') as any)
-        .select('stock, allow_negative, name')
-        .eq('id', item.product_id)
-        .single()
+      const product = productMap.get(item.product_id)
 
       if (!product) {
         return NextResponse.json(
@@ -78,30 +82,21 @@ export async function PATCH(
       }
 
       // 不再檢查庫存，支援負庫存出貨
-      // if (!product.allow_negative && product.stock < item.quantity) {
-      //   return NextResponse.json(
-      //     {
-      //       ok: false,
-      //       error: `${product.name} 庫存不足。剩餘: ${product.stock}, 需要: ${item.quantity}`,
-      //     },
-      //     { status: 400 }
-      //   )
-      // }
+      // if (!product.allow_negative && product.stock < item.quantity) { ... }
     }
 
-    // 扣庫存：只寫入 inventory_logs，trigger 會自動更新 products.stock
-    for (const item of delivery.delivery_items) {
-      // 🔧 修复：移除手动更新 stock，只寫入庫存日誌（trigger 會自動處理）
-      await (supabaseServer
-        .from('inventory_logs') as any)
-        .insert({
-          product_id: item.product_id,
-          ref_type: 'delivery',
-          ref_id: id,
-          qty_change: -item.quantity,
-          memo: `出貨扣庫存 - ${delivery.delivery_no}`,
-        })
-    }
+    // 扣庫存：批次寫入 inventory_logs（trigger 會自動更新 products.stock）
+    const inventoryLogs = delivery.delivery_items.map((item: any) => ({
+      product_id: item.product_id,
+      ref_type: 'delivery',
+      ref_id: id,
+      qty_change: -item.quantity,
+      memo: `出貨扣庫存 - ${delivery.delivery_no}`,
+    }))
+
+    await (supabaseServer
+      .from('inventory_logs') as any)
+      .insert(inventoryLogs)
 
     // 更新出貨單狀態
     const { data: confirmedDelivery, error: updateError } = await (supabaseServer

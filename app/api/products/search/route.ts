@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
 
     let query = supabaseServer
       .from('products')
-      .select('*')
+      .select('id, item_code, barcode, name, unit, price, cost, stock, avg_cost, allow_negative, is_active')
 
     // Only filter by active status if activeOnly is true (for POS)
     // For purchases/inventory management, allow searching all products

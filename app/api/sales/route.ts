@@ -342,18 +342,41 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 2. Check stock availability for each item
+    // 2. Check stock availability for each item（批次查詢優化）
+    // 分離一般商品和一番賞
+    const productIds = draft.items.filter(i => !i.ichiban_kuji_prize_id).map(i => i.product_id)
+    const prizeIds = draft.items.filter(i => i.ichiban_kuji_prize_id).map(i => i.ichiban_kuji_prize_id).filter((id): id is string => !!id)
+
+    // 批次查詢商品
+    let productMap = new Map<string, { stock: number; allow_negative: boolean; name: string }>()
+    if (productIds.length > 0) {
+      const { data: products } = await (supabaseServer
+        .from('products') as any)
+        .select('id, stock, allow_negative, name')
+        .in('id', productIds)
+      if (products) {
+        productMap = new Map(products.map((p: any) => [p.id, p]))
+      }
+    }
+
+    // 批次查詢一番賞
+    let prizeMap = new Map<string, { remaining: number; prize_tier: string }>()
+    if (prizeIds.length > 0) {
+      const { data: prizes } = await (supabaseServer
+        .from('ichiban_kuji_prizes') as any)
+        .select('id, remaining, prize_tier')
+        .in('id', prizeIds)
+      if (prizes) {
+        prizeMap = new Map(prizes.map((p: any) => [p.id, p]))
+      }
+    }
+
+    // 驗證庫存
     for (const item of draft.items) {
-      // 如果是從一番賞售出，檢查一番賞庫存
       if (item.ichiban_kuji_prize_id) {
-        const { data: prize } = await (supabaseServer
-          .from('ichiban_kuji_prizes') as any)
-          .select('remaining, prize_tier')
-          .eq('id', item.ichiban_kuji_prize_id)
-          .single()
+        const prize = prizeMap.get(item.ichiban_kuji_prize_id)
 
         if (!prize) {
-          // Rollback: delete the sale
           await (supabaseServer.from('sales') as any).delete().eq('id', sale.id)
           return NextResponse.json(
             { ok: false, error: `Prize not found: ${item.ichiban_kuji_prize_id}` },
@@ -362,7 +385,6 @@ export async function POST(request: NextRequest) {
         }
 
         if (prize.remaining < item.quantity) {
-          // Rollback: delete the sale
           await (supabaseServer.from('sales') as any).delete().eq('id', sale.id)
           return NextResponse.json(
             {
@@ -373,15 +395,9 @@ export async function POST(request: NextRequest) {
           )
         }
       } else {
-        // 一般商品，檢查商品庫存
-        const { data: product } = await (supabaseServer
-          .from('products') as any)
-          .select('stock, allow_negative, name')
-          .eq('id', item.product_id)
-          .single()
+        const product = productMap.get(item.product_id)
 
         if (!product) {
-          // Rollback: delete the sale
           await (supabaseServer.from('sales') as any).delete().eq('id', sale.id)
           return NextResponse.json(
             { ok: false, error: `Product not found: ${item.product_id}` },
@@ -390,17 +406,7 @@ export async function POST(request: NextRequest) {
         }
 
         // 移除庫存檢查，允許所有商品負庫存銷售
-        // if (!product.allow_negative && product.stock < item.quantity) {
-        //   // Rollback: delete the sale
-        //   await (supabaseServer.from('sales') as any).delete().eq('id', sale.id)
-        //   return NextResponse.json(
-        //     {
-        //       ok: false,
-        //       error: `${product.name} 庫存不足。剩餘: ${product.stock}, 需要: ${item.quantity}`,
-        //     },
-        //     { status: 400 }
-        //   )
-        // }
+        // if (!product.allow_negative && product.stock < item.quantity) { ... }
       }
     }
 

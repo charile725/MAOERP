@@ -203,9 +203,16 @@ export async function POST(
                     .in('partner_account_id', arIds)
 
                 if (allocations && allocations.length > 0) {
-                    const settlementIds = [...new Set(allocations.map((a: any) => a.settlement_id))]
+                    // 按 settlement 分組，加總此銷售單的 allocation 金額
+                    const refundBySettlement = new Map<string, { amount: number, allocIds: string[] }>()
+                    for (const alloc of allocations) {
+                        const existing = refundBySettlement.get(alloc.settlement_id) || { amount: 0, allocIds: [] }
+                        existing.amount += alloc.amount
+                        existing.allocIds.push(alloc.id)
+                        refundBySettlement.set(alloc.settlement_id, existing)
+                    }
 
-                    for (const settlementId of settlementIds) {
+                    for (const [settlementId, { amount: refundAmount, allocIds }] of refundBySettlement.entries()) {
                         const { data: settlement } = await (supabaseServer
                             .from('settlements') as any)
                             .select('amount, account_id, method, partner_code')
@@ -214,7 +221,7 @@ export async function POST(
 
                         if (settlement) {
                             if (settlement.method === 'store_credit' && settlement.partner_code) {
-                                // 購物金收款：回補購物金（這筆錢本來就是購物金，現在又轉購物金，需要加回來）
+                                // 購物金收款：回補購物金
                                 const { data: cust } = await (supabaseServer
                                     .from('customers') as any)
                                     .select('store_credit')
@@ -222,9 +229,11 @@ export async function POST(
                                     .single()
 
                                 if (cust) {
+                                    const scBefore = cust.store_credit || 0
+                                    const scAfter = scBefore + refundAmount
                                     await (supabaseServer
                                         .from('customers') as any)
-                                        .update({ store_credit: cust.store_credit + settlement.amount })
+                                        .update({ store_credit: scAfter })
                                         .eq('customer_code', settlement.partner_code)
 
                                     // 記錄購物金回補日誌
@@ -232,9 +241,9 @@ export async function POST(
                                         .from('customer_balance_logs') as any)
                                         .insert({
                                             customer_code: settlement.partner_code,
-                                            amount: settlement.amount,
-                                            balance_before: cust.store_credit,
-                                            balance_after: cust.store_credit + settlement.amount,
+                                            amount: refundAmount,
+                                            balance_before: scBefore,
+                                            balance_after: scAfter,
                                             type: 'refund',
                                             ref_type: 'sale_to_store_credit_refund',
                                             ref_id: id,
@@ -259,7 +268,7 @@ export async function POST(
                                     .single()
 
                                 if (account) {
-                                    const newBalance = account.balance - settlement.amount
+                                    const newBalance = account.balance - refundAmount
 
                                     await (supabaseServer
                                         .from('accounts') as any)
@@ -275,7 +284,7 @@ export async function POST(
                                         .insert({
                                             account_id: settlement.account_id,
                                             transaction_type: 'sale_to_store_credit',
-                                            amount: -settlement.amount,
+                                            amount: -refundAmount,
                                             balance_before: account.balance,
                                             balance_after: newBalance,
                                             ref_type: 'sale_to_store_credit',
@@ -294,16 +303,37 @@ export async function POST(
                             }
                         }
 
-                        // 刪除 settlement_allocations 和 settlement
-                        await (supabaseServer
+                        // 只刪除此銷售單的 allocations
+                        for (const allocId of allocIds) {
+                            await (supabaseServer
+                                .from('settlement_allocations') as any)
+                                .delete()
+                                .eq('id', allocId)
+                        }
+
+                        // 檢查 settlement 是否還有其他 allocations
+                        const { data: remaining } = await (supabaseServer
                             .from('settlement_allocations') as any)
-                            .delete()
+                            .select('id, amount')
                             .eq('settlement_id', settlementId)
 
-                        await (supabaseServer
-                            .from('settlements') as any)
-                            .delete()
-                            .eq('id', settlementId)
+                        if (!remaining || remaining.length === 0) {
+                            await (supabaseServer
+                                .from('account_transactions') as any)
+                                .delete()
+                                .eq('ref_type', 'settlement')
+                                .eq('ref_id', settlementId)
+                            await (supabaseServer
+                                .from('settlements') as any)
+                                .delete()
+                                .eq('id', settlementId)
+                        } else {
+                            const newAmount = remaining.reduce((s: number, a: any) => s + a.amount, 0)
+                            await (supabaseServer
+                                .from('settlements') as any)
+                                .update({ amount: newAmount })
+                                .eq('id', settlementId)
+                        }
                     }
                 }
             }

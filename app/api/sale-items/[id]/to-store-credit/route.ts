@@ -310,10 +310,28 @@ export async function POST(
                                     .eq('id', stl.account_id)
                                     .single()
                                 if (acct) {
+                                    const balanceBefore = Number(acct.balance)
+                                    const balanceAfter = balanceBefore - refundAmount
                                     await (supabaseServer
                                         .from('accounts') as any)
-                                        .update({ balance: Number(acct.balance) - refundAmount, updated_at: getTaiwanTime() })
+                                        .update({ balance: balanceAfter, updated_at: getTaiwanTime() })
                                         .eq('id', stl.account_id)
+
+                                    // 記錄帳戶交易
+                                    await (supabaseServer
+                                        .from('account_transactions') as any)
+                                        .insert({
+                                            account_id: stl.account_id,
+                                            transaction_type: 'sale_to_store_credit',
+                                            amount: -refundAmount,
+                                            balance_before: balanceBefore,
+                                            balance_after: balanceAfter,
+                                            ref_type: 'sale_to_store_credit',
+                                            ref_id: saleItem.id,
+                                            ref_no: sale.sale_no,
+                                            note: `單品轉購物金退還原付款 - ${sale.sale_no}`,
+                                            created_at: getTaiwanTime(),
+                                        })
                                 }
                             }
                         }

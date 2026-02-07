@@ -38,13 +38,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verify all accounts are AP
+    // Verify all accounts are AP（批次查詢優化）
+    const accountIds = draft.allocations.map(a => a.partner_account_id)
+    const { data: accounts } = await (supabaseServer
+      .from('partner_accounts') as any)
+      .select('id, direction, balance')
+      .in('id', accountIds)
+
+    const accountMap = new Map((accounts || []).map((a: any) => [a.id, a]))
+
     for (const allocation of draft.allocations) {
-      const { data: account } = await (supabaseServer
-        .from('partner_accounts') as any)
-        .select('direction, balance')
-        .eq('id', allocation.partner_account_id)
-        .single()
+      const account = accountMap.get(allocation.partner_account_id) as { id: string; direction: string; balance: number } | undefined
 
       if (!account) {
         return NextResponse.json(
