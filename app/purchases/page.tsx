@@ -542,6 +542,14 @@ export default function PurchasesPage() {
               >
                 未收貨統計
               </Link>
+              {isAdmin && (
+                <Link
+                  href="/purchases/official-kuji"
+                  className="text-sm text-orange-600 dark:text-orange-400 hover:underline min-h-[44px] flex items-center"
+                >
+                  官方賞進貨
+                </Link>
+              )}
             </div>
           </form>
         </div>
