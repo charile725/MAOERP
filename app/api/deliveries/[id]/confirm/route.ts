@@ -121,11 +121,59 @@ export async function PATCH(
       )
     }
 
-    // 更新 sales 的履約狀態
-    await (supabaseServer
-      .from('sales') as any)
-      .update({ fulfillment_status: 'completed' })
-      .eq('id', delivery.sale_id)
+    // 更新 sales 的履約狀態（根據實際出貨情況判斷）
+    const { data: allSaleItems } = await (supabaseServer
+      .from('sale_items') as any)
+      .select('id, quantity, store_credit_qty')
+      .eq('sale_id', delivery.sale_id)
+
+    if (allSaleItems && allSaleItems.length > 0) {
+      const allItemIds = allSaleItems.map((item: any) => item.id)
+
+      // 查詢所有已確認出貨的明細
+      const { data: confirmedDeliveryItems } = await (supabaseServer
+        .from('delivery_items') as any)
+        .select(`
+          sale_item_id,
+          quantity,
+          deliveries!inner (status)
+        `)
+        .in('sale_item_id', allItemIds)
+        .eq('deliveries.status', 'confirmed')
+
+      const deliveredQtyMap = new Map<string, number>()
+      confirmedDeliveryItems?.forEach((di: any) => {
+        const cur = deliveredQtyMap.get(di.sale_item_id) || 0
+        deliveredQtyMap.set(di.sale_item_id, cur + di.quantity)
+      })
+
+      let fullyResolved = 0
+      let partiallyResolved = 0
+
+      for (const item of allSaleItems) {
+        const deliveredQty = deliveredQtyMap.get(item.id) || 0
+        const scQty = item.store_credit_qty || 0
+        const resolvedQty = deliveredQty + scQty
+
+        if (resolvedQty >= item.quantity) {
+          fullyResolved++
+        } else if (resolvedQty > 0) {
+          partiallyResolved++
+        }
+      }
+
+      let newFulfillmentStatus = 'none'
+      if (fullyResolved === allSaleItems.length) {
+        newFulfillmentStatus = 'completed'
+      } else if (fullyResolved > 0 || partiallyResolved > 0) {
+        newFulfillmentStatus = 'partial'
+      }
+
+      await (supabaseServer
+        .from('sales') as any)
+        .update({ fulfillment_status: newFulfillmentStatus })
+        .eq('id', delivery.sale_id)
+    }
 
     return NextResponse.json({
       ok: true,

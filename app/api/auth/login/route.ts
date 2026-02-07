@@ -5,7 +5,6 @@ import { createSession, verifyPassword } from '@/lib/auth'
 export async function POST(request: NextRequest) {
   try {
     const { username, password } = await request.json()
-    console.log('[LOGIN] Attempting login for username:', username)
 
     if (!username || !password) {
       return NextResponse.json(
@@ -22,15 +21,7 @@ export async function POST(request: NextRequest) {
       .eq('is_active', true)
       .single() as any
 
-    console.log('[LOGIN] Database query error:', error)
-    console.log('[LOGIN] User found:', user ? 'Yes' : 'No')
-    if (user) {
-      console.log('[LOGIN] User role:', user.role)
-      console.log('[LOGIN] User is_active:', user.is_active)
-    }
-
     if (error || !user) {
-      console.log('[LOGIN] User not found or error')
       return NextResponse.json(
         { ok: false, error: '帳號或密碼錯誤' },
         { status: 401 }
@@ -38,12 +29,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify password
-    console.log('[LOGIN] Verifying password...')
     const isValid = await verifyPassword(password, user.password_hash)
-    console.log('[LOGIN] Password valid:', isValid)
 
     if (!isValid) {
-      console.log('[LOGIN] Invalid password')
       return NextResponse.json(
         { ok: false, error: '帳號或密碼錯誤' },
         { status: 401 }

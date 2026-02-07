@@ -225,11 +225,108 @@ export async function POST(
             }
         }
 
-        // 7. 刪除相關應收帳款記錄
-        await (supabaseServer
+        // 7. 處理相關應收帳款（如有已收款需退款）
+        const { data: arForItem } = await (supabaseServer
             .from('partner_accounts') as any)
-            .delete()
+            .select('id, amount, received_paid')
             .eq('sale_item_id', saleItem.id)
+
+        if (arForItem && arForItem.length > 0) {
+            const arIds = arForItem.map((ar: any) => ar.id)
+            const totalPaidOnAR = arForItem.reduce((sum: number, ar: any) => sum + (ar.received_paid || 0), 0)
+
+            // 如果有已收款金額，需要退還
+            if (totalPaidOnAR > 0) {
+                const { data: arAllocations } = await (supabaseServer
+                    .from('settlement_allocations') as any)
+                    .select('id, settlement_id, amount')
+                    .in('partner_account_id', arIds)
+
+                if (arAllocations && arAllocations.length > 0) {
+                    const refundBySettlement = new Map<string, { amount: number, allocIds: string[] }>()
+                    for (const alloc of arAllocations) {
+                        const existing = refundBySettlement.get(alloc.settlement_id) || { amount: 0, allocIds: [] }
+                        existing.amount += alloc.amount
+                        existing.allocIds.push(alloc.id)
+                        refundBySettlement.set(alloc.settlement_id, existing)
+                    }
+
+                    for (const [settlementId, { amount: refundAmount, allocIds }] of refundBySettlement.entries()) {
+                        const { data: stl } = await (supabaseServer
+                            .from('settlements') as any)
+                            .select('amount, account_id, method, partner_code')
+                            .eq('id', settlementId)
+                            .single()
+
+                        if (stl) {
+                            if (stl.method === 'store_credit' && stl.partner_code) {
+                                const { data: cust } = await (supabaseServer
+                                    .from('customers') as any)
+                                    .select('store_credit')
+                                    .eq('customer_code', stl.partner_code)
+                                    .single()
+                                if (cust) {
+                                    await (supabaseServer
+                                        .from('customers') as any)
+                                        .update({ store_credit: cust.store_credit + refundAmount })
+                                        .eq('customer_code', stl.partner_code)
+                                }
+                            } else if (stl.account_id) {
+                                const { data: acct } = await (supabaseServer
+                                    .from('accounts') as any)
+                                    .select('balance')
+                                    .eq('id', stl.account_id)
+                                    .single()
+                                if (acct) {
+                                    await (supabaseServer
+                                        .from('accounts') as any)
+                                        .update({ balance: Number(acct.balance) - refundAmount, updated_at: getTaiwanTime() })
+                                        .eq('id', stl.account_id)
+                                }
+                            }
+                        }
+
+                        // 刪除本項目的 allocations
+                        for (const allocId of allocIds) {
+                            await (supabaseServer
+                                .from('settlement_allocations') as any)
+                                .delete()
+                                .eq('id', allocId)
+                        }
+
+                        // 檢查 settlement 是否還有其他 allocations
+                        const { data: remaining } = await (supabaseServer
+                            .from('settlement_allocations') as any)
+                            .select('id, amount')
+                            .eq('settlement_id', settlementId)
+
+                        if (!remaining || remaining.length === 0) {
+                            await (supabaseServer
+                                .from('account_transactions') as any)
+                                .delete()
+                                .eq('ref_type', 'settlement')
+                                .eq('ref_id', settlementId)
+                            await (supabaseServer
+                                .from('settlements') as any)
+                                .delete()
+                                .eq('id', settlementId)
+                        } else {
+                            const newAmount = remaining.reduce((s: number, a: any) => s + a.amount, 0)
+                            await (supabaseServer
+                                .from('settlements') as any)
+                                .update({ amount: newAmount })
+                                .eq('id', settlementId)
+                        }
+                    }
+                }
+            }
+
+            // 刪除 AR 記錄
+            await (supabaseServer
+                .from('partner_accounts') as any)
+                .delete()
+                .in('id', arIds)
+        }
 
         // 8. 記錄銷貨更正
         await (supabaseServer

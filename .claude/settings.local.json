@@ -33,7 +33,9 @@
       "Bash(dir:*)",
       "Bash(npx next build)",
       "Bash(npx next lint:*)",
-      "Bash(python scripts/search.py:*)"
+      "Bash(python scripts/search.py:*)",
+      "Bash(git diff:*)",
+      "Bash(python3:*)"
     ]
   }
 }

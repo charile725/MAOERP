@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase/server'
 import { transferFunds } from '@/lib/account-service'
+import { requireRole } from '@/lib/auth'
 
 export async function POST(request: NextRequest) {
     try {
+        await requireRole('admin')
         const body = await request.json()
         const { fromAccountId, toAccountId, amount, date, note } = body
 

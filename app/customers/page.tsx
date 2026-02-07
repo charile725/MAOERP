@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import type { Customer } from '@/types'
-import { MoreHorizontal, Edit, Trash2, Wallet, TrendingUp, TrendingDown } from 'lucide-react'
+import { MoreHorizontal, Edit, Trash2, Wallet, TrendingUp, TrendingDown, History } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,6 +32,22 @@ export default function CustomersPage() {
   const [adjustType, setAdjustType] = useState<'recharge' | 'deduct' | 'adjustment'>('recharge')
   const [adjustNote, setAdjustNote] = useState('')
   const [adjustError, setAdjustError] = useState('')
+
+  // 購物金記錄相關狀態
+  type BalanceLog = {
+    id: string
+    amount: number
+    balance_before: number
+    balance_after: number
+    type: string
+    ref_type: string | null
+    ref_no: string | null
+    note: string | null
+    created_at: string
+  }
+  const [balanceLogsCustomer, setBalanceLogsCustomer] = useState<Customer | null>(null)
+  const [balanceLogs, setBalanceLogs] = useState<BalanceLog[]>([])
+  const [balanceLogsLoading, setBalanceLogsLoading] = useState(false)
 
   // 客户损益数据
   type CustomerProfit = {
@@ -105,12 +121,12 @@ export default function CustomersPage() {
   // 排序和分頁計算
   const sortedCustomers = showProfit && profitSortField
     ? [...customers].sort((a, b) => {
-        const profitA = profitData[a.customer_code]
-        const profitB = profitData[b.customer_code]
-        const valA = profitA?.[profitSortField] || 0
-        const valB = profitB?.[profitSortField] || 0
-        return profitSortDir === 'desc' ? valB - valA : valA - valB
-      })
+      const profitA = profitData[a.customer_code]
+      const profitB = profitData[b.customer_code]
+      const valA = profitA?.[profitSortField] || 0
+      const valB = profitB?.[profitSortField] || 0
+      return profitSortDir === 'desc' ? valB - valA : valA - valB
+    })
     : customers
 
   const totalPages = Math.ceil(sortedCustomers.length / pageSize)
@@ -253,6 +269,31 @@ export default function CustomersPage() {
     } finally {
       setProcessing(false)
     }
+  }
+
+  const fetchBalanceLogs = async (customerCode: string) => {
+    setBalanceLogsLoading(true)
+    try {
+      const res = await fetch(`/api/customers/balance-logs?customer_code=${customerCode}`)
+      const data = await res.json()
+      if (data.ok) {
+        setBalanceLogs(data.data || [])
+      }
+    } catch (err) {
+      console.error('Failed to fetch balance logs:', err)
+    } finally {
+      setBalanceLogsLoading(false)
+    }
+  }
+
+  const openBalanceLogsModal = (customer: Customer) => {
+    setBalanceLogsCustomer(customer)
+    fetchBalanceLogs(customer.customer_code)
+  }
+
+  const closeBalanceLogsModal = () => {
+    setBalanceLogsCustomer(null)
+    setBalanceLogs([])
   }
 
   return (
@@ -431,107 +472,112 @@ export default function CustomersPage() {
                   {paginatedCustomers.map((customer) => {
                     const profit = profitData[customer.customer_code]
                     return (
-                    <tr key={customer.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                      <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{customer.customer_code}</td>
-                      <td className="px-4 py-3 text-sm font-semibold text-gray-900 dark:text-gray-100">{customer.customer_name}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{customer.phone || '-'}</td>
-                      {!showProfit && (
-                        <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
-                          <div className="max-w-[200px] truncate" title={customer.store_address || ''}>
-                            {customer.store_address || '-'}
-                          </div>
-                        </td>
-                      )}
-                      {!showProfit && (
-                        <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
-                          <div className="max-w-[200px] truncate" title={customer.delivery_address || ''}>
-                            {customer.delivery_address || '-'}
-                          </div>
-                        </td>
-                      )}
-                      <td className="px-4 py-3 text-sm text-right">
-                        <span className={`font-bold ${customer.store_credit >= 0
-                          ? 'text-green-600 dark:text-green-400'
-                          : 'text-red-600 dark:text-red-400'
-                          }`}>
-                          ${customer.store_credit?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
-                        </span>
-                      </td>
-                      {showProfit && (
-                        <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100">
-                          {profit?.order_count || 0}
-                        </td>
-                      )}
-                      {showProfit && (
-                        <td className="px-4 py-3 text-sm text-right text-blue-600 dark:text-blue-400 font-medium">
-                          ${profit?.total_sales?.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || '0'}
-                        </td>
-                      )}
-                      {showProfit && (
-                        <td className="px-4 py-3 text-sm text-right text-orange-600 dark:text-orange-400 font-medium">
-                          ${profit?.total_cost?.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || '0'}
-                        </td>
-                      )}
-                      {showProfit && (
+                      <tr key={customer.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{customer.customer_code}</td>
+                        <td className="px-4 py-3 text-sm font-semibold text-gray-900 dark:text-gray-100">{customer.customer_name}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{customer.phone || '-'}</td>
+                        {!showProfit && (
+                          <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
+                            <div className="max-w-[200px] truncate" title={customer.store_address || ''}>
+                              {customer.store_address || '-'}
+                            </div>
+                          </td>
+                        )}
+                        {!showProfit && (
+                          <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
+                            <div className="max-w-[200px] truncate" title={customer.delivery_address || ''}>
+                              {customer.delivery_address || '-'}
+                            </div>
+                          </td>
+                        )}
                         <td className="px-4 py-3 text-sm text-right">
-                          <span className={`font-bold ${(profit?.net_profit || 0) >= 0
+                          <span className={`font-bold ${customer.store_credit >= 0
                             ? 'text-green-600 dark:text-green-400'
                             : 'text-red-600 dark:text-red-400'
                             }`}>
-                            {(profit?.net_profit || 0) >= 0 ? '+' : ''}${profit?.net_profit?.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || '0'}
+                            ${customer.store_credit?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
                           </span>
                         </td>
-                      )}
-                      {!showProfit && (
-                        <td className="px-4 py-3 text-sm text-center">
-                          <span className="inline-block px-2 py-0.5 rounded text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
-                            {customer.payment_method === 'cash' && '現金'}
-                            {customer.payment_method === 'card' && '刷卡'}
-                            {customer.payment_method === 'transfer' && '轉帳'}
-                            {customer.payment_method === 'cod' && '貨到付款'}
-                            {!customer.payment_method && '-'}
+                        {showProfit && (
+                          <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100">
+                            {profit?.order_count || 0}
+                          </td>
+                        )}
+                        {showProfit && (
+                          <td className="px-4 py-3 text-sm text-right text-blue-600 dark:text-blue-400 font-medium">
+                            ${profit?.total_sales?.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || '0'}
+                          </td>
+                        )}
+                        {showProfit && (
+                          <td className="px-4 py-3 text-sm text-right text-orange-600 dark:text-orange-400 font-medium">
+                            ${profit?.total_cost?.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || '0'}
+                          </td>
+                        )}
+                        {showProfit && (
+                          <td className="px-4 py-3 text-sm text-right">
+                            <span className={`font-bold ${(profit?.net_profit || 0) >= 0
+                              ? 'text-green-600 dark:text-green-400'
+                              : 'text-red-600 dark:text-red-400'
+                              }`}>
+                              {(profit?.net_profit || 0) >= 0 ? '+' : ''}${profit?.net_profit?.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || '0'}
+                            </span>
+                          </td>
+                        )}
+                        {!showProfit && (
+                          <td className="px-4 py-3 text-sm text-center">
+                            <span className="inline-block px-2 py-0.5 rounded text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                              {customer.payment_method === 'cash' && '現金'}
+                              {customer.payment_method === 'card' && '刷卡'}
+                              {customer.payment_method === 'transfer' && '轉帳'}
+                              {customer.payment_method === 'cod' && '貨到付款'}
+                              {!customer.payment_method && '-'}
+                            </span>
+                          </td>
+                        )}
+                        {!showProfit && <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{customer.line_id || '-'}</td>}
+                        <td className="px-4 py-3 text-center text-sm">
+                          <span
+                            className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${customer.is_active
+                              ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                              : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
+                              }`}
+                          >
+                            {customer.is_active ? '啟用' : '停用'}
                           </span>
                         </td>
-                      )}
-                      {!showProfit && <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{customer.line_id || '-'}</td>}
-                      <td className="px-4 py-3 text-center text-sm">
-                        <span
-                          className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${customer.is_active
-                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                            : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
-                            }`}
-                        >
-                          {customer.is_active ? '啟用' : '停用'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center text-sm">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => openAdjustModal(customer)}>
-                              <Wallet className="mr-2 h-4 w-4" />
-                              調整購物金
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => openEditModal(customer)}>
-                              <Edit className="mr-2 h-4 w-4" />
-                              編輯
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleDelete(customer)}
-                              className="text-red-600 focus:text-red-600"
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              刪除
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </td>
-                    </tr>
-                  )})}
+                        <td className="px-4 py-3 text-center text-sm">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" className="h-8 w-8 p-0">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => openAdjustModal(customer)}>
+                                <Wallet className="mr-2 h-4 w-4" />
+                                調整購物金
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => openBalanceLogsModal(customer)}>
+                                <History className="mr-2 h-4 w-4" />
+                                購物金記錄
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => openEditModal(customer)}>
+                                <Edit className="mr-2 h-4 w-4" />
+                                編輯
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => handleDelete(customer)}
+                                className="text-red-600 focus:text-red-600"
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                刪除
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -847,6 +893,111 @@ export default function CustomersPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Balance Logs Modal */}
+      {balanceLogsCustomer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="w-full max-w-2xl max-h-[80vh] rounded-lg bg-white dark:bg-gray-800 p-6 flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">購物金記錄</h2>
+              <button
+                onClick={closeBalanceLogsModal}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mb-4 rounded-lg bg-gray-50 dark:bg-gray-700 p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-sm font-medium text-gray-600 dark:text-gray-300">客戶：</span>
+                  <span className="ml-2 font-semibold text-gray-900 dark:text-gray-100">
+                    {balanceLogsCustomer.customer_name} ({balanceLogsCustomer.customer_code})
+                  </span>
+                </div>
+                <div>
+                  <span className="text-sm font-medium text-gray-600 dark:text-gray-300">當前餘額：</span>
+                  <span className={`ml-2 text-lg font-bold ${balanceLogsCustomer.store_credit >= 0
+                    ? 'text-green-600 dark:text-green-400'
+                    : 'text-red-600 dark:text-red-400'
+                    }`}>
+                    ${balanceLogsCustomer.store_credit?.toFixed(2) || '0.00'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-auto">
+              {balanceLogsLoading ? (
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400">載入中...</div>
+              ) : balanceLogs.length === 0 ? (
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400">沒有購物金異動記錄</div>
+              ) : (
+                <table className="w-full">
+                  <thead className="bg-gray-50 dark:bg-gray-900 sticky top-0">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400">日期</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400">類型</th>
+                      <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600 dark:text-gray-400">金額</th>
+                      <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600 dark:text-gray-400">餘額</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400">備註</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                    {balanceLogs.map((log) => (
+                      <tr key={log.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <td className="px-3 py-2 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                          {new Date(log.created_at).toLocaleString('zh-TW', {
+                            year: 'numeric', month: '2-digit', day: '2-digit',
+                            hour: '2-digit', minute: '2-digit'
+                          })}
+                        </td>
+                        <td className="px-3 py-2 text-sm">
+                          <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${log.type === 'recharge' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' :
+                            log.type === 'deduct' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400' :
+                              log.type === 'sale' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400' :
+                                log.type === 'refund' ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400' :
+                                  'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                            }`}>
+                            {log.type === 'recharge' && '充值'}
+                            {log.type === 'deduct' && '扣減'}
+                            {log.type === 'sale' && '消費'}
+                            {log.type === 'refund' && '退款'}
+                            {log.type === 'adjustment' && '調整'}
+                            {!['recharge', 'deduct', 'sale', 'refund', 'adjustment'].includes(log.type) && log.type}
+                          </span>
+                        </td>
+                        <td className={`px-3 py-2 text-sm text-right font-medium ${log.amount >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                          }`}>
+                          {log.amount >= 0 ? '+' : ''}{log.amount.toFixed(2)}
+                        </td>
+                        <td className="px-3 py-2 text-sm text-right text-gray-900 dark:text-gray-100">
+                          {log.balance_after?.toFixed(2) || '-'}
+                        </td>
+                        <td className="px-3 py-2 text-sm text-gray-600 dark:text-gray-400 max-w-[200px] truncate" title={log.note || ''}>
+                          {log.ref_no && <span className="text-blue-600 dark:text-blue-400">{log.ref_no}</span>}
+                          {log.ref_no && log.note && ' - '}
+                          {log.note || '-'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <div className="mt-4 pt-4 border-t dark:border-gray-700">
+              <button
+                onClick={closeBalanceLogsModal}
+                className="w-full rounded bg-gray-200 dark:bg-gray-700 px-4 py-2 font-medium text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600"
+              >
+                關閉
+              </button>
+            </div>
           </div>
         </div>
       )}
