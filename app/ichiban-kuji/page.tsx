@@ -61,6 +61,7 @@ export default function IchibanKujiPage() {
   const [deleting, setDeleting] = useState<string | null>(null)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [userRole, setUserRole] = useState<'admin' | 'staff' | null>(null)
+  const [typeFilter, setTypeFilter] = useState<'all' | 'custom' | 'official'>('all')
   const [page, setPage] = useState(1)
   const [pagination, setPagination] = useState({
     page: 1,
@@ -82,12 +83,14 @@ export default function IchibanKujiPage() {
 
   useEffect(() => {
     fetchKujis(page)
-  }, [page])
+  }, [page, typeFilter])
 
   const fetchKujis = async (currentPage: number = page) => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/ichiban-kuji?page=${currentPage}`)
+      const params = new URLSearchParams({ page: String(currentPage) })
+      if (typeFilter !== 'all') params.set('set_type', typeFilter)
+      const res = await fetch(`/api/ichiban-kuji?${params}`)
       const data = await res.json()
       if (data.ok) {
         setKujis(data.data || [])
@@ -210,6 +213,26 @@ export default function IchibanKujiPage() {
           </div>
         </div>
 
+        {/* 分類篩選 */}
+        <div className="mb-4 flex gap-2">
+          {([
+            { key: 'all', label: '全部' },
+            { key: 'custom', label: '自製' },
+            { key: 'official', label: '官方' },
+          ] as const).map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => { setTypeFilter(key); setPage(1) }}
+              className={`rounded px-4 py-1.5 text-sm font-medium ${typeFilter === key
+                ? key === 'official' ? 'bg-orange-600 text-white' : 'bg-blue-600 text-white'
+                : 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
         <div className="rounded-lg bg-white dark:bg-gray-800 shadow">
           {loading ? (
             <div className="p-8 text-center text-gray-900 dark:text-gray-100">載入中...</div>
@@ -224,7 +247,7 @@ export default function IchibanKujiPage() {
               </button>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-visible">
               <table className="w-full">
                 <thead className="border-b bg-gray-50 dark:bg-gray-900">
                   <tr>
@@ -293,8 +316,8 @@ export default function IchibanKujiPage() {
                             {/* 收貨狀態（僅官方套顯示） */}
                             {kuji.set_type === 'official' && (
                               <span className={`inline-block rounded px-1.5 py-0.5 text-xs ${kuji.is_received === false
-                                  ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
-                                  : 'bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-400'
+                                ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
+                                : 'bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-400'
                                 }`}>
                                 {kuji.is_received === false ? '未收貨' : '已收貨'}
                               </span>
@@ -305,10 +328,10 @@ export default function IchibanKujiPage() {
                               disabled={kuji.set_type === 'official' && kuji.is_received === false && !kuji.is_active}
                               title={kuji.set_type === 'official' && kuji.is_received === false && !kuji.is_active ? '尚未收貨，無法啟用' : ''}
                               className={`inline-block rounded px-2 py-1 text-xs font-medium transition-colors ${kuji.is_active
-                                  ? 'bg-green-100 text-green-800 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50'
-                                  : kuji.set_type === 'official' && kuji.is_received === false
-                                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed dark:bg-gray-700 dark:text-gray-500'
-                                    : 'bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                                ? 'bg-green-100 text-green-800 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50'
+                                : kuji.set_type === 'official' && kuji.is_received === false
+                                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed dark:bg-gray-700 dark:text-gray-500'
+                                  : 'bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
                                 }`}
                             >
                               {kuji.is_active ? '啟用' : '停用'}
@@ -350,6 +373,24 @@ export default function IchibanKujiPage() {
                                   >
                                     編輯
                                   </button>
+                                  {/* 啟用/停用 */}
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleToggleActive(kuji)
+                                      setOpenMenuId(null)
+                                    }}
+                                    disabled={kuji.set_type === 'official' && kuji.is_received === false && !kuji.is_active}
+                                    className={`block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-600 ${
+                                      kuji.set_type === 'official' && kuji.is_received === false && !kuji.is_active
+                                        ? 'text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                                        : kuji.is_active
+                                          ? 'text-yellow-600 dark:text-yellow-400'
+                                          : 'text-green-600 dark:text-green-400'
+                                    }`}
+                                  >
+                                    {kuji.is_active ? '停用' : '啟用'}
+                                  </button>
                                   {/* 標記已收貨（僅官方套且未收貨時顯示） */}
                                   {kuji.set_type === 'official' && kuji.is_received === false && (
                                     <button
@@ -366,14 +407,10 @@ export default function IchibanKujiPage() {
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation()
-                                      if (!kuji.is_active) {
-                                        handleDelete(kuji.id, kuji.name)
-                                        setOpenMenuId(null)
-                                      } else {
-                                        alert('請先停用一番賞再刪除')
-                                      }
+                                      handleDelete(kuji.id, kuji.name)
+                                      setOpenMenuId(null)
                                     }}
-                                    disabled={deleting === kuji.id || kuji.is_active}
+                                    disabled={deleting === kuji.id}
                                     className="block w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-600 disabled:text-gray-400 disabled:cursor-not-allowed"
                                   >
                                     {deleting === kuji.id ? '刪除中...' : '刪除'}

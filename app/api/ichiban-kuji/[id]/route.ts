@@ -373,6 +373,20 @@ export async function DELETE(
   try {
     const { id } = await context.params
 
+    // 檢查是否有相關銷售紀錄
+    const { data: saleItems } = await (supabaseServer
+      .from('sale_items') as any)
+      .select('id')
+      .eq('ichiban_kuji_id', id)
+      .limit(1)
+
+    if (saleItems && saleItems.length > 0) {
+      return NextResponse.json(
+        { ok: false, error: '此一番賞已有銷售紀錄，無法刪除' },
+        { status: 400 }
+      )
+    }
+
     // Delete prizes first (cascade should handle this, but being explicit)
     await (supabaseServer
       .from('ichiban_kuji_prizes') as any)

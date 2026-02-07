@@ -407,22 +407,20 @@ export default function NewIchibanKujiPage() {
                 <button
                   type="button"
                   onClick={() => handleSetTypeChange('custom')}
-                  className={`rounded px-4 py-2 text-sm font-medium transition-colors ${
-                    setType === 'custom'
+                  className={`rounded px-4 py-2 text-sm font-medium transition-colors ${setType === 'custom'
                       ? 'bg-blue-600 text-white'
                       : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
-                  }`}
+                    }`}
                 >
                   自製套
                 </button>
                 <button
                   type="button"
                   onClick={() => handleSetTypeChange('official')}
-                  className={`rounded px-4 py-2 text-sm font-medium transition-colors ${
-                    setType === 'official'
+                  className={`rounded px-4 py-2 text-sm font-medium transition-colors ${setType === 'official'
                       ? 'bg-orange-600 text-white'
                       : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
-                  }`}
+                    }`}
                 >
                   官方套
                 </button>
@@ -714,7 +712,7 @@ export default function NewIchibanKujiPage() {
               </div>
             ) : (
               /* Custom Set: Full table with product search */
-              <div className="overflow-x-auto">
+              <div className="overflow-visible">
                 <table className="w-full">
                   <thead className="border-b dark:border-gray-700">
                     <tr>
@@ -917,9 +915,8 @@ export default function NewIchibanKujiPage() {
                 </div>
                 <div>
                   <div className="text-sm text-gray-600 dark:text-gray-400">每抽利潤</div>
-                  <div className={`text-2xl font-bold ${
-                    price && parseFloat(price) > stats.avgCost ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
-                  }`}>
+                  <div className={`text-2xl font-bold ${price && parseFloat(price) > stats.avgCost ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                    }`}>
                     {price ? formatCurrency(parseFloat(price) - stats.avgCost) : '-'}
                   </div>
                 </div>

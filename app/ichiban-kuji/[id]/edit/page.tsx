@@ -443,11 +443,10 @@ export default function EditIchibanKujiPage() {
               <label className="mb-2 block text-sm font-medium text-gray-900 dark:text-gray-100">
                 套組類型
               </label>
-              <span className={`inline-block rounded px-3 py-1 text-sm font-medium ${
-                isOfficial
+              <span className={`inline-block rounded px-3 py-1 text-sm font-medium ${isOfficial
                   ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400'
                   : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
-              }`}>
+                }`}>
                 {isOfficial ? '官方套' : '自製套'}
               </span>
             </div>
@@ -708,7 +707,7 @@ export default function EditIchibanKujiPage() {
               </div>
             ) : (
               /* Custom Set: Full table with product search */
-              <div className="overflow-x-auto">
+              <div className="overflow-visible">
                 <table className="w-full">
                   <thead className="border-b dark:border-gray-700">
                     <tr>
@@ -911,9 +910,8 @@ export default function EditIchibanKujiPage() {
                 </div>
                 <div>
                   <div className="text-sm text-gray-600 dark:text-gray-400">每抽利潤</div>
-                  <div className={`text-2xl font-bold ${
-                    price && parseFloat(price) > stats.avgCost ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
-                  }`}>
+                  <div className={`text-2xl font-bold ${price && parseFloat(price) > stats.avgCost ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                    }`}>
                     {price ? formatCurrency(parseFloat(price) - stats.avgCost) : '-'}
                   </div>
                 </div>

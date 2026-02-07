@@ -39,6 +39,11 @@ export async function GET(request: NextRequest) {
       query = query.eq('is_active', active === 'true')
     }
 
+    const setType = searchParams.get('set_type')
+    if (setType) {
+      query = query.eq('set_type', setType)
+    }
+
     // Apply pagination
     const from = (page - 1) * pageSize
     const to = from + pageSize - 1
