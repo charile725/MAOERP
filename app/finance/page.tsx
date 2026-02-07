@@ -40,34 +40,9 @@ const ACCOUNT_TYPE_LABELS = {
   petty_cash: '零用金',
 }
 
-type ClosingStats = {
-  business_date: string
-  already_closed: boolean
-  current_stats: {
-    sales_count: number
-    total_sales: number
-    total_cash: number
-    total_card: number
-    total_transfer: number
-    total_cod: number
-    sales_by_account: { [key: string]: number }
-    store_credit_used: number
-    store_credit_granted: number
-  }
-}
-
 export default function FinanceDashboardPage() {
   const [data, setData] = useState<FinanceData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [closingSource, setClosingSource] = useState<'pos' | 'live'>('pos')
-  const [closingStats, setClosingStats] = useState<ClosingStats | null>(null)
-  const [closingNote, setClosingNote] = useState('')
-  const [isClosing, setIsClosing] = useState(false)
-  const [closingBusinessDate, setClosingBusinessDate] = useState<string>(() => {
-    const now = new Date()
-    const tw = new Date(now.getTime() + 8 * 60 * 60 * 1000)
-    return tw.toISOString().split('T')[0]
-  })
   const [userRole, setUserRole] = useState<UserRole | null>(null)
 
   const isAdmin = userRole === 'admin'
@@ -99,66 +74,10 @@ export default function FinanceDashboardPage() {
     }
   }
 
-  const fetchClosingStats = async (source: 'pos' | 'live', date?: string) => {
-    try {
-      const dateParam = date || closingBusinessDate
-      const res = await fetch(`/api/business-day-closing?source=${source}&business_date=${dateParam}`)
-      const result = await res.json()
-      if (result.ok) {
-        setClosingStats(result.data)
-      }
-    } catch (err) {
-      console.error('Failed to fetch closing stats:', err)
-    }
-  }
-
   useEffect(() => {
     fetchUserRole()
     fetchFinanceData()
-    fetchClosingStats(closingSource)
   }, [])
-
-  useEffect(() => {
-    fetchClosingStats(closingSource)
-  }, [closingSource])
-
-  const handleClosing = async () => {
-    if (closingStats?.already_closed) {
-      alert(`${closingBusinessDate} 已經日結過了，無法重複日結`)
-      return
-    }
-    if (!confirm(`確定要對 ${closingBusinessDate} 執行${closingSource === 'pos' ? '店裡' : '直播'}日結嗎？`)) {
-      return
-    }
-
-    setIsClosing(true)
-    try {
-      const res = await fetch('/api/business-day-closing', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          source: closingSource,
-          note: closingNote,
-          business_date: closingBusinessDate,
-        }),
-      })
-
-      const result = await res.json()
-      if (result.ok) {
-        alert('日結完成！')
-        setClosingNote('')
-        fetchClosingStats(closingSource)
-        fetchFinanceData()
-      } else {
-        alert(`日結失敗：${result.error}`)
-      }
-    } catch (err) {
-      console.error('Failed to perform closing:', err)
-      alert('日結失敗，請稍後再試')
-    } finally {
-      setIsClosing(false)
-    }
-  }
 
   if (loading) {
     return (
@@ -284,154 +203,6 @@ export default function FinanceDashboardPage() {
               </div>
             </div>
           </div>
-        )}
-
-        {/* 日結功能 - 僅管理員可見 */}
-        {isAdmin && (
-        <div className="mb-6 rounded-lg bg-white dark:bg-gray-800 p-6 shadow">
-          <h2 className="mb-4 text-xl font-semibold text-gray-900 dark:text-gray-100">
-            營業日結算
-          </h2>
-
-          {/* 來源選擇 */}
-          <div className="mb-4 flex gap-4">
-            <button
-              onClick={() => setClosingSource('pos')}
-              className={`flex-1 rounded-lg px-4 py-3 font-medium transition-colors ${
-                closingSource === 'pos'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
-              }`}
-            >
-              店裡收銀（POS）
-            </button>
-            <button
-              onClick={() => setClosingSource('live')}
-              className={`flex-1 rounded-lg px-4 py-3 font-medium transition-colors ${
-                closingSource === 'live'
-                  ? 'bg-purple-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
-              }`}
-            >
-              直播銷售（Live）
-            </button>
-          </div>
-
-          {/* 日期選擇 */}
-          <div className="mb-4">
-            <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-              營業日期
-            </label>
-            <input
-              type="date"
-              value={closingBusinessDate}
-              onChange={(e) => {
-                setClosingBusinessDate(e.target.value)
-                fetchClosingStats(closingSource, e.target.value)
-              }}
-              className="w-full rounded-lg border border-gray-300 px-4 py-2 text-gray-900 focus:border-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
-            />
-          </div>
-
-          {/* 已日結警告 */}
-          {closingStats?.already_closed && (
-            <div className="mb-4 rounded-lg border-2 border-red-300 bg-red-50 p-3 dark:border-red-700 dark:bg-red-900/20">
-              <div className="font-semibold text-red-800 dark:text-red-300">
-                {closingBusinessDate} 已經日結過了，無法重複日結
-              </div>
-            </div>
-          )}
-
-          {closingStats && (
-            <div className="mb-4 space-y-3">
-              <div className="grid gap-3 md:grid-cols-3">
-                <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-700">
-                  <div className="text-xs text-gray-600 dark:text-gray-400">銷售筆數</div>
-                  <div className="text-lg font-bold text-gray-900 dark:text-gray-100">
-                    {closingStats.current_stats.sales_count} 筆
-                  </div>
-                </div>
-                <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-700">
-                  <div className="text-xs text-gray-600 dark:text-gray-400">原始營業額</div>
-                  <div className="text-lg font-bold text-blue-600">
-                    {formatCurrency(closingStats.current_stats.total_sales + (closingStats.current_stats.store_credit_used || 0))}
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    實收: {formatCurrency(closingStats.current_stats.total_sales)}
-                    {(closingStats.current_stats.store_credit_used || 0) > 0 && (
-                      <span className="text-orange-500 ml-1">
-                        (購物金 -{formatCurrency(closingStats.current_stats.store_credit_used)})
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-700">
-                  <div className="text-xs text-gray-600 dark:text-gray-400">現金收入</div>
-                  <div className="text-lg font-bold text-gray-900 dark:text-gray-100">
-                    {formatCurrency(closingStats.current_stats.total_cash)}
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-3">
-                <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-700">
-                  <div className="text-xs text-gray-600 dark:text-gray-400">刷卡收入</div>
-                  <div className="text-lg font-bold text-gray-900 dark:text-gray-100">
-                    {formatCurrency(closingStats.current_stats.total_card)}
-                  </div>
-                </div>
-                <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-700">
-                  <div className="text-xs text-gray-600 dark:text-gray-400">轉帳收入</div>
-                  <div className="text-lg font-bold text-gray-900 dark:text-gray-100">
-                    {formatCurrency(closingStats.current_stats.total_transfer)}
-                  </div>
-                </div>
-                <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-700">
-                  <div className="text-xs text-gray-600 dark:text-gray-400">貨到付款</div>
-                  <div className="text-lg font-bold text-gray-900 dark:text-gray-100">
-                    {formatCurrency(closingStats.current_stats.total_cod)}
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-700">
-                  <div className="text-xs text-gray-600 dark:text-gray-400">購物金折抵</div>
-                  <div className="text-lg font-bold text-orange-600">
-                    {formatCurrency(closingStats.current_stats.store_credit_used || 0)}
-                  </div>
-                </div>
-                <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-700">
-                  <div className="text-xs text-gray-600 dark:text-gray-400">購物金轉出</div>
-                  <div className="text-lg font-bold text-purple-600">
-                    {formatCurrency(closingStats.current_stats.store_credit_granted || 0)}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="mb-4">
-            <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-              備註（選填）
-            </label>
-            <input
-              type="text"
-              value={closingNote}
-              onChange={(e) => setClosingNote(e.target.value)}
-              placeholder="例如：早班、晚班、值班人員等"
-              className="w-full rounded-lg border border-gray-300 px-4 py-2 text-gray-900 focus:border-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
-            />
-          </div>
-
-          <button
-            onClick={handleClosing}
-            disabled={isClosing || !closingStats || closingStats.already_closed}
-            className="w-full rounded-lg bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-          >
-            {isClosing ? '處理中...' : closingStats?.already_closed ? '已日結' : `執行${closingSource === 'pos' ? '店裡' : '直播'}日結`}
-          </button>
-        </div>
         )}
 
         {/* 各帳戶明細 */}

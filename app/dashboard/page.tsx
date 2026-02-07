@@ -431,8 +431,7 @@ export default function DashboardPage() {
                 <select
                   value={selectedClosingId}
                   onChange={(e) => { setSelectedClosingId(e.target.value); setSourceFilter('pos') }}
-                  className="w-full rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:outline-none [&>option]:py-1.5"
-                  size={5}
+                  className="w-full rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:outline-none"
                   disabled={businessDayClosings.length === 0}
                 >
                   {businessDayClosings.length === 0 ? (
