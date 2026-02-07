@@ -59,6 +59,8 @@ type SaleDraft = {
 type ClosingStats = {
     sales_count: number
     total_sales: number
+    store_credit_used: number
+    store_credit_granted: number
     store_credit_converted: number
     store_credit_count: number
     fake_total_sales: number
@@ -1016,141 +1018,141 @@ export default function MobilePOS({
                         {!closingStats ? (
                             <div className="p-12 text-center text-slate-400">載入中...</div>
                         ) : (
-                        <>
-                        {/* 內容 */}
-                        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                            {/* 日期選擇 */}
-                            <div>
-                                <label className="block text-slate-400 text-xs mb-1">營業日期</label>
-                                <input
-                                    type="date"
-                                    value={businessDate}
-                                    onChange={async (e) => {
-                                        await setBusinessDate(e.target.value)
-                                    }}
-                                    className="w-full rounded-lg px-4 py-2 text-white bg-slate-700 border border-slate-600 focus:border-emerald-500 focus:outline-none"
-                                />
-                            </div>
-
-                            {/* 已日結警告 */}
-                            {alreadyClosed && (
-                                <div className="bg-red-900/30 border border-red-700 rounded-lg p-3">
-                                    <div className="text-red-300 font-semibold text-sm">
-                                        {businessDate} 已經日結過了，無法重複日結
+                            <>
+                                {/* 內容 */}
+                                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                                    {/* 日期選擇 */}
+                                    <div>
+                                        <label className="block text-slate-400 text-xs mb-1">營業日期</label>
+                                        <input
+                                            type="date"
+                                            value={businessDate}
+                                            onChange={async (e) => {
+                                                await setBusinessDate(e.target.value)
+                                            }}
+                                            className="w-full rounded-lg px-4 py-2 text-white bg-slate-700 border border-slate-600 focus:border-emerald-500 focus:outline-none"
+                                        />
                                     </div>
-                                </div>
-                            )}
 
-                            {/* 總覽 */}
-                            <div className="grid grid-cols-2 gap-3">
-                                <div className="bg-blue-900/30 rounded-lg p-3">
-                                    <div className="text-blue-400 text-xs mb-1">總銷售筆數</div>
-                                    <div className="text-white text-xl font-bold">{closingStats.sales_count} 筆</div>
-                                </div>
-                                <div className="bg-emerald-900/30 rounded-lg p-3">
-                                    <div className="text-emerald-400 text-xs mb-1">原始營業額</div>
-                                    <div className="text-white text-xl font-bold">{formatCurrency((closingStats.total_sales || 0) + (closingStats.store_credit_used || 0))}</div>
-                                    {(closingStats.store_credit_used || 0) > 0 && (
-                                        <div className="text-emerald-400 text-xs mt-1">實收: {formatCurrency(closingStats.total_sales || 0)}</div>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* 購物金資訊 */}
-                            {((closingStats.store_credit_used || 0) > 0 || (closingStats.store_credit_granted || 0) > 0) && (
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="bg-orange-900/30 border border-orange-700 rounded-lg p-3">
-                                        <div className="text-orange-400 text-xs mb-1">購物金折抵</div>
-                                        <div className="text-white text-lg font-bold">{formatCurrency(closingStats.store_credit_used || 0)}</div>
-                                    </div>
-                                    <div className="bg-purple-900/30 border border-purple-700 rounded-lg p-3">
-                                        <div className="text-purple-400 text-xs mb-1">購物金轉出</div>
-                                        <div className="text-white text-lg font-bold">{formatCurrency(closingStats.store_credit_granted || 0)}</div>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* 假營業額（轉購物金前） */}
-                            {closingStats.store_credit_converted > 0 && (
-                                <div className="bg-purple-900/30 border border-purple-700 rounded-lg p-3">
-                                    <div className="flex justify-between items-center">
-                                        <div>
-                                            <div className="text-purple-400 text-xs mb-1">假營業額（轉購物金前）</div>
-                                            <div className="text-purple-300 text-xs">含 {closingStats.store_credit_count} 筆已轉購物金</div>
+                                    {/* 已日結警告 */}
+                                    {alreadyClosed && (
+                                        <div className="bg-red-900/30 border border-red-700 rounded-lg p-3">
+                                            <div className="text-red-300 font-semibold text-sm">
+                                                {businessDate} 已經日結過了，無法重複日結
+                                            </div>
                                         </div>
-                                        <div className="text-white text-xl font-bold">{formatCurrency(closingStats.fake_total_sales)}</div>
-                                    </div>
-                                    <div className="mt-2 pt-2 border-t border-purple-700 text-sm text-purple-300 flex justify-between">
-                                        <span>轉購物金金額：</span>
-                                        <span className="font-semibold">-{formatCurrency(closingStats.store_credit_converted)}</span>
-                                    </div>
-                                </div>
-                            )}
+                                    )}
 
-                            {/* 已收款 vs 未收款 */}
-                            <div className="grid grid-cols-2 gap-3">
-                                <div className="bg-emerald-900/30 border border-emerald-700 rounded-lg p-3">
-                                    <div className="text-emerald-400 text-xs mb-1">已收款</div>
-                                    <div className="text-white text-lg font-bold">{formatCurrency(closingStats.paid_sales || 0)}</div>
-                                    <div className="text-emerald-400 text-xs">{closingStats.paid_count || 0} 筆</div>
-                                </div>
-                                <div className="bg-orange-900/30 border border-orange-700 rounded-lg p-3">
-                                    <div className="text-orange-400 text-xs mb-1">未收款</div>
-                                    <div className="text-white text-lg font-bold">{formatCurrency(closingStats.unpaid_sales || 0)}</div>
-                                    <div className="text-orange-400 text-xs">{closingStats.unpaid_count || 0} 筆</div>
-                                </div>
-                            </div>
+                                    {/* 總覽 */}
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="bg-blue-900/30 rounded-lg p-3">
+                                            <div className="text-blue-400 text-xs mb-1">總銷售筆數</div>
+                                            <div className="text-white text-xl font-bold">{closingStats.sales_count} 筆</div>
+                                        </div>
+                                        <div className="bg-emerald-900/30 rounded-lg p-3">
+                                            <div className="text-emerald-400 text-xs mb-1">原始營業額</div>
+                                            <div className="text-white text-xl font-bold">{formatCurrency((closingStats.total_sales || 0) + (closingStats.store_credit_used || 0))}</div>
+                                            {(closingStats.store_credit_used || 0) > 0 && (
+                                                <div className="text-emerald-400 text-xs mt-1">實收: {formatCurrency(closingStats.total_sales || 0)}</div>
+                                            )}
+                                        </div>
+                                    </div>
 
-                            {/* 已收款明細 */}
-                            <div className="border-t border-slate-700 pt-4">
-                                <div className="text-white font-semibold mb-3">已收款明細</div>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <div className="bg-slate-700 rounded-lg px-3 py-2 flex justify-between items-center">
-                                        <span className="text-slate-300 text-sm">現金</span>
-                                        <span className="text-white font-semibold">{formatCurrency(closingStats.paid_cash || 0)}</span>
+                                    {/* 購物金資訊 */}
+                                    {((closingStats.store_credit_used || 0) > 0 || (closingStats.store_credit_granted || 0) > 0) && (
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="bg-orange-900/30 border border-orange-700 rounded-lg p-3">
+                                                <div className="text-orange-400 text-xs mb-1">購物金折抵</div>
+                                                <div className="text-white text-lg font-bold">{formatCurrency(closingStats.store_credit_used || 0)}</div>
+                                            </div>
+                                            <div className="bg-purple-900/30 border border-purple-700 rounded-lg p-3">
+                                                <div className="text-purple-400 text-xs mb-1">購物金轉出</div>
+                                                <div className="text-white text-lg font-bold">{formatCurrency(closingStats.store_credit_granted || 0)}</div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* 假營業額（轉購物金前） */}
+                                    {closingStats.store_credit_converted > 0 && (
+                                        <div className="bg-purple-900/30 border border-purple-700 rounded-lg p-3">
+                                            <div className="flex justify-between items-center">
+                                                <div>
+                                                    <div className="text-purple-400 text-xs mb-1">假營業額（轉購物金前）</div>
+                                                    <div className="text-purple-300 text-xs">含 {closingStats.store_credit_count} 筆已轉購物金</div>
+                                                </div>
+                                                <div className="text-white text-xl font-bold">{formatCurrency(closingStats.fake_total_sales)}</div>
+                                            </div>
+                                            <div className="mt-2 pt-2 border-t border-purple-700 text-sm text-purple-300 flex justify-between">
+                                                <span>轉購物金金額：</span>
+                                                <span className="font-semibold">-{formatCurrency(closingStats.store_credit_converted)}</span>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* 已收款 vs 未收款 */}
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="bg-emerald-900/30 border border-emerald-700 rounded-lg p-3">
+                                            <div className="text-emerald-400 text-xs mb-1">已收款</div>
+                                            <div className="text-white text-lg font-bold">{formatCurrency(closingStats.paid_sales || 0)}</div>
+                                            <div className="text-emerald-400 text-xs">{closingStats.paid_count || 0} 筆</div>
+                                        </div>
+                                        <div className="bg-orange-900/30 border border-orange-700 rounded-lg p-3">
+                                            <div className="text-orange-400 text-xs mb-1">未收款</div>
+                                            <div className="text-white text-lg font-bold">{formatCurrency(closingStats.unpaid_sales || 0)}</div>
+                                            <div className="text-orange-400 text-xs">{closingStats.unpaid_count || 0} 筆</div>
+                                        </div>
                                     </div>
-                                    <div className="bg-slate-700 rounded-lg px-3 py-2 flex justify-between items-center">
-                                        <span className="text-slate-300 text-sm">刷卡</span>
-                                        <span className="text-white font-semibold">{formatCurrency(closingStats.paid_card || 0)}</span>
-                                    </div>
-                                    <div className="bg-slate-700 rounded-lg px-3 py-2 flex justify-between items-center">
-                                        <span className="text-slate-300 text-sm">轉帳</span>
-                                        <span className="text-white font-semibold">{formatCurrency(closingStats.paid_transfer || 0)}</span>
-                                    </div>
-                                    <div className="bg-slate-700 rounded-lg px-3 py-2 flex justify-between items-center">
-                                        <span className="text-slate-300 text-sm">貨到付款</span>
-                                        <span className="text-white font-semibold">{formatCurrency(closingStats.paid_cod || 0)}</span>
+
+                                    {/* 已收款明細 */}
+                                    <div className="border-t border-slate-700 pt-4">
+                                        <div className="text-white font-semibold mb-3">已收款明細</div>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div className="bg-slate-700 rounded-lg px-3 py-2 flex justify-between items-center">
+                                                <span className="text-slate-300 text-sm">現金</span>
+                                                <span className="text-white font-semibold">{formatCurrency(closingStats.paid_cash || 0)}</span>
+                                            </div>
+                                            <div className="bg-slate-700 rounded-lg px-3 py-2 flex justify-between items-center">
+                                                <span className="text-slate-300 text-sm">刷卡</span>
+                                                <span className="text-white font-semibold">{formatCurrency(closingStats.paid_card || 0)}</span>
+                                            </div>
+                                            <div className="bg-slate-700 rounded-lg px-3 py-2 flex justify-between items-center">
+                                                <span className="text-slate-300 text-sm">轉帳</span>
+                                                <span className="text-white font-semibold">{formatCurrency(closingStats.paid_transfer || 0)}</span>
+                                            </div>
+                                            <div className="bg-slate-700 rounded-lg px-3 py-2 flex justify-between items-center">
+                                                <span className="text-slate-300 text-sm">貨到付款</span>
+                                                <span className="text-white font-semibold">{formatCurrency(closingStats.paid_cod || 0)}</span>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        </div>
 
-                        {/* 底部按鈕 */}
-                        <div className="p-3 pb-6 border-t border-slate-700 flex gap-3">
-                            <button
-                                onClick={async () => {
-                                    setClosingInProgress(true)
-                                    try {
-                                        await handleClosing()
-                                        setShowClosingModal(false)
-                                    } finally {
-                                        setClosingInProgress(false)
-                                    }
-                                }}
-                                disabled={closingInProgress || alreadyClosed}
-                                className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-600 text-white font-bold py-3 rounded-lg"
-                            >
-                                {closingInProgress ? '結算中...' : alreadyClosed ? '已日結' : '確認日結'}
-                            </button>
-                            <button
-                                onClick={() => setShowClosingModal(false)}
-                                disabled={closingInProgress}
-                                className="flex-1 bg-slate-700 text-slate-300 py-3 rounded-lg"
-                            >
-                                取消
-                            </button>
-                        </div>
-                        </>
+                                {/* 底部按鈕 */}
+                                <div className="p-3 pb-6 border-t border-slate-700 flex gap-3">
+                                    <button
+                                        onClick={async () => {
+                                            setClosingInProgress(true)
+                                            try {
+                                                await handleClosing()
+                                                setShowClosingModal(false)
+                                            } finally {
+                                                setClosingInProgress(false)
+                                            }
+                                        }}
+                                        disabled={closingInProgress || alreadyClosed}
+                                        className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-600 text-white font-bold py-3 rounded-lg"
+                                    >
+                                        {closingInProgress ? '結算中...' : alreadyClosed ? '已日結' : '確認日結'}
+                                    </button>
+                                    <button
+                                        onClick={() => setShowClosingModal(false)}
+                                        disabled={closingInProgress}
+                                        className="flex-1 bg-slate-700 text-slate-300 py-3 rounded-lg"
+                                    >
+                                        取消
+                                    </button>
+                                </div>
+                            </>
                         )}
                     </div>
                 </div>

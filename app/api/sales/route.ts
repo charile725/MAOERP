@@ -394,7 +394,7 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           )
         }
-      } else {
+      } else if (item.product_id) {
         const product = productMap.get(item.product_id)
 
         if (!product) {
