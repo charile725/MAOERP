@@ -45,7 +45,6 @@ type DashboardStats = {
     total: number
   }
   arOverdueList?: Array<{ partner_code: string; balance: number; days_overdue: number }>
-  apDueSoon?: Array<{ partner_code: string; balance: number; days_until_due: number }>
   apOverdueList?: Array<{ partner_code: string; balance: number; days_overdue: number }>
   inventory?: {
     totalValue: number
@@ -111,7 +110,7 @@ export default function DashboardPage() {
   const [sourceFilter, setSourceFilter] = useState<'all' | 'pos' | 'live'>('all')
 
   // 新增：報表模式（按日期 vs 按營業日）
-  const [reportMode, setReportMode] = useState<'by_date' | 'by_business_day'>('by_date')
+  const [reportMode, setReportMode] = useState<'by_date' | 'by_business_day'>('by_business_day')
   const [businessDayClosings, setBusinessDayClosings] = useState<BusinessDayClosing[]>([])
   const [selectedClosingId, setSelectedClosingId] = useState<string>('')
 
@@ -120,8 +119,9 @@ export default function DashboardPage() {
   }, [dateFrom, dateTo, sourceFilter, reportMode, selectedClosingId])
 
   useEffect(() => {
-    // 當切換到營業日模式時，獲取日結記錄列表
+    // 當切換到營業日模式時，獲取日結記錄列表，並重置通路篩選
     if (reportMode === 'by_business_day') {
+      setSourceFilter('pos')
       fetchBusinessDayClosings()
     }
   }, [reportMode])
@@ -141,10 +141,15 @@ export default function DashboardPage() {
         ...(liveData.ok ? liveData.data : [])
       ].sort((a, b) => b.business_date.localeCompare(a.business_date))
 
-      setBusinessDayClosings(allClosings)
-      if (allClosings.length > 0) {
-        setSelectedClosingId(allClosings[0].id)
-      }
+      // 加入「今日（未日結）」虛擬選項（分通路）
+      const today = new Date().toISOString().split('T')[0]
+      const todayPreviews = [
+        { id: 'today_pos', business_date: today, source: 'pos', total_sales: 0, sales_count: 0 },
+        { id: 'today_live', business_date: today, source: 'live', total_sales: 0, sales_count: 0 },
+      ]
+
+      setBusinessDayClosings([...todayPreviews as any[], ...allClosings.slice(0, 30)])
+      setSelectedClosingId('today_pos')
     } catch (err) {
       console.error('Failed to fetch business day closings:', err)
     }
@@ -169,9 +174,8 @@ export default function DashboardPage() {
           return
         }
 
-        // 使用 business_date 和 source 查詢該營業日的銷售
-        const sourceParam = sourceFilter !== 'all' ? `&source=${sourceFilter}` : `&source=${selectedClosing.source}`
-
+        // 全部通路 → 不帶 source；否則用該筆日結的 source
+        const sourceParam = sourceFilter === 'all' ? '' : `&source=${selectedClosing.source}`
         salesUrl = `/api/sales?business_date=${selectedClosing.business_date}${sourceParam}`
         expensesUrl = `/api/expenses?date_from=${selectedClosing.business_date}&date_to=${selectedClosing.business_date}`
       } else {
@@ -308,7 +312,6 @@ export default function DashboardPage() {
         arAging: extendedData.arAging,
         apAging: extendedData.apAging,
         arOverdueList: extendedData.arOverdueList,
-        apDueSoon: extendedData.apDueSoon,
         apOverdueList: extendedData.apOverdueList,
         profitTrend: extendedData.profitTrend,
         depreciation,
@@ -337,15 +340,6 @@ export default function DashboardPage() {
         <div className="mb-6 rounded-lg bg-white dark:bg-gray-800 p-4 shadow">
           <div className="flex gap-2 mb-4">
             <button
-              onClick={() => setReportMode('by_date')}
-              className={`flex-1 rounded-lg px-4 py-3 text-sm font-bold transition-all ${reportMode === 'by_date'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600'
-                }`}
-            >
-              按日期查看
-            </button>
-            <button
               onClick={() => setReportMode('by_business_day')}
               className={`flex-1 rounded-lg px-4 py-3 text-sm font-bold transition-all ${reportMode === 'by_business_day'
                 ? 'bg-green-600 text-white shadow-md'
@@ -353,6 +347,15 @@ export default function DashboardPage() {
                 }`}
             >
               按營業日查看
+            </button>
+            <button
+              onClick={() => setReportMode('by_date')}
+              className={`flex-1 rounded-lg px-4 py-3 text-sm font-bold transition-all ${reportMode === 'by_date'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600'
+                }`}
+            >
+              按日期查看
             </button>
           </div>
         </div>
@@ -420,22 +423,31 @@ export default function DashboardPage() {
             </div>
           ) : (
             // 按營業日模式
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_auto]">
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">
                   選擇營業日
                 </label>
                 <select
                   value={selectedClosingId}
-                  onChange={(e) => setSelectedClosingId(e.target.value)}
-                  className="w-full rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:outline-none"
+                  onChange={(e) => { setSelectedClosingId(e.target.value); setSourceFilter('pos') }}
+                  className="w-full rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:outline-none [&>option]:py-1.5"
+                  size={5}
                   disabled={businessDayClosings.length === 0}
                 >
                   {businessDayClosings.length === 0 ? (
                     <option>無日結記錄</option>
                   ) : (
                     businessDayClosings.map((closing) => {
+                      const isToday = closing.id === 'today_pos' || closing.id === 'today_live'
                       const sourceLabel = closing.source === 'pos' ? '店裡' : '直播'
+                      if (isToday) {
+                        return (
+                          <option key={closing.id} value={closing.id}>
+                            {sourceLabel}（未日結）{closing.business_date}
+                          </option>
+                        )
+                      }
 
                       return (
                         <option key={closing.id} value={closing.id}>
@@ -446,39 +458,16 @@ export default function DashboardPage() {
                   )}
                 </select>
               </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">
-                  顯示通路
-                </label>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setSourceFilter('all')}
-                    className={`flex-1 rounded px-3 py-2 text-sm font-medium transition-colors ${sourceFilter === 'all'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600'
-                      }`}
-                  >
-                    全部
-                  </button>
-                  <button
-                    onClick={() => setSourceFilter('pos')}
-                    className={`flex-1 rounded px-3 py-2 text-sm font-medium transition-colors ${sourceFilter === 'pos'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600'
-                      }`}
-                  >
-                    店裡
-                  </button>
-                  <button
-                    onClick={() => setSourceFilter('live')}
-                    className={`flex-1 rounded px-3 py-2 text-sm font-medium transition-colors ${sourceFilter === 'live'
-                      ? 'bg-pink-600 text-white'
-                      : 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600'
-                      }`}
-                  >
-                    直播
-                  </button>
-                </div>
+              <div className="flex items-end">
+                <button
+                  onClick={() => setSourceFilter(sourceFilter === 'all' ? 'pos' : 'all')}
+                  className={`rounded px-4 py-2 text-sm font-medium transition-colors ${sourceFilter === 'all'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600'
+                    }`}
+                >
+                  全部通路
+                </button>
               </div>
             </div>
           )}
@@ -590,46 +579,23 @@ export default function DashboardPage() {
 
 
 
-        {/* 到期提醒 */}
-        <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {/* AP 即將到期 */}
-          {stats.apDueSoon && stats.apDueSoon.length > 0 && (
-            <div className="rounded-lg bg-white dark:bg-gray-800 p-6 shadow border-l-4 border-yellow-500">
-              <h2 className="mb-4 text-xl font-semibold text-gray-900 dark:text-gray-100">應付帳款即將到期 (7天內)</h2>
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                {stats.apDueSoon.map((item, index) => (
-                  <div key={index} className="flex justify-between items-center p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded">
-                    <span className="text-sm text-gray-700 dark:text-gray-300">{item.partner_code}</span>
-                    <div className="text-right">
-                      <span className="font-semibold text-yellow-600">{formatCurrency(item.balance)}</span>
-                      <span className="ml-2 text-xs text-gray-500">
-                        ({item.days_until_due === 0 ? '今天' : `${item.days_until_due} 天後`})
-                      </span>
-                    </div>
+        {/* AP 已逾期 */}
+        {stats.apOverdueList && stats.apOverdueList.length > 0 && (
+          <div className="mb-6 rounded-lg bg-white dark:bg-gray-800 p-6 shadow border-l-4 border-red-500">
+            <h2 className="mb-4 text-xl font-semibold text-gray-900 dark:text-gray-100">應付帳款已逾期</h2>
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {stats.apOverdueList.map((item, index) => (
+                <div key={index} className="flex justify-between items-center p-2 bg-red-50 dark:bg-red-900/20 rounded">
+                  <span className="text-sm text-gray-700 dark:text-gray-300">{item.partner_code}</span>
+                  <div className="text-right">
+                    <span className="font-semibold text-red-600">{formatCurrency(item.balance)}</span>
+                    <span className="ml-2 text-xs text-gray-500">(逾期 {item.days_overdue} 天)</span>
                   </div>
-                ))}
-              </div>
+                </div>
+              ))}
             </div>
-          )}
-
-          {/* AP 已逾期 */}
-          {stats.apOverdueList && stats.apOverdueList.length > 0 && (
-            <div className="rounded-lg bg-white dark:bg-gray-800 p-6 shadow border-l-4 border-red-500">
-              <h2 className="mb-4 text-xl font-semibold text-gray-900 dark:text-gray-100">應付帳款已逾期</h2>
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                {stats.apOverdueList.map((item, index) => (
-                  <div key={index} className="flex justify-between items-center p-2 bg-red-50 dark:bg-red-900/20 rounded">
-                    <span className="text-sm text-gray-700 dark:text-gray-300">{item.partner_code}</span>
-                    <div className="text-right">
-                      <span className="font-semibold text-red-600">{formatCurrency(item.balance)}</span>
-                      <span className="ml-2 text-xs text-gray-500">(逾期 {item.days_overdue} 天)</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
 
 
 

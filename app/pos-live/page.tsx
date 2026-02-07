@@ -307,6 +307,14 @@ export default function POSPage() {
         }
       }
 
+      // 先載入 20 筆最近更新的商品，讓畫面秒出
+      const firstRes = await fetch('/api/products?active=true&page=1&pageSize=20&sortBy=updated_at&sortOrder=desc')
+      const firstData = await firstRes.json()
+      if (firstData.ok && firstData.data?.length > 0) {
+        setProducts(firstData.data)
+      }
+
+      // 背景載入全部商品
       const res = await fetch('/api/products?all=true&active=true')
       const data = await res.json()
       if (data.ok) {

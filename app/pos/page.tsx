@@ -335,7 +335,14 @@ export default function POSPage() {
         }
       }
 
-      // Supabase 預設限制 1000 筆，需要分頁取得所有商品
+      // 先載入 20 筆最近更新的商品，讓畫面秒出
+      const firstRes = await fetch('/api/products?active=true&page=1&pageSize=20&sortBy=updated_at&sortOrder=desc')
+      const firstData = await firstRes.json()
+      if (firstData.ok && firstData.data?.length > 0) {
+        setProducts(firstData.data)
+      }
+
+      // 背景載入全部商品
       const allProducts: Product[] = []
       let page = 1
       const pageSize = 1000
@@ -347,7 +354,6 @@ export default function POSPage() {
 
         allProducts.push(...(data.data || []))
 
-        // 如果這頁不滿，表示已經取完
         if (!data.data || data.data.length < pageSize) break
         page++
       }
