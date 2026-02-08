@@ -116,7 +116,7 @@ export async function POST(
         for (const item of originalItems) {
             const wasAdjusted = items.some(adj => adj.sale_item_id === item.id)
             if (!wasAdjusted) {
-                newSubtotal += item.subtotal
+                newSubtotal += (item.quantity * item.price) || 0  // Fix: 使用 quantity * price 而非 item.subtotal
             }
         }
 
@@ -316,11 +316,11 @@ export async function POST(
                 // 重新讀取更正後的 sale_items，按比例重算所有 AR
                 const { data: currentItems } = await (supabaseServer
                     .from('sale_items') as any)
-                    .select('id, subtotal')
+                    .select('id, quantity, price')  // Fix: 查詢 quantity, price 而非 subtotal
                     .eq('sale_id', id)
 
                 const currentTotalSubtotal = (currentItems || []).reduce(
-                    (sum: number, item: any) => sum + (item.subtotal || 0), 0
+                    (sum: number, item: any) => sum + ((item.quantity * item.price) || 0), 0  // Fix: 使用 quantity * price
                 )
 
                 // 刪除已被移除品項的 AR
@@ -343,7 +343,7 @@ export async function POST(
                 for (let i = 0; i < remainingARs.length; i++) {
                     const ar = remainingARs[i]
                     const item = (currentItems || []).find((item: any) => item.id === ar.sale_item_id)
-                    const itemSubtotal = item?.subtotal || 0
+                    const itemSubtotal = item ? (item.quantity * item.price) || 0 : 0  // Fix: 使用 quantity * price
 
                     let newAmount: number
                     if (i === remainingARs.length - 1) {
@@ -416,24 +416,32 @@ export async function POST(
 
         // 8.5. 如果已付款但金額增加，需要產生應收帳款
         if (sale.is_paid && adjustmentAmount < 0 && sale.customer_code) {
-            const additionalAmount = -adjustmentAmount // 將負數轉為正數
+            // Bug fix: AR 金額應該是實際需要補收的金額（考慮購物金）
+            // additionalAmount = 新實際應收 - 原本已收（即 newFinalTotal - originalTotal）
+            // 注意：-adjustmentAmount 就是這個值，因為 adjustmentAmount = originalTotal - newFinalTotal
+            const additionalAmount = -adjustmentAmount
 
-            // 為增加的金額建立 AR 記錄
-            await (supabaseServer
-                .from('partner_accounts') as any)
-                .insert({
-                    partner_type: 'customer',
-                    partner_code: sale.customer_code,
-                    direction: 'AR',
-                    amount: additionalAmount,
-                    ref_type: 'sale_correction',
-                    ref_id: id,
-                    due_date: new Date(new Date().getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 天
-                    status: 'pending',
-                    note: `銷貨更正補收 - ${sale.sale_no}`,
-                })
+            // 安全檢查：AR 不應超過新的實際應收金額（newFinalTotal）
+            const cappedAmount = Math.min(additionalAmount, newFinalTotal)
 
-            console.log(`[Sale Correction] Created AR for additional amount: ${additionalAmount}`)
+            if (cappedAmount > 0) {
+                // 為增加的金額建立 AR 記錄
+                await (supabaseServer
+                    .from('partner_accounts') as any)
+                    .insert({
+                        partner_type: 'customer',
+                        partner_code: sale.customer_code,
+                        direction: 'AR',
+                        amount: cappedAmount,
+                        ref_type: 'sale_correction',
+                        ref_id: id,
+                        due_date: new Date(new Date().getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 天
+                        status: 'pending',
+                        note: `銷貨更正補收 - ${sale.sale_no}`,
+                    })
+
+                console.log(`[Sale Correction] Created AR for additional amount: ${cappedAmount} (original: ${additionalAmount}, capped to newFinalTotal: ${newFinalTotal})`)
+            }
         }
 
         // 9. 建立更正記錄

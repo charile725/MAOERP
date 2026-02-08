@@ -679,6 +679,22 @@ export async function DELETE(
                   .update({ store_credit: newBalance })
                   .eq('customer_code', settlement.partner_code)
 
+                // 新增退還日誌 (Bug fix: 原本只刪舊 log 沒新增退還記錄)
+                await (supabaseServer
+                  .from('customer_balance_logs') as any)
+                  .insert({
+                    customer_code: settlement.partner_code,
+                    amount: refundAmount,
+                    balance_before: customer.store_credit,
+                    balance_after: newBalance,
+                    type: 'refund',
+                    ref_type: 'sale_delete',
+                    ref_id: id.toString(),
+                    ref_no: sale.sale_no,
+                    note: `刪除銷售單 ${sale.sale_no}，退還購物金收款`,
+                    created_at: getTaiwanTime(),
+                  })
+
                 // 刪除購物金扣除日誌
                 await (supabaseServer
                   .from('customer_balance_logs') as any)

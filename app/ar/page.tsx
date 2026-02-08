@@ -813,7 +813,7 @@ export default function ARPageV2() {
                                       className="h-5 w-5"
                                     />
                                     <div>
-                                      <div className="font-medium text-gray-900 dark:text-gray-100">{account.ref_no}</div>
+                                      <div className="font-medium text-gray-900 dark:text-gray-100">{account.sales?.sale_no || '-'}</div>
                                       {account.sale_item && (
                                         <div className="text-xs text-gray-500">{account.sale_item.snapshot_name}</div>
                                       )}
@@ -880,7 +880,7 @@ export default function ARPageV2() {
                                       />
                                     </td>
                                     <td className="py-3 pl-2 text-sm text-gray-900 dark:text-gray-100 align-top">
-                                      <div className="font-medium">{account.ref_no}</div>
+                                      <div className="font-medium">{account.sales?.sale_no || '-'}</div>
                                     </td>
                                     <td className="py-3 text-sm text-gray-900 dark:text-gray-100 align-top">
                                       {account.sale_item ? (

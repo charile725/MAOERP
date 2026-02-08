@@ -140,7 +140,7 @@ export async function GET(request: NextRequest) {
     // 收集需要查詢的 ID
     const customerCodes = [...new Set((accounts as any[]).map(a => a.partner_code))]
     const itemIds = (accounts as any[]).filter(a => a.sale_item_id).map(a => a.sale_item_id)
-    const saleIds = [...new Set((accounts as any[]).filter(a => a.ref_type === 'sale').map(a => a.ref_id))]
+    const saleIds = [...new Set((accounts as any[]).filter(a => a.ref_type === 'sale' || a.ref_type === 'sale_correction').map(a => a.ref_id))]
 
     // 並行查詢所有相關資料
     const [customersResult, itemsResult, salesResult, saleItemsResult] = await Promise.all([
@@ -192,8 +192,8 @@ export async function GET(request: NextRequest) {
 
     // 組合結果
     const accountsWithDetails = (accounts as any[]).map(account => {
-      const saleData = account.ref_type === 'sale' ? salesMap.get(account.ref_id) : null
-      const saleItems = account.ref_type === 'sale' ? saleItemsBySaleId.get(account.ref_id) || [] : []
+      const saleData = (account.ref_type === 'sale' || account.ref_type === 'sale_correction') ? salesMap.get(account.ref_id) : null
+      const saleItems = (account.ref_type === 'sale' || account.ref_type === 'sale_correction') ? saleItemsBySaleId.get(account.ref_id) || [] : []
 
       return {
         ...account,

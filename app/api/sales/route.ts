@@ -638,10 +638,27 @@ export async function POST(request: NextRequest) {
           .single()
 
         if (customer) {
+          const newBalance = customer.store_credit + storeCreditUsed
           await (supabaseServer
             .from('customers') as any)
-            .update({ store_credit: customer.store_credit + storeCreditUsed })
+            .update({ store_credit: newBalance })
             .eq('customer_code', draft.customer_code)
+
+          // 記錄退還日誌 (Bug fix: 原本漏記)
+          await (supabaseServer
+            .from('customer_balance_logs') as any)
+            .insert({
+              customer_code: draft.customer_code,
+              amount: storeCreditUsed,
+              balance_before: customer.store_credit,
+              balance_after: newBalance,
+              type: 'refund',
+              ref_type: 'sale_rollback',
+              ref_id: sale.id,
+              ref_no: saleNo,
+              note: `銷售單 ${saleNo} 確認失敗，退還購物金`,
+              created_at: getTaiwanTime(),
+            })
         }
       }
 
