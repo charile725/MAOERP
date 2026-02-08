@@ -44,7 +44,45 @@ export async function GET(request: NextRequest) {
       query = query.eq('vendor_code', vendorCode)
     }
 
-    // keyword filtering moved to post-query for vendor_name support
+    // keyword: 全部 server-side 過濾，避免 Supabase 預設 1000 筆上限導致漏資料
+    if (keyword) {
+      // 1. 查廠商名稱匹配的 vendor_codes
+      const { data: matchedVendors } = await (supabaseServer
+        .from('vendors') as any)
+        .select('vendor_code')
+        .ilike('vendor_name', `%${keyword}%`)
+      const matchedVendorCodes: string[] = (matchedVendors || []).map((v: any) => v.vendor_code)
+
+      // 2. 查商品名稱/品號匹配的 product_ids
+      const { data: matchedProducts } = await (supabaseServer
+        .from('products') as any)
+        .select('id')
+        .or(`name.ilike.%${keyword}%,item_code.ilike.%${keyword}%`)
+      const matchedProductIds: string[] = (matchedProducts || []).map((p: any) => p.id)
+
+      // 3. 用 product_ids 查出對應的 purchase_ids
+      let matchedPurchaseIds: string[] = []
+      if (matchedProductIds.length > 0) {
+        const { data: matchedItems } = await (supabaseServer
+          .from('purchase_items') as any)
+          .select('purchase_id')
+          .in('product_id', matchedProductIds)
+        matchedPurchaseIds = [...new Set((matchedItems || []).map((i: any) => i.purchase_id))]
+      }
+
+      // 4. 組合 server-side OR 條件
+      const orParts: string[] = [
+        `purchase_no.ilike.%${keyword}%`,
+        `vendor_code.ilike.%${keyword}%`,
+      ]
+      if (matchedVendorCodes.length > 0) {
+        orParts.push(`vendor_code.in.(${matchedVendorCodes.join(',')})`)
+      }
+      if (matchedPurchaseIds.length > 0) {
+        orParts.push(`id.in.(${matchedPurchaseIds.join(',')})`)
+      }
+      query = query.or(orParts.join(','))
+    }
 
     if (status) {
       query = query.eq('status', status)
@@ -59,21 +97,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // 統一關鍵字過濾：單號、廠商代碼、廠商名稱、商品名稱、品號
     let filteredData = data
-    if (keyword) {
-      const kw = keyword.toLowerCase()
-      filteredData = filteredData?.filter((purchase: any) => {
-        if (purchase.purchase_no?.toLowerCase().includes(kw)) return true
-        if (purchase.vendor_code?.toLowerCase().includes(kw)) return true
-        if (purchase.vendors?.vendor_name?.toLowerCase().includes(kw)) return true
-        const items = purchase.purchase_items || []
-        return items.some((item: any) =>
-          item.products?.name?.toLowerCase().includes(kw) ||
-          item.products?.item_code?.toLowerCase().includes(kw)
-        )
-      })
-    }
 
     // Calculate summary for each purchase
     // 收集所有 purchase_item IDs 來查詢付款狀態
@@ -84,8 +108,8 @@ export async function GET(request: NextRequest) {
     // 查詢每個品項的付款狀態
     let paymentStatusMap: Map<string, string> = new Map()
     if (allItemIds.length > 0) {
-      const { data: apRecords } = await supabaseServer
-        .from('partner_accounts')
+      const { data: apRecords } = await (supabaseServer
+        .from('partner_accounts') as any)
         .select('purchase_item_id, status')
         .in('purchase_item_id', allItemIds)
 

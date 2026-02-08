@@ -16,16 +16,87 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1')
     const pageSize = parseInt(searchParams.get('pageSize') || '20')
 
-    let query = supabaseServer
+    // 如果有 keyword，先搜尋廠商名稱找出對應的 vendor_code
+    let matchingVendorCodes: string[] = []
+
+    if (keyword) {
+      const { data: vendors } = await supabaseServer
+        .from('vendors')
+        .select('vendor_code')
+        .ilike('vendor_name', `%${keyword}%`)
+
+      matchingVendorCodes = (vendors as any[])?.map(v => v.vendor_code) || []
+    }
+
+    // 首先獲取所有符合條件的 partner_code 和 balance（不分頁），以確保完整分組和計算全域總額
+    let allQuery = supabaseServer
       .from('partner_accounts')
-      .select('*', { count: 'exact' })
+      .select('partner_code, balance, status')
       .eq('partner_type', 'vendor')
       .eq('direction', 'AP')
-      .order('created_at', { ascending: false })
 
     if (vendorCode) {
-      query = query.eq('partner_code', vendorCode)
+      allQuery = allQuery.eq('partner_code', vendorCode)
     }
+
+    if (status) {
+      allQuery = allQuery.eq('status', status)
+    }
+
+    if (dueBefore) {
+      allQuery = allQuery.lte('due_date', dueBefore)
+    }
+
+    if (keyword) {
+      const safeKeyword = keyword.replace(/[(),.*\\]/g, '')
+      const conditions: string[] = []
+      if (safeKeyword) {
+        conditions.push(`partner_code.ilike.%${safeKeyword}%`)
+      }
+      if (matchingVendorCodes.length > 0) {
+        conditions.push(`partner_code.in.(${matchingVendorCodes.join(',')})`)
+      }
+      if (conditions.length > 0) {
+        allQuery = allQuery.or(conditions.join(','))
+      }
+    }
+
+    const { data: allAccounts } = await allQuery
+
+    // 計算全域未付總額（跨所有頁面）
+    const globalTotalUnpaid = (allAccounts || [])
+      .filter((a: any) => a.status !== 'paid')
+      .reduce((sum: number, a: any) => sum + (a.balance || 0), 0)
+    const globalUnpaidCount = (allAccounts || [])
+      .filter((a: any) => a.status !== 'paid').length
+
+    // 取得唯一的 partner_codes 並按照廠商分頁
+    const uniquePartnerCodes = [...new Set((allAccounts || []).map((a: any) => a.partner_code))]
+    const totalVendors = uniquePartnerCodes.length
+    const totalPages = Math.ceil(totalVendors / pageSize)
+
+    // 對廠商代碼進行分頁
+    const from = (page - 1) * pageSize
+    const to = from + pageSize
+    const pagedPartnerCodes = uniquePartnerCodes.slice(from, to)
+
+    if (pagedPartnerCodes.length === 0) {
+      return NextResponse.json({
+        ok: true,
+        data: [],
+        pagination: { page, pageSize, total: totalVendors, totalPages },
+        summary: { globalTotalUnpaid, globalUnpaidCount }
+      })
+    }
+
+    // 獲取這些廠商的所有帳款記錄
+    let query = supabaseServer
+      .from('partner_accounts')
+      .select('*')
+      .eq('partner_type', 'vendor')
+      .eq('direction', 'AP')
+      .in('partner_code', pagedPartnerCodes)
+      .order('created_at', { ascending: false })
 
     if (status) {
       query = query.eq('status', status)
@@ -35,16 +106,7 @@ export async function GET(request: NextRequest) {
       query = query.lte('due_date', dueBefore)
     }
 
-    if (keyword) {
-      query = query.ilike('partner_code', `%${keyword}%`)
-    }
-
-    // Apply pagination
-    const from = (page - 1) * pageSize
-    const to = from + pageSize - 1
-    query = query.range(from, to)
-
-    const { data: accounts, error, count } = await query
+    const { data: accounts, error } = await query
 
     if (error) {
       return NextResponse.json(
@@ -53,15 +115,24 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    if (!accounts || accounts.length === 0) {
+      return NextResponse.json({
+        ok: true,
+        data: [],
+        pagination: { page, pageSize, total: totalVendors, totalPages },
+        summary: { globalTotalUnpaid, globalUnpaidCount }
+      })
+    }
+
     // Fetch vendor details separately
-    const vendorCodes = [...new Set((accounts as any[])?.map(a => a.partner_code) || [])]
+    const vendorCodes = [...new Set((accounts as any[]).map(a => a.partner_code))]
     const { data: vendors } = await supabaseServer
       .from('vendors')
       .select('vendor_code, vendor_name')
       .in('vendor_code', vendorCodes)
 
     // Fetch purchase item details for accounts with purchase_item_id
-    const itemIds = (accounts as any[])?.filter(a => a.purchase_item_id).map(a => a.purchase_item_id) || []
+    const itemIds = (accounts as any[]).filter(a => a.purchase_item_id).map(a => a.purchase_item_id)
     let itemsMap = new Map()
 
     if (itemIds.length > 0) {
@@ -76,7 +147,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch purchase details to get purchase_no
-    const purchaseIds = [...new Set((accounts as any[])?.filter(a => a.ref_type === 'purchase').map(a => a.ref_id) || [])]
+    const purchaseIds = [...new Set((accounts as any[]).filter(a => a.ref_type === 'purchase').map(a => a.ref_id))]
     let purchasesMap = new Map()
 
     if (purchaseIds.length > 0) {
@@ -95,7 +166,7 @@ export async function GET(request: NextRequest) {
       (vendors as any[])?.map(v => [v.vendor_code, v]) || []
     )
 
-    const accountsWithDetails = (accounts as any[])?.map(account => ({
+    const accountsWithDetails = (accounts as any[]).map(account => ({
       ...account,
       vendors: vendorsMap.get(account.partner_code) || null,
       purchase_item: account.purchase_item_id ? itemsMap.get(account.purchase_item_id) : null,
@@ -108,9 +179,10 @@ export async function GET(request: NextRequest) {
       pagination: {
         page,
         pageSize,
-        total: count || 0,
-        totalPages: Math.ceil((count || 0) / pageSize)
-      }
+        total: totalVendors,
+        totalPages
+      },
+      summary: { globalTotalUnpaid, globalUnpaidCount }
     })
   } catch (error) {
     return NextResponse.json(

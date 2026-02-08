@@ -74,6 +74,10 @@ export default function APPageV2() {
   const [totalPages, setTotalPages] = useState(0)
   const [totalCount, setTotalCount] = useState(0)
 
+  // 全域統計（跨所有頁面）
+  const [globalTotalUnpaid, setGlobalTotalUnpaid] = useState(0)
+  const [globalUnpaidCount, setGlobalUnpaidCount] = useState(0)
+
   // 權限檢查
   useEffect(() => {
     fetch('/api/auth/me')
@@ -127,6 +131,11 @@ export default function APPageV2() {
         setTotalCount(data.pagination.total)
       }
 
+      if (data.summary) {
+        setGlobalTotalUnpaid(data.summary.globalTotalUnpaid)
+        setGlobalUnpaidCount(data.summary.globalUnpaidCount)
+      }
+
       if (data.ok) {
         // 按廠商分組
         const groups: { [key: string]: VendorGroup } = {}
@@ -171,7 +180,8 @@ export default function APPageV2() {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
-    fetchAccounts()
+    setCurrentPage(1)
+    fetchAccounts(1)
   }
 
   const toggleVendor = (partnerCode: string) => {
@@ -318,8 +328,8 @@ export default function APPageV2() {
     }
   }
 
-  const totalUnpaid = vendorGroups.reduce((sum, g) => sum + g.total_balance, 0)
-  const totalVendors = vendorGroups.filter(g => g.unpaid_count > 0).length
+  const totalUnpaid = globalTotalUnpaid || vendorGroups.reduce((sum, g) => sum + g.total_balance, 0)
+  const totalVendors = totalCount || vendorGroups.filter(g => g.unpaid_count > 0).length
 
   // 權限不足時顯示提示
   if (accessDenied) {
@@ -626,7 +636,7 @@ export default function APPageV2() {
           <div className="mt-4 rounded-lg bg-white dark:bg-gray-800 p-3 sm:p-4 shadow flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 w-full sm:w-auto">
               <div className="text-sm text-gray-600 dark:text-gray-400">
-                共 {totalCount} 筆，第 {currentPage}/{totalPages} 頁
+                共 {totalCount} 家廠商，第 {currentPage}/{totalPages} 頁
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-sm text-gray-600 dark:text-gray-400">每頁</span>
@@ -642,7 +652,7 @@ export default function APPageV2() {
                   <option value={20}>20</option>
                   <option value={50}>50</option>
                 </select>
-                <span className="text-sm text-gray-600 dark:text-gray-400">筆</span>
+                <span className="text-sm text-gray-600 dark:text-gray-400">家</span>
               </div>
             </div>
             <div className="flex items-center gap-2 w-full sm:w-auto justify-center">
