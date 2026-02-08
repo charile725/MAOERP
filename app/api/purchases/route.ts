@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
           .from('purchase_items') as any)
           .select('purchase_id')
           .in('product_id', matchedProductIds)
-        matchedPurchaseIds = [...new Set((matchedItems || []).map((i: any) => i.purchase_id))]
+        matchedPurchaseIds = [...new Set((matchedItems || []).map((i: any) => i.purchase_id))] as string[]
       }
 
       // 4. 組合 server-side OR 條件
