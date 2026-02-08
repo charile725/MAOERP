@@ -300,8 +300,15 @@ export default function POSPage() {
       const res = await fetch('/api/accounts?active_only=true')
       const data = await res.json()
       if (data.ok) {
-        // 只取有 payment_method_code 的帳戶作為付款方式選項
-        const accounts = (data.data || []).filter((acc: PaymentAccount) => acc.payment_method_code)
+        // POS 只顯示指定的付款方式：現金、國泰公司戶、LinePay、待定
+        const POS_ALLOWED_CODES = ['cash', 'pending']
+        const POS_ALLOWED_NAMES = ['國泰公司戶', 'LinePay', 'LINE Pay', 'Line Pay', 'linepay']
+        const accounts = (data.data || []).filter((acc: PaymentAccount) =>
+          acc.payment_method_code && (
+            POS_ALLOWED_CODES.includes(acc.payment_method_code) ||
+            POS_ALLOWED_NAMES.some(name => acc.account_name.toLowerCase().includes(name.toLowerCase()))
+          )
+        )
         setPaymentAccounts(accounts)
         // 設定預設付款方式為第一個帳戶（通常是現金）
         if (accounts.length > 0 && !paymentMethod) {

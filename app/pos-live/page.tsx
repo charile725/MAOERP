@@ -281,8 +281,10 @@ export default function POSPage() {
       const res = await fetch('/api/accounts?active_only=true')
       const data = await res.json()
       if (data.ok) {
-        // 只取有 payment_method_code 的帳戶作為付款方式選項
-        const accounts = (data.data || []).filter((acc: PaymentAccount) => acc.payment_method_code)
+        // Live POS 只顯示待定
+        const accounts = (data.data || []).filter((acc: PaymentAccount) =>
+          acc.payment_method_code === 'pending'
+        )
         setPaymentAccounts(accounts)
       }
     } catch (err) {
