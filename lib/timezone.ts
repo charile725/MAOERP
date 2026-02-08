@@ -7,12 +7,14 @@
 
 /**
  * 取得當前台灣時間 (UTC+8)
- * @returns ISO 格式的台灣時間字串
+ * 
+ * 注意：資料庫使用 timestamptz 類型，會自動處理時區轉換
+ * 我們只需要傳入當前時間（ISO 格式），PostgreSQL 會正確存儲
+ * 
+ * @returns ISO 格式的當前時間字串
  */
 export function getTaiwanTime(): string {
-  const now = new Date()
-  const taiwanTime = new Date(now.getTime() + 8 * 60 * 60 * 1000)
-  return taiwanTime.toISOString()
+  return new Date().toISOString()
 }
 
 /**

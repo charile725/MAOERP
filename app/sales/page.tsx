@@ -1429,11 +1429,21 @@ export default function SalesPage() {
                             <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
                               {sale.customers?.customer_name || '散客'}
                             </td>
-                            <td className={`px-6 py-4 text-right text-lg font-semibold ${sale.total > 0
+                            <td className={`px-6 py-4 text-right ${sale.total > 0
                               ? 'text-gray-900 dark:text-gray-100'
                               : 'text-gray-400 dark:text-gray-500'
                               }`}>
-                              {formatCurrency(sale.total)}
+                              <div className="text-lg font-semibold">{formatCurrency(sale.total)}</div>
+                              {(sale.store_credit_used || 0) > 0 && (
+                                <div className="text-xs text-emerald-600 dark:text-emerald-400">
+                                  購物金 -{formatCurrency(sale.store_credit_used || 0)}
+                                </div>
+                              )}
+                              {(sale.discount_amount || 0) > 0 && (
+                                <div className="text-xs text-orange-600 dark:text-orange-400">
+                                  折扣 -{formatCurrency(sale.discount_amount || 0)}
+                                </div>
+                              )}
                             </td>
                             <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
                               {sale.item_count || 0} 項 / {sale.total_quantity || 0} 件
@@ -1641,6 +1651,34 @@ export default function SalesPage() {
                                       })}
                                     </tbody>
                                   </table>
+
+                                  {/* 合計摘要 */}
+                                  {((sale.store_credit_used || 0) > 0 || (sale.discount_amount || 0) > 0) && (
+                                    <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
+                                      <div className="flex flex-col items-end gap-1 text-sm">
+                                        <div className="flex justify-between w-48">
+                                          <span className="text-gray-500 dark:text-gray-400">商品小計</span>
+                                          <span className="text-gray-900 dark:text-gray-100">{formatCurrency(sale.subtotal || sale.sale_items?.reduce((sum, item) => sum + item.price * item.quantity, 0) || 0)}</span>
+                                        </div>
+                                        {(sale.discount_amount || 0) > 0 && (
+                                          <div className="flex justify-between w-48">
+                                            <span className="text-orange-600 dark:text-orange-400">折扣</span>
+                                            <span className="text-orange-600 dark:text-orange-400">-{formatCurrency(sale.discount_amount || 0)}</span>
+                                          </div>
+                                        )}
+                                        {(sale.store_credit_used || 0) > 0 && (
+                                          <div className="flex justify-between w-48">
+                                            <span className="text-emerald-600 dark:text-emerald-400">購物金折抵</span>
+                                            <span className="text-emerald-600 dark:text-emerald-400">-{formatCurrency(sale.store_credit_used || 0)}</span>
+                                          </div>
+                                        )}
+                                        <div className="flex justify-between w-48 pt-1 border-t border-gray-300 dark:border-gray-600">
+                                          <span className="font-semibold text-gray-900 dark:text-gray-100">實收金額</span>
+                                          <span className="font-bold text-lg text-gray-900 dark:text-gray-100">{formatCurrency(sale.total)}</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               </td>
                             </tr>
