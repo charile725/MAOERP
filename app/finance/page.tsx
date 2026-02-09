@@ -32,6 +32,20 @@ type FinanceData = {
     expensesByAccount: { [key: string]: number }
     salesByAccount: { [key: string]: number }
   }
+  arAging?: {
+    total: number
+    current: number
+    days31_60: number
+    days61_90: number
+    over90: number
+  }
+  apAging?: {
+    total: number
+    current: number
+    days31_60: number
+    days61_90: number
+    over90: number
+  }
 }
 
 const ACCOUNT_TYPE_LABELS = {
@@ -103,104 +117,117 @@ export default function FinanceDashboardPage() {
     )
   }
 
+  const arTotal = data.arAging?.total || 0
+  const apTotal = data.apAging?.total || 0
+  const netCashPosition = data.totals.total + arTotal - apTotal
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
       <div className="mx-auto max-w-7xl">
         <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">財務總覽</h1>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">現金流</h1>
           <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-            即時查看各帳戶餘額與今日現金流
+            帳戶總餘額 + 應收帳款 - 應付帳款
           </p>
         </div>
 
-        {/* 總覽卡片 */}
-        <div className={`mb-6 grid gap-4 ${isAdmin ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-1 lg:grid-cols-1 max-w-md'}`}>
-          {/* 現金餘額 - 僅管理員可見 */}
-          {isAdmin && (
-            <div className="rounded-lg bg-white dark:bg-gray-800 p-6 shadow">
-              <div className="mb-2 text-sm font-medium text-gray-600 dark:text-gray-400">
-                現金餘額
-              </div>
-              <div className="text-3xl font-bold text-green-600">
-                {formatCurrency(data.totals.cash)}
-              </div>
-              <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                {data.accounts.cash.length} 個帳戶
-              </div>
-            </div>
-          )}
-
-          {/* 銀行餘額 - 僅管理員可見 */}
-          {isAdmin && (
-            <div className="rounded-lg bg-white dark:bg-gray-800 p-6 shadow">
-              <div className="mb-2 text-sm font-medium text-gray-600 dark:text-gray-400">
-                銀行餘額
-              </div>
-              <div className="text-3xl font-bold text-blue-600">
-                {formatCurrency(data.totals.bank)}
-              </div>
-              <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                {data.accounts.bank.length} 個帳戶
-              </div>
-            </div>
-          )}
-
-          {/* 零用金 - 所有人可見 */}
-          <div className="rounded-lg bg-white dark:bg-gray-800 p-6 shadow">
-            <div className="mb-2 text-sm font-medium text-gray-600 dark:text-gray-400">
-              零用金
-            </div>
-            <div className="text-3xl font-bold text-orange-600">
-              {formatCurrency(data.totals.petty_cash)}
-            </div>
-            <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-              {data.accounts.petty_cash.length} 個帳戶
-            </div>
-          </div>
-
-          {/* 今日淨現金流 - 僅管理員可見 */}
-          {isAdmin && (
-            <div className="rounded-lg bg-white dark:bg-gray-800 p-6 shadow">
-              <div className="mb-2 text-sm font-medium text-gray-600 dark:text-gray-400">
-                今日淨現金流
-              </div>
-              <div
-                className={`text-3xl font-bold ${
-                  data.today.netCashFlow >= 0 ? 'text-green-600' : 'text-red-600'
-                }`}
-              >
-                {formatCurrency(data.today.netCashFlow)}
-              </div>
-              <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                收入 {formatCurrency(data.today.sales)} - 支出 {formatCurrency(data.today.expenses)}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* 今日現金流詳情 - 僅管理員可見 */}
         {isAdmin && (
-          <div className="mb-6 rounded-lg bg-white dark:bg-gray-800 p-6 shadow">
-            <h2 className="mb-4 text-xl font-semibold text-gray-900 dark:text-gray-100">
-              今日現金流詳情
-            </h2>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-900/20">
-                <div className="mb-1 text-sm font-medium text-green-800 dark:text-green-400">
-                  今日收入（銷售）
+          <>
+            {/* 現金流總覽 */}
+            <div className="mb-6 rounded-lg bg-white dark:bg-gray-800 p-6 shadow">
+              <div className="flex flex-col items-center gap-4 md:flex-row md:justify-between">
+                {/* 帳戶總餘額 */}
+                <div className="text-center md:text-left flex-1">
+                  <div className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">帳戶總餘額</div>
+                  <div className="text-3xl font-bold text-blue-600">{formatCurrency(data.totals.total)}</div>
                 </div>
-                <div className="text-2xl font-bold text-green-600">
-                  {formatCurrency(data.today.sales)}
+
+                <div className="text-2xl font-bold text-gray-400 hidden md:block">+</div>
+
+                {/* 應收帳款 */}
+                <div className="text-center flex-1">
+                  <div className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">應收帳款</div>
+                  <div className="text-3xl font-bold text-green-600">
+                    {formatCurrency(arTotal)}
+                  </div>
+                </div>
+
+                <div className="text-2xl font-bold text-gray-400 hidden md:block">-</div>
+
+                {/* 應付帳款 */}
+                <div className="text-center flex-1">
+                  <div className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">應付帳款</div>
+                  <div className="text-3xl font-bold text-red-600">
+                    {formatCurrency(apTotal)}
+                  </div>
+                </div>
+
+                <div className="text-2xl font-bold text-gray-400 hidden md:block">=</div>
+
+                {/* 淨現金部位 */}
+                <div className="text-center md:text-right flex-1 border-t md:border-t-0 md:border-l border-gray-200 dark:border-gray-700 pt-4 md:pt-0 md:pl-6">
+                  <div className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">淨現金部位</div>
+                  <div className={`text-4xl font-bold ${netCashPosition >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                    {formatCurrency(netCashPosition)}
+                  </div>
                 </div>
               </div>
-              <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
-                <div className="mb-1 text-sm font-medium text-red-800 dark:text-red-400">
-                  今日支出
+            </div>
+
+            {/* 帳戶餘額卡片 */}
+            <div className="mb-6 grid gap-4 md:grid-cols-3">
+              <div className="rounded-lg bg-white dark:bg-gray-800 p-6 shadow">
+                <div className="mb-2 text-sm font-medium text-gray-600 dark:text-gray-400">現金餘額</div>
+                <div className="text-3xl font-bold text-green-600">{formatCurrency(data.totals.cash)}</div>
+                <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">{data.accounts.cash.length} 個帳戶</div>
+              </div>
+              <div className="rounded-lg bg-white dark:bg-gray-800 p-6 shadow">
+                <div className="mb-2 text-sm font-medium text-gray-600 dark:text-gray-400">銀行餘額</div>
+                <div className="text-3xl font-bold text-blue-600">{formatCurrency(data.totals.bank)}</div>
+                <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">{data.accounts.bank.length} 個帳戶</div>
+              </div>
+              <div className="rounded-lg bg-white dark:bg-gray-800 p-6 shadow">
+                <div className="mb-2 text-sm font-medium text-gray-600 dark:text-gray-400">零用金</div>
+                <div className="text-3xl font-bold text-orange-600">{formatCurrency(data.totals.petty_cash)}</div>
+                <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">{data.accounts.petty_cash.length} 個帳戶</div>
+              </div>
+            </div>
+
+            {/* 今日現金流 */}
+            <div className="mb-6 rounded-lg bg-white dark:bg-gray-800 p-6 shadow">
+              <h2 className="mb-4 text-xl font-semibold text-gray-900 dark:text-gray-100">今日現金流</h2>
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-900/20">
+                  <div className="mb-1 text-sm font-medium text-green-800 dark:text-green-400">收入（銷售）</div>
+                  <div className="text-2xl font-bold text-green-600">{formatCurrency(data.today.sales)}</div>
                 </div>
-                <div className="text-2xl font-bold text-red-600">
-                  {formatCurrency(data.today.expenses)}
+                <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
+                  <div className="mb-1 text-sm font-medium text-red-800 dark:text-red-400">支出</div>
+                  <div className="text-2xl font-bold text-red-600">{formatCurrency(data.today.expenses)}</div>
+                </div>
+                <div className={`rounded-lg border p-4 ${data.today.netCashFlow >= 0
+                  ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-900/20'
+                  : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/20'
+                  }`}>
+                  <div className={`mb-1 text-sm font-medium ${data.today.netCashFlow >= 0 ? 'text-emerald-800 dark:text-emerald-400' : 'text-red-800 dark:text-red-400'}`}>
+                    淨現金流
+                  </div>
+                  <div className={`text-2xl font-bold ${data.today.netCashFlow >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                    {formatCurrency(data.today.netCashFlow)}
+                  </div>
                 </div>
               </div>
+            </div>
+          </>
+        )}
+
+        {/* 員工只看零用金 */}
+        {!isAdmin && (
+          <div className="mb-6 max-w-md">
+            <div className="rounded-lg bg-white dark:bg-gray-800 p-6 shadow">
+              <div className="mb-2 text-sm font-medium text-gray-600 dark:text-gray-400">零用金</div>
+              <div className="text-3xl font-bold text-orange-600">{formatCurrency(data.totals.petty_cash)}</div>
+              <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">{data.accounts.petty_cash.length} 個帳戶</div>
             </div>
           </div>
         )}
@@ -208,7 +235,6 @@ export default function FinanceDashboardPage() {
         {/* 各帳戶明細 */}
         <div className="space-y-6">
           {Object.entries(data.accounts).map(([type, accountList]) => {
-            // 員工只能看到零用金帳戶
             if (!isAdmin && type !== 'petty_cash') return null
             if (accountList.length === 0) return null
 
@@ -231,18 +257,10 @@ export default function FinanceDashboardPage() {
                   <table className="w-full">
                     <thead className="border-b bg-gray-50 dark:bg-gray-900">
                       <tr>
-                        <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">
-                          帳戶名稱
-                        </th>
-                        <th className="px-6 py-3 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">
-                          餘額
-                        </th>
-                        <th className="px-6 py-3 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">
-                          今日收入
-                        </th>
-                        <th className="px-6 py-3 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">
-                          今日支出
-                        </th>
+                        <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">帳戶名稱</th>
+                        <th className="px-6 py-3 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">餘額</th>
+                        <th className="px-6 py-3 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">今日收入</th>
+                        <th className="px-6 py-3 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">今日支出</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -250,19 +268,10 @@ export default function FinanceDashboardPage() {
                         const todayExpense = data.today.expensesByAccount[account.id] || 0
                         const todaySales = data.today.salesByAccount?.[account.id] || 0
                         return (
-                          <tr
-                            key={account.id}
-                            className="hover:bg-gray-50 dark:hover:bg-gray-700"
-                          >
-                            <td className="px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">
-                              {account.account_name}
-                            </td>
+                          <tr key={account.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                            <td className="px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">{account.account_name}</td>
                             <td className="px-6 py-4 text-right text-sm">
-                              <span
-                                className={`font-semibold ${
-                                  account.balance >= 0 ? 'text-green-600' : 'text-red-600'
-                                }`}
-                              >
+                              <span className={`font-semibold ${account.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                                 {formatCurrency(account.balance)}
                               </span>
                             </td>
