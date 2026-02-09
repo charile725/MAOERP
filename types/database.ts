@@ -219,7 +219,7 @@ export interface Database {
         Row: {
           id: string
           sale_id: string
-          product_id: string
+          product_id: string | null
           quantity: number
           price: number
           subtotal: number
@@ -230,7 +230,7 @@ export interface Database {
         Insert: {
           id?: string
           sale_id: string
-          product_id: string
+          product_id?: string | null
           quantity: number
           price: number
           subtotal?: number
@@ -241,7 +241,7 @@ export interface Database {
         Update: {
           id?: string
           sale_id?: string
-          product_id?: string
+          product_id?: string | null
           quantity?: number
           price?: number
           subtotal?: number

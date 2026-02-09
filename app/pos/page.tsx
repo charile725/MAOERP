@@ -21,6 +21,7 @@ type CartItem = SaleItem & {
   product: Product
   ichiban_kuji_prize_id?: string
   ichiban_kuji_id?: string
+  realProductId?: string | null  // 一番賞用：官方套獎品為 null，自組套為實際 product_id
   isFreeGift?: boolean
   isNotDelivered?: boolean
 }
@@ -472,7 +473,7 @@ export default function POSPage() {
     }
   }
 
-  const addToCart = (product: Product, quantityOrInfo: number | { kuji_id: string; prize_id: string } = 1) => {
+  const addToCart = (product: Product, quantityOrInfo: number | { kuji_id: string; prize_id: string; realProductId?: string | null } = 1) => {
     // Determine if this is an ichiban kuji item
     const ichibanInfo = typeof quantityOrInfo === 'object' ? quantityOrInfo : undefined
     const quantity = typeof quantityOrInfo === 'number' ? quantityOrInfo : 1
@@ -489,6 +490,7 @@ export default function POSPage() {
             product,
             ichiban_kuji_id: ichibanInfo.kuji_id,
             ichiban_kuji_prize_id: ichibanInfo.prize_id,
+            realProductId: ichibanInfo.realProductId ?? null,
             isFreeGift: false,
             isNotDelivered: false,
           },
@@ -594,7 +596,7 @@ export default function POSPage() {
       tags: [],
     }
 
-    addToCart(product, { kuji_id: kuji.id, prize_id: prize.id })
+    addToCart(product, { kuji_id: kuji.id, prize_id: prize.id, realProductId: prize.product_id || null })
   }
 
   const updateQuantity = (index: number, quantity: number) => {
@@ -914,9 +916,9 @@ export default function POSPage() {
               .filter(p => parseFloat(p.amount) > 0)
               .map(p => ({ method: p.method, amount: parseFloat(p.amount) }))
             : undefined,
-          // 傳送每個品項的出貨狀態
+          // 傳送每個品項的出貨狀態（官方套獎品 realProductId 為 null，送 null 給後端）
           items: checkoutCart.map((item) => ({
-            product_id: item.product_id,
+            product_id: item.ichiban_kuji_prize_id ? (item.realProductId ?? null) : item.product_id,
             quantity: item.quantity,
             price: item.price,
             ichiban_kuji_prize_id: item.ichiban_kuji_prize_id,
@@ -991,7 +993,7 @@ export default function POSPage() {
           discount_type: discountType,
           discount_value: discountValue,
           items: draftCart.map((item) => ({
-            product_id: item.product_id,
+            product_id: item.ichiban_kuji_prize_id ? (item.realProductId ?? null) : item.product_id,
             quantity: item.quantity,
             price: item.price,
             ichiban_kuji_prize_id: item.ichiban_kuji_prize_id,
