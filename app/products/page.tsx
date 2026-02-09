@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { formatCurrency } from '@/lib/utils'
 import type { Product } from '@/types'
 import ProductImportModal from '@/components/ProductImportModal'
+import CameraScanner from '@/components/CameraScanner'
 
 type SortField = 'item_code' | 'name' | 'price' | 'avg_cost' | 'stock' | 'updated_at'
 type SortOrder = 'asc' | 'desc'
@@ -29,6 +30,7 @@ export default function ProductsPage() {
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
   const [userRole, setUserRole] = useState<'admin' | 'staff' | null>(null)
   const [showImportModal, setShowImportModal] = useState(false)
+  const [showScanner, setShowScanner] = useState(false)
 
   // 獲取用戶角色
   useEffect(() => {
@@ -75,6 +77,28 @@ export default function ProductsPage() {
     setPage(1)
     fetchProducts(1)
   }
+
+  const handleScan = useCallback((code: string) => {
+    setKeyword(code)
+    setPage(1)
+    // 需要延遲一下讓 state 更新後再搜尋
+    setTimeout(() => {
+      const params = new URLSearchParams()
+      params.set('keyword', code)
+      if (activeFilter !== null) params.set('active', String(activeFilter))
+      params.set('page', '1')
+      params.set('sortBy', sortBy)
+      params.set('sortOrder', sortOrder)
+      fetch(`/api/products?${params}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.ok) {
+            setProducts(data.data || [])
+            setPagination(data.pagination)
+          }
+        })
+    }, 100)
+  }, [activeFilter, sortBy, sortOrder])
 
   const handlePageChange = (newPage: number) => {
     setPage(newPage)
@@ -176,6 +200,16 @@ export default function ProductsPage() {
               placeholder="搜尋商品名稱、品號或條碼"
               className="flex-1 rounded border border-gray-300 dark:border-gray-600 px-4 py-2 text-gray-900 dark:text-gray-100 dark:bg-gray-700 placeholder:text-gray-900 dark:placeholder:text-gray-400"
             />
+            <button
+              type="button"
+              onClick={() => setShowScanner(true)}
+              className="rounded bg-slate-700 px-3 py-2 text-white hover:bg-slate-600"
+              title="掃描條碼"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M3 17v2a2 2 0 002 2h2M17 21h2a2 2 0 002-2v-2M7 12h10M12 7v10" />
+              </svg>
+            </button>
             <button
               type="submit"
               className="rounded bg-blue-600 px-6 py-2 font-medium text-white hover:bg-blue-700"
@@ -498,6 +532,13 @@ export default function ProductsPage() {
         </>,
         document.body
       )}
+
+      {/* Camera Scanner */}
+      <CameraScanner
+        isOpen={showScanner}
+        onClose={() => setShowScanner(false)}
+        onScan={handleScan}
+      />
 
       {/* Import Modal */}
       <ProductImportModal
