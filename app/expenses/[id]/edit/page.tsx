@@ -40,6 +40,7 @@ export default function EditExpensePage({ params }: PageProps) {
   const [fetching, setFetching] = useState(true)
   const [error, setError] = useState('')
   const [accounts, setAccounts] = useState<Account[]>([])
+  const [userRole, setUserRole] = useState<'admin' | 'staff' | null>(null)
   const [formData, setFormData] = useState({
     date: '',
     category: EXPENSE_CATEGORIES[0],
@@ -48,13 +49,28 @@ export default function EditExpensePage({ params }: PageProps) {
     note: '',
   })
 
+  const isAdmin = userRole === 'admin'
+
   useEffect(() => {
+    fetchUserRole()
     fetchAccounts()
     params.then((p) => {
       setId(p.id)
       fetchExpense(p.id)
     })
   }, [params])
+
+  const fetchUserRole = async () => {
+    try {
+      const res = await fetch('/api/auth/me')
+      const result = await res.json()
+      if (result.ok && result.data) {
+        setUserRole(result.data.role)
+      }
+    } catch (err) {
+      console.error('Failed to fetch user role:', err)
+    }
+  }
 
   const fetchAccounts = async () => {
     try {
@@ -67,6 +83,9 @@ export default function EditExpensePage({ params }: PageProps) {
       console.error('Failed to fetch accounts:', err)
     }
   }
+
+  // 員工只能使用零用金帳戶
+  const availableAccounts = isAdmin ? accounts : accounts.filter(acc => acc.account_type === 'petty_cash')
 
   const fetchExpense = async (expenseId: string) => {
     try {
@@ -202,7 +221,7 @@ export default function EditExpensePage({ params }: PageProps) {
                 className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
               >
                 <option value="">請選擇帳戶</option>
-                {accounts.map((acc) => (
+                {availableAccounts.map((acc) => (
                   <option key={acc.id} value={acc.id}>
                     {acc.account_name} ({formatCurrency(acc.balance)})
                   </option>

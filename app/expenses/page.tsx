@@ -60,14 +60,30 @@ export default function ExpensesPage() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [deleting, setDeleting] = useState<number | null>(null)
+  const [userRole, setUserRole] = useState<'admin' | 'staff' | null>(null)
+
+  const isAdmin = userRole === 'admin'
 
   useEffect(() => {
+    fetchUserRole()
     fetchAccounts()
   }, [])
 
   useEffect(() => {
     fetchExpenses()
   }, [categoryFilter, accountFilter, dateFrom, dateTo])
+
+  const fetchUserRole = async () => {
+    try {
+      const res = await fetch('/api/auth/me')
+      const result = await res.json()
+      if (result.ok && result.data) {
+        setUserRole(result.data.role)
+      }
+    } catch (err) {
+      console.error('Failed to fetch user role:', err)
+    }
+  }
 
   const fetchAccounts = async () => {
     try {
@@ -80,6 +96,9 @@ export default function ExpensesPage() {
       console.error('Failed to fetch accounts:', err)
     }
   }
+
+  // 員工只能看到零用金帳戶
+  const availableAccounts = isAdmin ? accounts : accounts.filter(acc => acc.account_type === 'petty_cash')
 
   const fetchExpenses = async () => {
     setLoading(true)
@@ -133,7 +152,10 @@ export default function ExpensesPage() {
     }
   }
 
-  const totalAmount = expenses.reduce((sum, exp) => sum + exp.amount, 0)
+  // 員工只顯示零用金帳戶的費用
+  const pettyAccountIds = new Set(accounts.filter(acc => acc.account_type === 'petty_cash').map(acc => acc.id))
+  const displayedExpenses = isAdmin ? expenses : expenses.filter(exp => exp.account_id && pettyAccountIds.has(exp.account_id))
+  const totalAmount = displayedExpenses.reduce((sum, exp) => sum + exp.amount, 0)
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
@@ -178,7 +200,7 @@ export default function ExpensesPage() {
                 className="w-full rounded border border-gray-300 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:outline-none"
               >
                 <option value="">全部帳戶</option>
-                {accounts.map((acc) => (
+                {availableAccounts.map((acc) => (
                   <option key={acc.id} value={acc.id}>
                     {acc.account_name}
                   </option>
@@ -246,7 +268,7 @@ export default function ExpensesPage() {
         <div className="rounded-lg bg-white dark:bg-gray-800 shadow">
           {loading ? (
             <div className="p-8 text-center text-gray-900 dark:text-gray-100">載入中...</div>
-          ) : expenses.length === 0 ? (
+          ) : displayedExpenses.length === 0 ? (
             <div className="p-8 text-center text-gray-900 dark:text-gray-100">
               <p className="mb-4">尚未記錄任何費用</p>
               <button
@@ -282,7 +304,7 @@ export default function ExpensesPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                  {expenses.map((expense) => (
+                  {displayedExpenses.map((expense) => (
                     <tr key={expense.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                       <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
                         {formatDate(expense.date)}
