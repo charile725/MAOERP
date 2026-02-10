@@ -777,6 +777,21 @@ export default function ARPageV2() {
                         </div>
                       </div>
 
+                      {unpaidAccounts.length > 0 && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            selectAllForCustomer(group.partner_code, !allSelected)
+                            if (!isExpanded) toggleCustomer(group.partner_code)
+                          }}
+                          className={`rounded px-3 py-2 text-sm font-medium transition-colors ${allSelected
+                            ? 'bg-blue-600 text-white hover:bg-blue-700'
+                            : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                          }`}
+                        >
+                          {allSelected ? '取消全選' : '全選'}
+                        </button>
+                      )}
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
