@@ -326,19 +326,18 @@ export default function BarcodePrintPage() {
             margin: 0 !important;
           }
 
-          /* 標籤紙 grid - 置中 */
+          /* 標籤紙 grid - 一排一個，左右置中 */
           .print-area {
-            display: grid !important;
-            grid-template-columns: repeat(2, 1fr) !important;
-            gap: 2mm !important;
-            align-content: start !important;
-            justify-content: center !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
             background: #fff !important;
             width: 100% !important;
             margin: 0 auto !important;
+            gap: 2mm !important;
           }
 
-          /* 標籤框體 - 內容全部置中 */
+          /* 標籤框體 - 固定寬度，內容置中 */
           .label {
             display: flex !important;
             flex-direction: column !important;
@@ -352,6 +351,7 @@ export default function BarcodePrintPage() {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
             text-align: center !important;
+            width: 90mm !important;
           }
 
           /* 條碼本體置中 */
