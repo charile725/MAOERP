@@ -524,6 +524,35 @@ export default function IchibanKujiPage() {
                                       廢套結算
                                     </button>
                                   )}
+                                  {/* 復活（僅自製套 + 已停用） */}
+                                  {kuji.set_type === 'custom' && !kuji.is_active && userRole === 'admin' && (
+                                    <button
+                                      onClick={async (e) => {
+                                        e.stopPropagation()
+                                        setOpenMenuId(null)
+                                        if (!confirm(`確定要復活「${kuji.name}」嗎？\n\n將反轉廢套結算的費用記錄並重新啟用。`)) return
+                                        try {
+                                          const res = await fetch(`/api/ichiban-kuji/${kuji.id}/reactivate`, {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({}),
+                                          })
+                                          const data = await res.json()
+                                          if (data.ok) {
+                                            alert(`已復活「${kuji.name}」${data.data.expense_reversed ? `，已回補費用 $${data.data.amount_reversed}` : ''}`)
+                                            fetchKujis(page)
+                                          } else {
+                                            alert(data.error || '復活失敗')
+                                          }
+                                        } catch {
+                                          alert('復活失敗')
+                                        }
+                                      }}
+                                      className="block w-full text-left px-4 py-2 text-sm text-green-600 dark:text-green-400 hover:bg-gray-100 dark:hover:bg-gray-600"
+                                    >
+                                      復活
+                                    </button>
+                                  )}
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation()
