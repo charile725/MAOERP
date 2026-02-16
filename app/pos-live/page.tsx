@@ -22,6 +22,7 @@ type CartItem = SaleItem & {
   ichiban_kuji_prize_id?: string
   ichiban_kuji_id?: string
   realProductId?: string | null
+  selectionOptionId?: string  // 複選獎：選中的選項ID
   isFreeGift?: boolean
   isNotDelivered?: boolean
 }
@@ -157,6 +158,12 @@ export default function POSPage() {
   const [ichibanKujis, setIchibanKujis] = useState<any[]>([])
   const [selectedKuji, setSelectedKuji] = useState<any | null>(null)
   const [expandedKujiId, setExpandedKujiId] = useState<string | null>(null)
+  // 複選獎選項彈窗
+  const [selectionDialog, setSelectionDialog] = useState<{
+    kuji: any
+    prize: any
+    options: any[]
+  } | null>(null)
   const scanTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // 相機掃描
@@ -536,7 +543,20 @@ export default function POSPage() {
       return
     }
 
-    // Add to cart
+    // 複選獎：開啟選項彈窗
+    const options = prize.ichiban_kuji_prize_options || []
+    if (options.length > 0) {
+      const cartOptionIds = new Set(cart.filter(i => i.selectionOptionId).map(i => i.selectionOptionId))
+      const availableOptions = options.filter((o: any) => !o.is_consumed && !cartOptionIds.has(o.id))
+      if (availableOptions.length === 0) {
+        alert('此複選獎已無可用選項')
+        return
+      }
+      setSelectionDialog({ kuji, prize, options: availableOptions })
+      return
+    }
+
+    // 普通獎
     const product: Product = {
       id: prize.product_id || prize.id,
       item_code: prize.products?.item_code || prize.prize_tier,
@@ -552,6 +572,44 @@ export default function POSPage() {
     }
 
     addToCart(product, { kuji_id: kuji.id, prize_id: prize.id, realProductId: prize.product_id || null })
+  }
+
+  const handleSelectOption = (option: any) => {
+    if (!selectionDialog) return
+    const { kuji, prize } = selectionDialog
+    const optProduct = option.products
+
+    const product: Product = {
+      id: optProduct?.id || option.product_id,
+      item_code: optProduct?.item_code || prize.prize_tier,
+      name: `【${kuji.name}】${prize.prize_tier} - ${optProduct?.name || ''}`,
+      unit: optProduct?.unit || '抽',
+      price: kuji.price || 0,
+      cost: optProduct?.cost || 0,
+      stock: prize.remaining,
+      avg_cost: 0,
+      allow_negative: false,
+      is_active: true,
+      tags: [],
+    }
+
+    setCart((prev) => [
+      ...prev,
+      {
+        product_id: optProduct?.id || option.product_id,
+        quantity: 1,
+        price: kuji.price || 0,
+        product,
+        ichiban_kuji_id: kuji.id,
+        ichiban_kuji_prize_id: prize.id,
+        realProductId: optProduct?.id || option.product_id,
+        selectionOptionId: option.id,
+        isFreeGift: false,
+        isNotDelivered: false,
+      },
+    ])
+
+    setSelectionDialog(null)
   }
 
   const updateQuantity = (index: number, quantity: number) => {
@@ -860,6 +918,7 @@ export default function POSPage() {
             price: item.price,
             ichiban_kuji_prize_id: item.ichiban_kuji_prize_id,
             ichiban_kuji_id: item.ichiban_kuji_id,
+            selection_option_id: item.selectionOptionId,
             isNotDelivered: item.isNotDelivered || false,
           })),
         }),
@@ -1511,26 +1570,33 @@ export default function POSPage() {
                               </div>
 
                               {/* 賞品列表 */}
-                              {(selectedKuji.ichiban_kuji_prizes || []).map((prize: any) => (
-                                <button
-                                  key={prize.id}
-                                  onClick={() => addIchibanPrize(selectedKuji, prize)}
-                                  disabled={prize.remaining <= 0}
-                                  className={`rounded p-3 shadow hover:shadow-md transition-all active:scale-95 flex flex-col items-center justify-center min-h-[100px] border-2 ${prize.remaining <= 0
-                                    ? 'bg-gray-300 dark:bg-gray-700 border-gray-400 dark:border-gray-600 text-gray-500 cursor-not-allowed opacity-50'
-                                    : 'bg-teal-700 hover:bg-teal-800 text-white border-teal-800'
-                                    }`}
-                                >
-                                  <div className="text-xs font-bold mb-1 text-center px-2 py-0.5 bg-white/20 rounded">
-                                    {prize.prize_tier}
-                                  </div>
-                                  <div className="text-sm font-bold text-center mb-1 line-clamp-2">
-                                    {prize.products?.name || prize.prize_name || prize.prize_tier}
-                                  </div>
-                                  <div className="text-lg font-bold">{formatCurrency(selectedKuji.price || 0)}</div>
-                                  <div className="text-xs mt-1">剩餘: {prize.remaining}</div>
-                                </button>
-                              ))}
+                              {(selectedKuji.ichiban_kuji_prizes || []).map((prize: any) => {
+                                const options = prize.ichiban_kuji_prize_options || []
+                                const isSelection = options.length > 0
+                                return (
+                                  <button
+                                    key={prize.id}
+                                    onClick={() => addIchibanPrize(selectedKuji, prize)}
+                                    disabled={prize.remaining <= 0}
+                                    className={`rounded p-3 shadow hover:shadow-md transition-all active:scale-95 flex flex-col items-center justify-center min-h-[100px] border-2 ${prize.remaining <= 0
+                                      ? 'bg-gray-300 dark:bg-gray-700 border-gray-400 dark:border-gray-600 text-gray-500 cursor-not-allowed opacity-50'
+                                      : isSelection
+                                        ? 'bg-violet-700 hover:bg-violet-800 text-white border-violet-800'
+                                        : 'bg-teal-700 hover:bg-teal-800 text-white border-teal-800'
+                                      }`}
+                                  >
+                                    <div className="text-xs font-bold mb-1 text-center px-2 py-0.5 bg-white/20 rounded">
+                                      {prize.prize_tier}
+                                      {isSelection && <span className="ml-1">{options.length}選1</span>}
+                                    </div>
+                                    <div className="text-sm font-bold text-center mb-1 line-clamp-2">
+                                      {isSelection ? '複選獎' : (prize.products?.name || prize.prize_name || prize.prize_tier)}
+                                    </div>
+                                    <div className="text-lg font-bold">{formatCurrency(selectedKuji.price || 0)}</div>
+                                    <div className="text-xs mt-1">剩餘: {prize.remaining}</div>
+                                  </button>
+                                )
+                              })}
                             </>
                           )
                         })()}
@@ -2573,6 +2639,49 @@ export default function POSPage() {
         onClose={() => setShowCameraScanner(false)}
         onScan={handleCameraScan}
       />
+
+      {/* 複選獎選項彈窗 */}
+      {selectionDialog && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60" onClick={() => setSelectionDialog(null)}>
+          <div
+            className="mx-4 max-h-[80vh] w-full max-w-md overflow-y-auto rounded-xl bg-white dark:bg-gray-800 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="border-b border-gray-200 dark:border-gray-700 px-5 py-4">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                {selectionDialog.prize.prize_tier} - 選擇獎品
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                請從以下選項中選擇一個
+              </p>
+            </div>
+            <div className="p-4 space-y-2">
+              {selectionDialog.options.map((option: any) => (
+                <button
+                  key={option.id}
+                  onClick={() => handleSelectOption(option)}
+                  className="w-full rounded-lg border-2 border-violet-200 dark:border-violet-700 bg-violet-50 dark:bg-violet-900/30 p-4 text-left hover:border-violet-500 dark:hover:border-violet-500 hover:bg-violet-100 dark:hover:bg-violet-900/50 transition-colors"
+                >
+                  <div className="font-semibold text-gray-900 dark:text-gray-100">
+                    {option.products?.name || '未知商品'}
+                  </div>
+                  <div className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                    {option.products?.item_code}
+                  </div>
+                </button>
+              ))}
+            </div>
+            <div className="border-t border-gray-200 dark:border-gray-700 px-5 py-3 text-right">
+              <button
+                onClick={() => setSelectionDialog(null)}
+                className="rounded px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

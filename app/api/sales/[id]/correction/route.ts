@@ -180,6 +180,12 @@ export async function POST(
         // 5. 更新銷售明細
         for (const adjustment of items) {
             if (adjustment.new_quantity === 0) {
+                // 釋放一番賞複選獎選項（如果有的話）
+                await (supabaseServer
+                    .from('ichiban_kuji_prize_options') as any)
+                    .update({ is_consumed: false, consumed_sale_item_id: null })
+                    .eq('consumed_sale_item_id', adjustment.sale_item_id)
+
                 // 刪除該品項
                 await (supabaseServer
                     .from('sale_items') as any)

@@ -12,6 +12,13 @@ type Product = {
   unit: string
 }
 
+type PrizeOption = {
+  id: string
+  product_id: string
+  is_consumed: boolean
+  products: Product | null
+}
+
 type Prize = {
   id: string
   prize_tier: string
@@ -20,6 +27,7 @@ type Prize = {
   quantity: number
   remaining: number
   products: Product | null
+  ichiban_kuji_prize_options?: PrizeOption[]
 }
 
 type ComboPrice = {
@@ -596,51 +604,79 @@ export default function IchibanKujiPage() {
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y">
-                                    {kuji.ichiban_kuji_prizes.map((prize) => (
-                                      <tr key={prize.id}>
-                                        <td className="py-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
-                                          {prize.prize_tier}
-                                        </td>
-                                        <td className="py-2 text-sm text-gray-900 dark:text-gray-100">
-                                          {kuji.set_type === 'official'
-                                            ? (prize.prize_name || '-')
-                                            : (prize.products?.name || '-')}
-                                        </td>
-                                        {kuji.set_type !== 'official' && (
-                                          <td className="py-2 text-sm text-gray-500 dark:text-gray-400">
-                                            {prize.products?.item_code || '-'}
+                                    {kuji.ichiban_kuji_prizes.map((prize) => {
+                                      const options = prize.ichiban_kuji_prize_options || []
+                                      const isSelection = options.length > 0
+                                      const avgOptionCost = isSelection
+                                        ? options.reduce((s, o) => s + (o.products?.cost || 0), 0) / options.length
+                                        : 0
+                                      return (
+                                        <tr key={prize.id}>
+                                          <td className="py-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                                            <div className="flex items-center gap-1.5">
+                                              {prize.prize_tier}
+                                              {isSelection && (
+                                                <span className="rounded bg-violet-100 dark:bg-violet-900/40 px-1.5 py-0.5 text-[10px] font-medium text-violet-700 dark:text-violet-300">
+                                                  {options.length}選1
+                                                </span>
+                                              )}
+                                            </div>
                                           </td>
-                                        )}
-                                        <td className="py-2 text-right text-sm text-gray-900 dark:text-gray-100">
-                                          {prize.quantity} {prize.products?.unit || '抽'}
-                                        </td>
-                                        <td className="py-2 text-right text-sm font-semibold">
-                                          <span className={
-                                            prize.remaining === 0
-                                              ? 'text-gray-500 dark:text-gray-400'
-                                              : prize.remaining <= 5
-                                                ? 'text-orange-600 dark:text-orange-400'
-                                                : 'text-green-600 dark:text-green-400'
-                                          }>
-                                            {prize.remaining === 0
-                                              ? '完售'
-                                              : prize.remaining <= 5
-                                                ? `⚠ ${prize.remaining} 抽`
-                                                : `${prize.remaining} 抽`}
-                                          </span>
-                                        </td>
-                                        {userRole === 'admin' && kuji.set_type !== 'official' && (
-                                          <>
-                                            <td className="py-2 text-right text-sm text-gray-900 dark:text-gray-100">
-                                              {formatCurrency(prize.products?.cost || 0)}
+                                          <td className="py-2 text-sm text-gray-900 dark:text-gray-100">
+                                            {kuji.set_type === 'official'
+                                              ? (prize.prize_name || '-')
+                                              : isSelection
+                                                ? (
+                                                  <div className="flex flex-wrap gap-1">
+                                                    {options.map(opt => (
+                                                      <span key={opt.id} className={`inline-block rounded px-1.5 py-0.5 text-xs ${opt.is_consumed ? 'bg-gray-200 text-gray-400 line-through dark:bg-gray-700 dark:text-gray-500' : 'bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300'}`}>
+                                                        {opt.products?.name || '?'}
+                                                      </span>
+                                                    ))}
+                                                  </div>
+                                                )
+                                                : (prize.products?.name || '-')}
+                                          </td>
+                                          {kuji.set_type !== 'official' && (
+                                            <td className="py-2 text-sm text-gray-500 dark:text-gray-400">
+                                              {isSelection ? '-' : (prize.products?.item_code || '-')}
                                             </td>
-                                            <td className="py-2 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">
-                                              {formatCurrency((prize.products?.cost || 0) * prize.quantity)}
-                                            </td>
-                                          </>
-                                        )}
-                                      </tr>
-                                    ))}
+                                          )}
+                                          <td className="py-2 text-right text-sm text-gray-900 dark:text-gray-100">
+                                            {prize.quantity} {prize.products?.unit || '抽'}
+                                          </td>
+                                          <td className="py-2 text-right text-sm font-semibold">
+                                            <span className={
+                                              prize.remaining === 0
+                                                ? 'text-gray-500 dark:text-gray-400'
+                                                : prize.remaining <= 5
+                                                  ? 'text-orange-600 dark:text-orange-400'
+                                                  : 'text-green-600 dark:text-green-400'
+                                            }>
+                                              {prize.remaining === 0
+                                                ? '完售'
+                                                : prize.remaining <= 5
+                                                  ? `⚠ ${prize.remaining} 抽`
+                                                  : `${prize.remaining} 抽`}
+                                            </span>
+                                          </td>
+                                          {userRole === 'admin' && kuji.set_type !== 'official' && (
+                                            <>
+                                              <td className="py-2 text-right text-sm text-gray-900 dark:text-gray-100">
+                                                {isSelection
+                                                  ? <span className="text-xs text-violet-600 dark:text-violet-400">平均 {formatCurrency(avgOptionCost)}</span>
+                                                  : formatCurrency(prize.products?.cost || 0)}
+                                              </td>
+                                              <td className="py-2 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">
+                                                {isSelection
+                                                  ? formatCurrency(avgOptionCost * prize.quantity)
+                                                  : formatCurrency((prize.products?.cost || 0) * prize.quantity)}
+                                              </td>
+                                            </>
+                                          )}
+                                        </tr>
+                                      )
+                                    })}
                                   </tbody>
                                   {userRole === 'admin' && (
                                     <tfoot className="border-t-2 bg-gray-100 dark:bg-gray-800">
@@ -653,7 +689,14 @@ export default function IchibanKujiPage() {
                                             kuji.set_type === 'official'
                                               ? (kuji.total_cost || 0)
                                               : kuji.ichiban_kuji_prizes.reduce(
-                                                (sum, prize) => sum + (prize.products?.cost || 0) * prize.quantity,
+                                                (sum, prize) => {
+                                                  const options = prize.ichiban_kuji_prize_options || []
+                                                  if (options.length > 0) {
+                                                    const avgCost = options.reduce((s, o) => s + (o.products?.cost || 0), 0) / options.length
+                                                    return sum + avgCost * prize.quantity
+                                                  }
+                                                  return sum + (prize.products?.cost || 0) * prize.quantity
+                                                },
                                                 0
                                               ) + (kuji.last_prize_product?.cost || 0)
                                           )}

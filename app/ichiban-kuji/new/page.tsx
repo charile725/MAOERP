@@ -24,6 +24,8 @@ type Prize = {
   product?: Product | null
   prize_name?: string
   quantity: number
+  is_selection: boolean
+  selection_products: Product[]
 }
 
 type LastPrize = {
@@ -96,8 +98,11 @@ export default function NewIchibanKujiPage() {
     }
   }
 
+  const [selectionSearchInputs, setSelectionSearchInputs] = useState<{ [key: number]: string }>({})
+  const [selectionSearchResults, setSelectionSearchResults] = useState<{ [key: number]: Product[] }>({})
+
   const addPrize = () => {
-    setPrizes([...prizes, { prize_tier: '', product_id: '', product: null, prize_name: '', quantity: 1 }])
+    setPrizes([...prizes, { prize_tier: '', product_id: '', product: null, prize_name: '', quantity: 1, is_selection: false, selection_products: [] }])
   }
 
   const removePrize = (index: number) => {
@@ -191,6 +196,78 @@ export default function NewIchibanKujiPage() {
     }, 200)
   }
 
+  // 複選獎功能
+  const toggleSelection = (index: number) => {
+    const updated = [...prizes]
+    updated[index] = {
+      ...updated[index],
+      is_selection: !updated[index].is_selection,
+      // 切換時清空對應資料
+      product_id: !updated[index].is_selection ? '' : updated[index].product_id,
+      product: !updated[index].is_selection ? null : updated[index].product,
+      selection_products: !updated[index].is_selection ? updated[index].selection_products : [],
+    }
+    setPrizes(updated)
+    // 清空搜尋狀態
+    if (!updated[index].is_selection) {
+      const newInputs = { ...searchInputs }
+      delete newInputs[index]
+      setSearchInputs(newInputs)
+    }
+  }
+
+  const searchSelectionProduct = (index: number, keyword: string) => {
+    setSelectionSearchInputs({ ...selectionSearchInputs, [index]: keyword })
+
+    if (!keyword.trim()) {
+      const newResults = { ...selectionSearchResults }
+      delete newResults[index]
+      setSelectionSearchResults(newResults)
+      return
+    }
+
+    const alreadySelected = new Set(prizes[index].selection_products.map(p => p.id))
+    const results = products.filter(p =>
+      !alreadySelected.has(p.id) && (
+        p.barcode?.toLowerCase().includes(keyword.toLowerCase()) ||
+        p.name.toLowerCase().includes(keyword.toLowerCase()) ||
+        p.item_code.toLowerCase().includes(keyword.toLowerCase())
+      )
+    ).slice(0, 8)
+
+    setSelectionSearchResults({ ...selectionSearchResults, [index]: results })
+  }
+
+  const addSelectionProduct = (index: number, product: Product) => {
+    const updated = [...prizes]
+    updated[index] = {
+      ...updated[index],
+      selection_products: [...updated[index].selection_products, product],
+    }
+    setPrizes(updated)
+    setSelectionSearchInputs({ ...selectionSearchInputs, [index]: '' })
+    const newResults = { ...selectionSearchResults }
+    delete newResults[index]
+    setSelectionSearchResults(newResults)
+  }
+
+  const removeSelectionProduct = (prizeIndex: number, productId: string) => {
+    const updated = [...prizes]
+    updated[prizeIndex] = {
+      ...updated[prizeIndex],
+      selection_products: updated[prizeIndex].selection_products.filter(p => p.id !== productId),
+    }
+    setPrizes(updated)
+  }
+
+  const clearSelectionSearch = (index: number) => {
+    setTimeout(() => {
+      const newResults = { ...selectionSearchResults }
+      delete newResults[index]
+      setSelectionSearchResults(newResults)
+    }, 200)
+  }
+
   // 最後賞搜尋
   const searchLastPrizeProduct = (keyword: string) => {
     setLastPrizeSearchInput(keyword)
@@ -236,7 +313,12 @@ export default function NewIchibanKujiPage() {
       // 官方套的最後賞成本已包含在 totalCost 中
     } else {
       prizes.forEach(prize => {
-        if (prize.product) {
+        if (prize.is_selection && prize.selection_products.length > 0) {
+          // 複選獎：平均成本 × 數量
+          const avgOptionCost = prize.selection_products.reduce((sum, p) => sum + p.cost, 0) / prize.selection_products.length
+          totalDraws += prize.quantity
+          computedTotalCost += avgOptionCost * prize.quantity
+        } else if (prize.product) {
           totalDraws += prize.quantity
           computedTotalCost += prize.product.cost * prize.quantity
         }
@@ -292,8 +374,16 @@ export default function NewIchibanKujiPage() {
         setError(`第 ${i + 1} 個賞項：請輸入賞別名稱`)
         return
       }
-      if (!isOfficial && !prize.product_id) {
+      if (!isOfficial && !prize.is_selection && !prize.product_id) {
         setError(`第 ${i + 1} 個賞項：請選擇商品`)
+        return
+      }
+      if (!isOfficial && prize.is_selection && prize.selection_products.length === 0) {
+        setError(`第 ${i + 1} 個賞項：複選獎至少需要一個選項`)
+        return
+      }
+      if (!isOfficial && prize.is_selection && prize.selection_products.length < prize.quantity) {
+        setError(`第 ${i + 1} 個賞項：選項數量 (${prize.selection_products.length}) 必須 >= 賞項數量 (${prize.quantity})`)
         return
       }
       if (prize.quantity <= 0) {
@@ -330,8 +420,9 @@ export default function NewIchibanKujiPage() {
           prizes: prizes.map(p => ({
             prize_tier: p.prize_tier,
             prize_name: p.prize_name || null,
-            product_id: isOfficial ? null : p.product_id,
+            product_id: isOfficial ? null : (p.is_selection ? null : p.product_id),
             quantity: p.quantity,
+            selection_product_ids: !isOfficial && p.is_selection ? p.selection_products.map(sp => sp.id) : null,
           })),
           combo_prices: comboPrices,
           opening_combo_prices: openingComboPrices,
@@ -362,6 +453,8 @@ export default function NewIchibanKujiPage() {
     setPrizes([])
     setSearchInputs({})
     setSearchResults({})
+    setSelectionSearchInputs({})
+    setSelectionSearchResults({})
     setTotalCost('')
     setVendorCode('')
     setOpeningComboPrices([])
@@ -711,98 +804,181 @@ export default function NewIchibanKujiPage() {
                 </table>
               </div>
             ) : (
-              /* Custom Set: Full table with product search */
-              <div className="overflow-visible">
-                <table className="w-full">
-                  <thead className="border-b dark:border-gray-700">
-                    <tr>
-                      <th className="pb-2 text-left text-sm font-semibold text-gray-900 dark:text-gray-100 w-24">賞別 *</th>
-                      <th className="pb-2 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">商品 *</th>
-                      <th className="pb-2 text-left text-sm font-semibold text-gray-900 dark:text-gray-100 w-28">數量 *</th>
-                      <th className="pb-2 text-right text-sm font-semibold text-gray-900 dark:text-gray-100 w-32">單位成本</th>
-                      <th className="pb-2 text-right text-sm font-semibold text-gray-900 dark:text-gray-100 w-32">小計</th>
-                      <th className="pb-2 text-center text-sm font-semibold text-gray-900 dark:text-gray-100 w-20">操作</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y dark:divide-gray-700">
-                    {prizes.map((prize, index) => (
-                      <tr key={index}>
-                        <td className="py-2">
-                          <input
-                            type="text"
-                            value={prize.prize_tier}
-                            onChange={(e) => updatePrize(index, 'prize_tier', e.target.value)}
-                            className="w-full rounded border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
-                            placeholder="A賞"
-                          />
-                        </td>
-                        <td className="py-2 pr-2">
-                          <div className="relative">
-                            <input
-                              type="text"
-                              value={searchInputs[index] || ''}
-                              onChange={(e) => searchProduct(index, e.target.value)}
-                              onBlur={() => clearSearch(index)}
-                              className="w-full rounded border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
-                              placeholder="掃碼或搜尋商品名稱/品號"
-                              autoComplete="off"
-                            />
-                            {searchResults[index] && searchResults[index].length > 0 && (
-                              <div className="absolute z-[9999] mt-1 w-full min-w-[300px] max-h-64 overflow-y-auto rounded-md border border-gray-300 bg-white shadow-xl dark:border-gray-600 dark:bg-gray-700">
-                                {searchResults[index].map(product => (
-                                  <div
-                                    key={product.id}
-                                    onMouseDown={(e) => {
-                                      e.preventDefault()
-                                      selectProduct(index, product)
-                                    }}
-                                    className="cursor-pointer border-b px-3 py-2 last:border-b-0 hover:bg-blue-50 dark:border-gray-600 dark:hover:bg-gray-600"
-                                  >
-                                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{product.name}</div>
-                                    <div className="text-xs text-gray-500 dark:text-gray-400">
-                                      {product.item_code} | 成本: {formatCurrency(product.cost)}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                            {searchResults[index] && searchResults[index].length === 0 && (
-                              <div className="absolute z-[9999] mt-1 w-full min-w-[300px] rounded-md border border-gray-300 bg-white shadow-xl dark:border-gray-600 dark:bg-gray-700">
-                                <div className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
-                                  找不到商品
+              /* Custom Set: Full table with product search + selection prize support */
+              <div className="overflow-visible space-y-3">
+                {prizes.map((prize, index) => (
+                  <div key={index} className={`rounded-lg border p-3 ${prize.is_selection ? 'border-violet-300 bg-violet-50/50 dark:border-violet-600 dark:bg-violet-900/20' : 'border-gray-200 dark:border-gray-700'}`}>
+                    <div className="flex items-center gap-3 mb-2">
+                      {/* 賞別 */}
+                      <input
+                        type="text"
+                        value={prize.prize_tier}
+                        onChange={(e) => updatePrize(index, 'prize_tier', e.target.value)}
+                        className="w-24 rounded border border-gray-300 bg-white px-2 py-1 text-sm font-semibold text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                        placeholder="A賞"
+                      />
+                      {/* 複選 toggle */}
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={prize.is_selection}
+                          onChange={() => toggleSelection(index)}
+                          className="h-3.5 w-3.5 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                        />
+                        <span className="text-xs text-violet-700 dark:text-violet-400 font-medium">複選</span>
+                      </label>
+                      {/* 數量 */}
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs text-gray-500 dark:text-gray-400">數量</span>
+                        <input
+                          type="number"
+                          min="1"
+                          value={prize.quantity}
+                          onChange={(e) => updatePrize(index, 'quantity', parseInt(e.target.value) || 1)}
+                          className="w-20 rounded border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                        />
+                      </div>
+                      {/* 成本顯示 */}
+                      <div className="ml-auto flex items-center gap-3 text-sm text-gray-900 dark:text-gray-100">
+                        {prize.is_selection ? (
+                          prize.selection_products.length > 0 ? (
+                            <>
+                              <span className="text-xs text-gray-500 dark:text-gray-400">
+                                平均成本 {formatCurrency(prize.selection_products.reduce((s, p) => s + p.cost, 0) / prize.selection_products.length)}
+                              </span>
+                              <span className="font-semibold">
+                                小計 {formatCurrency(prize.selection_products.reduce((s, p) => s + p.cost, 0) / prize.selection_products.length * prize.quantity)}
+                              </span>
+                            </>
+                          ) : <span className="text-gray-400">-</span>
+                        ) : (
+                          prize.product ? (
+                            <>
+                              <span className="text-xs text-gray-500 dark:text-gray-400">成本 {formatCurrency(prize.product.cost)}</span>
+                              <span className="font-semibold">小計 {formatCurrency(prize.product.cost * prize.quantity)}</span>
+                            </>
+                          ) : <span className="text-gray-400">-</span>
+                        )}
+                      </div>
+                      {/* 刪除 */}
+                      <button
+                        type="button"
+                        onClick={() => removePrize(index)}
+                        className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-500 text-lg font-bold"
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    {/* 單品搜尋（非複選模式） */}
+                    {!prize.is_selection && (
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={searchInputs[index] || ''}
+                          onChange={(e) => searchProduct(index, e.target.value)}
+                          onBlur={() => clearSearch(index)}
+                          className="w-full rounded border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                          placeholder="掃碼或搜尋商品名稱/品號"
+                          autoComplete="off"
+                        />
+                        {searchResults[index] && searchResults[index].length > 0 && (
+                          <div className="absolute z-[9999] mt-1 w-full min-w-[300px] max-h-64 overflow-y-auto rounded-md border border-gray-300 bg-white shadow-xl dark:border-gray-600 dark:bg-gray-700">
+                            {searchResults[index].map(product => (
+                              <div
+                                key={product.id}
+                                onMouseDown={(e) => {
+                                  e.preventDefault()
+                                  selectProduct(index, product)
+                                }}
+                                className="cursor-pointer border-b px-3 py-2 last:border-b-0 hover:bg-blue-50 dark:border-gray-600 dark:hover:bg-gray-600"
+                              >
+                                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{product.name}</div>
+                                <div className="text-xs text-gray-500 dark:text-gray-400">
+                                  {product.item_code} | 成本: {formatCurrency(product.cost)}
                                 </div>
                               </div>
-                            )}
+                            ))}
                           </div>
-                        </td>
-                        <td className="py-2 pr-2">
+                        )}
+                        {searchResults[index] && searchResults[index].length === 0 && (
+                          <div className="absolute z-[9999] mt-1 w-full min-w-[300px] rounded-md border border-gray-300 bg-white shadow-xl dark:border-gray-600 dark:bg-gray-700">
+                            <div className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
+                              找不到商品
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* 複選模式 */}
+                    {prize.is_selection && (
+                      <div className="space-y-2">
+                        {/* 已選商品列表 */}
+                        {prize.selection_products.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5">
+                            {prize.selection_products.map(sp => (
+                              <span
+                                key={sp.id}
+                                className="inline-flex items-center gap-1 rounded-full bg-violet-100 dark:bg-violet-900/40 px-2.5 py-1 text-xs text-violet-800 dark:text-violet-300"
+                              >
+                                {sp.name}
+                                <span className="text-violet-500 dark:text-violet-400">({formatCurrency(sp.cost)})</span>
+                                <button
+                                  type="button"
+                                  onClick={() => removeSelectionProduct(index, sp.id)}
+                                  className="ml-0.5 text-violet-600 hover:text-red-600 dark:text-violet-400 dark:hover:text-red-400 font-bold"
+                                >
+                                  ✕
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {/* 搜尋新增商品 */}
+                        <div className="relative">
                           <input
-                            type="number"
-                            min="1"
-                            value={prize.quantity}
-                            onChange={(e) => updatePrize(index, 'quantity', parseInt(e.target.value) || 1)}
-                            className="w-full rounded border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                            type="text"
+                            value={selectionSearchInputs[index] || ''}
+                            onChange={(e) => searchSelectionProduct(index, e.target.value)}
+                            onBlur={() => clearSelectionSearch(index)}
+                            className="w-full rounded border border-violet-300 bg-white px-2 py-1 text-sm text-gray-900 dark:border-violet-600 dark:bg-gray-700 dark:text-gray-100"
+                            placeholder="搜尋商品加入選項..."
+                            autoComplete="off"
                           />
-                        </td>
-                        <td className="py-2 text-right text-sm text-gray-900 dark:text-gray-100">
-                          {prize.product ? formatCurrency(prize.product.cost) : '-'}
-                        </td>
-                        <td className="py-2 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">
-                          {prize.product ? formatCurrency(prize.product.cost * prize.quantity) : '-'}
-                        </td>
-                        <td className="py-2 text-center">
-                          <button
-                            type="button"
-                            onClick={() => removePrize(index)}
-                            className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-500"
-                          >
-                            ✕
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                          {selectionSearchResults[index] && selectionSearchResults[index].length > 0 && (
+                            <div className="absolute z-[9999] mt-1 w-full min-w-[300px] max-h-64 overflow-y-auto rounded-md border border-gray-300 bg-white shadow-xl dark:border-gray-600 dark:bg-gray-700">
+                              {selectionSearchResults[index].map(product => (
+                                <div
+                                  key={product.id}
+                                  onMouseDown={(e) => {
+                                    e.preventDefault()
+                                    addSelectionProduct(index, product)
+                                  }}
+                                  className="cursor-pointer border-b px-3 py-2 last:border-b-0 hover:bg-violet-50 dark:border-gray-600 dark:hover:bg-gray-600"
+                                >
+                                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{product.name}</div>
+                                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                                    {product.item_code} | 成本: {formatCurrency(product.cost)}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        {/* 驗證提示 */}
+                        {prize.selection_products.length > 0 && prize.selection_products.length < prize.quantity && (
+                          <p className="text-xs text-red-500 dark:text-red-400">
+                            選項數量 ({prize.selection_products.length}) 必須 &gt;= 賞項數量 ({prize.quantity})
+                          </p>
+                        )}
+                        <p className="text-xs text-violet-600 dark:text-violet-400">
+                          {prize.selection_products.length} 個選項，抽到時從中選 1
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
           </div>

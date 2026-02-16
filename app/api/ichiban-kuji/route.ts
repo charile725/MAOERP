@@ -30,6 +30,17 @@ export async function GET(request: NextRequest) {
             cost,
             price,
             unit
+          ),
+          ichiban_kuji_prize_options (
+            id,
+            product_id,
+            is_consumed,
+            products (
+              id,
+              name,
+              item_code,
+              cost
+            )
           )
         )
       `, { count: 'exact' })
@@ -143,26 +154,42 @@ export async function POST(request: NextRequest) {
       // 官方套的最後賞成本已包含在 total_cost 中，不需額外計算
     } else {
       // 自製套：成本從各商品計算
+      // 蒐集所有 product IDs（含複選獎選項）
       const productIds = draft.prizes.map(p => p.product_id).filter(Boolean) as string[]
+      for (const prize of draft.prizes) {
+        if (prize.selection_product_ids && prize.selection_product_ids.length > 0) {
+          productIds.push(...prize.selection_product_ids)
+        }
+      }
 
       // 加入最後賞商品ID（如果有）
       if (draft.last_prize_product_id) {
         productIds.push(draft.last_prize_product_id)
       }
 
+      const uniqueProductIds = [...new Set(productIds)]
       const { data: products } = await (supabaseServer
         .from('products') as any)
         .select('id, cost')
-        .in('id', productIds)
+        .in('id', uniqueProductIds)
 
       const productCostMap = new Map(
         (products as any[])?.map(p => [p.id, p.cost]) || []
       )
 
       for (const prize of draft.prizes) {
-        const cost = productCostMap.get(prize.product_id) || 0
-        totalDraws += prize.quantity
-        totalCost += cost * prize.quantity
+        if (prize.selection_product_ids && prize.selection_product_ids.length > 0) {
+          // 複選獎：平均選項成本 × 數量
+          const optionCosts = prize.selection_product_ids.map(pid => productCostMap.get(pid) || 0)
+          const avgOptionCost = optionCosts.reduce((a, b) => a + b, 0) / optionCosts.length
+          totalDraws += prize.quantity
+          totalCost += avgOptionCost * prize.quantity
+        } else {
+          // 普通獎
+          const cost = productCostMap.get(prize.product_id) || 0
+          totalDraws += prize.quantity
+          totalCost += cost * prize.quantity
+        }
       }
 
       // 加入最後賞成本（不計入抽數）
@@ -211,18 +238,22 @@ export async function POST(request: NextRequest) {
     }
 
     // Insert prizes
-    const prizeInserts = draft.prizes.map(prize => ({
-      kuji_id: kuji.id,
-      prize_tier: prize.prize_tier,
-      prize_name: prize.prize_name || null,
-      product_id: isOfficial ? null : prize.product_id,
-      quantity: prize.quantity,
-      remaining: prize.quantity, // 初始剩餘數量等於總數量
-    }))
+    const prizeInserts = draft.prizes.map(prize => {
+      const isSelection = !isOfficial && prize.selection_product_ids && prize.selection_product_ids.length > 0
+      return {
+        kuji_id: kuji.id,
+        prize_tier: prize.prize_tier,
+        prize_name: prize.prize_name || null,
+        product_id: isOfficial ? null : (isSelection ? null : prize.product_id),
+        quantity: prize.quantity,
+        remaining: prize.quantity,
+      }
+    })
 
-    const { error: prizesError } = await (supabaseServer
+    const { data: insertedPrizes, error: prizesError } = await (supabaseServer
       .from('ichiban_kuji_prizes') as any)
       .insert(prizeInserts)
+      .select('id, prize_tier')
 
     if (prizesError) {
       // Rollback: delete the kuji
@@ -231,6 +262,37 @@ export async function POST(request: NextRequest) {
         { ok: false, error: prizesError.message },
         { status: 500 }
       )
+    }
+
+    // Insert prize options for selection prizes
+    const optionInserts: any[] = []
+    for (let i = 0; i < draft.prizes.length; i++) {
+      const prize = draft.prizes[i]
+      if (!isOfficial && prize.selection_product_ids && prize.selection_product_ids.length > 0) {
+        const insertedPrize = insertedPrizes[i]
+        for (const productId of prize.selection_product_ids) {
+          optionInserts.push({
+            prize_id: insertedPrize.id,
+            product_id: productId,
+          })
+        }
+      }
+    }
+
+    if (optionInserts.length > 0) {
+      const { error: optionsError } = await (supabaseServer
+        .from('ichiban_kuji_prize_options') as any)
+        .insert(optionInserts)
+
+      if (optionsError) {
+        // Rollback
+        await (supabaseServer.from('ichiban_kuji_prizes') as any).delete().eq('kuji_id', kuji.id)
+        await (supabaseServer.from('ichiban_kuji') as any).delete().eq('id', kuji.id)
+        return NextResponse.json(
+          { ok: false, error: optionsError.message },
+          { status: 500 }
+        )
+      }
     }
 
     // 官方套：建立 AP（應付帳款）記錄

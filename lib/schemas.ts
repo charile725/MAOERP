@@ -72,6 +72,7 @@ export const saleDraftSchema = z.object({
       price: z.number().min(0, 'Price must be positive'),
       ichiban_kuji_prize_id: z.string().uuid().optional(), // 如果是從一番賞售出
       ichiban_kuji_id: z.string().uuid().optional(), // 所屬一番賞ID
+      selection_option_id: z.string().uuid().optional(), // 複選獎：選中的選項ID
       isNotDelivered: z.boolean().optional(), // 是否未出貨（支援部分出貨）
     })
   ).min(1, 'At least one item is required'),
@@ -119,6 +120,7 @@ export const ichibanKujiPrizeSchema = z.object({
   product_id: z.string().uuid('Invalid product ID').optional().nullable(),
   prize_name: z.string().optional().nullable(),
   quantity: z.number().int().positive('Quantity must be positive'),
+  selection_product_ids: z.array(z.string().uuid()).optional().nullable(),
 })
 
 export const ichibanKujiComboPriceSchema = z.object({

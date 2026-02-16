@@ -31,16 +31,9 @@ type IchibanKuji = {
   }[]
 }
 
-type PrintFormat = 'a4-grid' | 'label-4x10' | 'label-3x8'
+type PrintFormat = 'label-4x10' | 'label-3x8'
 
 const FORMATS = {
-  'a4-grid': {
-    name: 'A4 網格（6x10）',
-    columns: 6,
-    rows: 10,
-    width: 140,
-    height: 84,
-  },
   'label-4x10': {
     name: '標籤紙 4x10',
     columns: 4,
@@ -73,7 +66,7 @@ export default function BarcodePrintPage() {
     copies: number
     source: 'product' | 'prize' | 'kuji'
   }[]>([])
-  const [format, setFormat] = useState<PrintFormat>('a4-grid')
+  const [format, setFormat] = useState<PrintFormat>('label-4x10')
   const [loading, setLoading] = useState(true)
   const [productSearchKeyword, setProductSearchKeyword] = useState('')
   const [kujiSearchKeyword, setKujiSearchKeyword] = useState('')
@@ -298,7 +291,7 @@ export default function BarcodePrintPage() {
         @media print {
           @page {
             size: A4;
-            margin: 8mm;
+            margin: 5mm 8mm;
           }
 
           /* 強制移除所有螢幕版面的干擾 */
@@ -311,7 +304,6 @@ export default function BarcodePrintPage() {
             overflow: visible !important;
             margin: 0 !important;
             padding: 0 !important;
-            position: static !important;
           }
 
           /* 隱藏所有非列印內容 */
@@ -319,11 +311,6 @@ export default function BarcodePrintPage() {
           .no-print {
             display: none !important;
             visibility: hidden !important;
-          }
-
-          /* 強制所有元素為正常文流 */
-          * {
-            position: static !important;
           }
 
           /* 列印容器 */
@@ -339,28 +326,32 @@ export default function BarcodePrintPage() {
             margin: 0 !important;
           }
 
-          /* A4 兩欄 label grid - 一頁10張 */
+          /* 標籤紙 grid - 置中 */
           .print-area {
             display: grid !important;
             grid-template-columns: repeat(2, 1fr) !important;
-            gap: 4mm !important;
+            gap: 2mm !important;
             align-content: start !important;
+            justify-content: center !important;
             background: #fff !important;
+            width: 100% !important;
+            margin: 0 auto !important;
           }
 
-          /* 標籤框體 - 全部置中 */
+          /* 標籤框體 - 內容全部置中 */
           .label {
             display: flex !important;
             flex-direction: column !important;
             align-items: center !important;
-            justify-content: flex-start !important;
+            justify-content: center !important;
             background: #fff !important;
             color: #000 !important;
-            border: 1px solid #000 !important;
-            padding: 2mm !important;
+            border: 1px solid #ccc !important;
+            padding: 1.5mm 2mm !important;
             box-sizing: border-box !important;
             break-inside: avoid !important;
             page-break-inside: avoid !important;
+            text-align: center !important;
           }
 
           /* 條碼本體置中 */
@@ -374,13 +365,6 @@ export default function BarcodePrintPage() {
             line-height: 0 !important;
           }
 
-          .barcode-img {
-            display: block !important;
-            height: 11mm !important;
-            width: auto !important;
-            margin: 0 auto !important;
-          }
-
           .barcode-wrap img {
             display: block !important;
             height: 11mm !important;
@@ -388,20 +372,39 @@ export default function BarcodePrintPage() {
             margin: 0 auto !important;
           }
 
-          /* 文字：全部同大小、置中、一行 */
-          .meta-row {
-            margin-top: 1mm !important;
-            font-size: 9pt !important;
-            font-weight: 400 !important;
-            line-height: 1.1 !important;
+          /* 商品名稱 */
+          .meta-row .name {
+            display: block !important;
+            font-size: 8pt !important;
+            font-weight: 600 !important;
+            line-height: 1.2 !important;
             text-align: center !important;
             white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            max-width: 100% !important;
+            margin-top: 1mm !important;
           }
 
-          /* 統一所有 span 字級和粗細 */
-          .meta-row span {
-            font-size: inherit !important;
-            font-weight: inherit !important;
+          /* 條碼號 + 價格同一行 */
+          .meta-row .code,
+          .meta-row .price {
+            display: inline !important;
+            font-size: 7pt !important;
+            font-weight: 400 !important;
+            line-height: 1.2 !important;
+            text-align: center !important;
+          }
+
+          .meta-row .price {
+            margin-left: 2mm !important;
+            font-weight: 600 !important;
+          }
+
+          /* meta-row 容器 */
+          .meta-row {
+            text-align: center !important;
+            width: 100% !important;
           }
         }
       `}</style>

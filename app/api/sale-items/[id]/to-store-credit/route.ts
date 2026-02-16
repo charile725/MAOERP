@@ -378,6 +378,12 @@ export async function POST(
                 .in('id', arIds)
         }
 
+        // 7.5 釋放一番賞複選獎選項（如果有的話）
+        await (supabaseServer
+            .from('ichiban_kuji_prize_options') as any)
+            .update({ is_consumed: false, consumed_sale_item_id: null })
+            .eq('consumed_sale_item_id', saleItemId)
+
         // 8. 記錄銷貨更正
         await (supabaseServer
             .from('sale_corrections') as any)

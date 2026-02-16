@@ -410,9 +410,67 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 3. Get product details and insert sale items (subtotal is auto-calculated by database)
+    // 3. 複選獎：驗證 selection_option_id 並取得 product 資訊
+    // 建立 optionMap 以便後續使用
+    const optionMap = new Map<string, any>()
+    for (const item of draft.items) {
+      if (item.selection_option_id) {
+        const { data: option, error: optErr } = await (supabaseServer
+          .from('ichiban_kuji_prize_options') as any)
+          .select('id, prize_id, product_id, is_consumed, products(id, name, item_code, cost)')
+          .eq('id', item.selection_option_id)
+          .single()
+
+        if (optErr || !option) {
+          await (supabaseServer.from('sales') as any).delete().eq('id', sale.id)
+          return NextResponse.json(
+            { ok: false, error: `找不到複選獎選項: ${item.selection_option_id}` },
+            { status: 400 }
+          )
+        }
+        if (option.is_consumed) {
+          await (supabaseServer.from('sales') as any).delete().eq('id', sale.id)
+          return NextResponse.json(
+            { ok: false, error: `複選獎選項已被使用` },
+            { status: 400 }
+          )
+        }
+        optionMap.set(item.selection_option_id, option)
+      }
+    }
+
+    // Get product details and insert sale items (subtotal is auto-calculated by database)
     const saleItems = await Promise.all(
       draft.items.map(async (item) => {
+        // 複選獎：使用選項的 product
+        if (item.selection_option_id) {
+          const option = optionMap.get(item.selection_option_id)
+          const optProduct = option?.products
+
+          const { data: kuji } = await (supabaseServer
+            .from('ichiban_kuji') as any)
+            .select('avg_cost, name')
+            .eq('id', item.ichiban_kuji_id)
+            .single()
+
+          const { data: prize } = await (supabaseServer
+            .from('ichiban_kuji_prizes') as any)
+            .select('prize_tier')
+            .eq('id', item.ichiban_kuji_prize_id)
+            .single()
+
+          return {
+            sale_id: sale.id,
+            product_id: optProduct?.id || option?.product_id,
+            quantity: item.quantity,
+            price: item.price,
+            cost: kuji?.avg_cost || 0,
+            snapshot_name: `${kuji?.name || ''} ${prize?.prize_tier || ''} - ${optProduct?.name || ''}`,
+            ichiban_kuji_prize_id: item.ichiban_kuji_prize_id || null,
+            ichiban_kuji_id: item.ichiban_kuji_id || null,
+          }
+        }
+
         // 官方套賞項沒有 product_id，需從 prize + kuji 取得資訊
         if (item.ichiban_kuji_prize_id && !item.product_id) {
           const { data: prize } = await (supabaseServer
@@ -564,7 +622,9 @@ export async function POST(request: NextRequest) {
     }
 
     // 5. Deduct ONLY ichiban kuji remaining (product stock is auto-deducted by DB trigger)
-    for (const item of draft.items) {
+    for (let idx = 0; idx < draft.items.length; idx++) {
+      const item = draft.items[idx]
+      const insertedItem = insertedSaleItems[idx]
       // 如果是從一番賞售出，扣除一番賞的 remaining
       if (item.ichiban_kuji_prize_id) {
         const { data: prize, error: fetchPrizeError } = await (supabaseServer
@@ -608,6 +668,21 @@ export async function POST(request: NextRequest) {
             { ok: false, error: `Failed to deduct prize inventory: ${updatePrizeError.message}` },
             { status: 500 }
           )
+        }
+
+        // 複選獎：標記選項為已消耗
+        if (item.selection_option_id && insertedItem) {
+          const { error: consumeError } = await (supabaseServer
+            .from('ichiban_kuji_prize_options') as any)
+            .update({
+              is_consumed: true,
+              consumed_sale_item_id: insertedItem.id,
+            })
+            .eq('id', item.selection_option_id)
+
+          if (consumeError) {
+            console.error(`[Sales API] Failed to consume option ${item.selection_option_id}:`, consumeError)
+          }
         }
       }
     }

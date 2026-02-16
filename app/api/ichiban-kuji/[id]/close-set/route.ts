@@ -44,6 +44,16 @@ export async function POST(
             name,
             item_code,
             cost
+          ),
+          ichiban_kuji_prize_options (
+            id,
+            product_id,
+            is_consumed,
+            products (
+              id,
+              name,
+              cost
+            )
           )
         )
       `)
@@ -89,14 +99,31 @@ export async function POST(
 
     for (const prize of prizes) {
       const drawn = prize.quantity - prize.remaining
-      const unitCost = prize.products?.cost || 0
-      const drawnCost = drawn * unitCost
+      const options = prize.ichiban_kuji_prize_options || []
+      const isSelection = options.length > 0
+
+      let drawnCost: number
+      let unitCost: number
+      let productName: string
+
+      if (isSelection) {
+        // 複選獎：從已消耗選項的實際商品成本加總
+        const consumedOptions = options.filter((o: any) => o.is_consumed)
+        drawnCost = consumedOptions.reduce((sum: number, o: any) => sum + (o.products?.cost || 0), 0)
+        unitCost = drawn > 0 ? Math.round(drawnCost / drawn) : 0
+        productName = `${prize.prize_tier}（${options.length}選1）`
+      } else {
+        unitCost = prize.products?.cost || 0
+        drawnCost = drawn * unitCost
+        productName = prize.products?.name || '-'
+      }
+
       totalDrawsSold += drawn
       actualCostOfDrawn += drawnCost
 
       prizeDetails.push({
         prize_tier: prize.prize_tier,
-        product_name: prize.products?.name || '-',
+        product_name: productName,
         quantity: prize.quantity,
         remaining: prize.remaining,
         drawn,

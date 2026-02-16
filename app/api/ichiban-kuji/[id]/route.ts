@@ -35,6 +35,18 @@ export async function GET(
             price,
             stock,
             unit
+          ),
+          ichiban_kuji_prize_options (
+            id,
+            product_id,
+            is_consumed,
+            consumed_sale_item_id,
+            products (
+              id,
+              name,
+              item_code,
+              cost
+            )
           )
         ),
         last_prize_product:products!last_prize_product_id (
@@ -97,25 +109,39 @@ export async function PUT(
     } else {
       // 自製套：成本從各商品計算
       const productIds = draft.prizes.map(p => p.product_id).filter(Boolean) as string[]
+      for (const prize of draft.prizes) {
+        if (prize.selection_product_ids && prize.selection_product_ids.length > 0) {
+          productIds.push(...prize.selection_product_ids)
+        }
+      }
 
       // 加入最後賞商品ID（如果有）
       if (draft.last_prize_product_id) {
         productIds.push(draft.last_prize_product_id)
       }
 
+      const uniqueProductIds = [...new Set(productIds)]
       const { data: products } = await (supabaseServer
         .from('products') as any)
         .select('id, cost')
-        .in('id', productIds)
+        .in('id', uniqueProductIds)
 
       const productCostMap = new Map(
         (products as any[])?.map(p => [p.id, p.cost]) || []
       )
 
       for (const prize of draft.prizes) {
-        const cost = productCostMap.get(prize.product_id) || 0
-        totalDraws += prize.quantity
-        totalCost += cost * prize.quantity
+        if (prize.selection_product_ids && prize.selection_product_ids.length > 0) {
+          // 複選獎：平均選項成本 × 數量
+          const optionCosts = prize.selection_product_ids.map(pid => productCostMap.get(pid) || 0)
+          const avgOptionCost = optionCosts.reduce((a, b) => a + b, 0) / optionCosts.length
+          totalDraws += prize.quantity
+          totalCost += avgOptionCost * prize.quantity
+        } else {
+          const cost = productCostMap.get(prize.product_id) || 0
+          totalDraws += prize.quantity
+          totalCost += cost * prize.quantity
+        }
       }
 
       // 加入最後賞成本（不計入抽數）
@@ -159,13 +185,37 @@ export async function PUT(
       .select('id, prize_tier, prize_name, product_id, quantity, remaining')
       .eq('kuji_id', id)
 
+    // 讀取舊的 prize options
+    const oldPrizeIds = oldPrizes?.map((p: any) => p.id) || []
+    let oldOptionsMap = new Map<string, any[]>()
+    if (oldPrizeIds.length > 0) {
+      const { data: oldOptions } = await (supabaseServer
+        .from('ichiban_kuji_prize_options') as any)
+        .select('id, prize_id, product_id, is_consumed')
+        .in('prize_id', oldPrizeIds)
+
+      if (oldOptions) {
+        for (const opt of oldOptions) {
+          const list = oldOptionsMap.get(opt.prize_id) || []
+          list.push(opt)
+          oldOptionsMap.set(opt.prize_id, list)
+        }
+      }
+    }
+
     console.log(`[Ichiban Kuji PUT ${id}] Found ${oldPrizes?.length || 0} old prizes`)
 
-    // 建立舊 prizes 的 Map（使用 prize_tier + product_id 作為唯一鍵；官方套用 prize_tier 即可）
+    // 建立舊 prizes 的 Map
+    // 複選獎使用 `${prize_tier}_selection` 作為 key
     const oldPrizesMap = new Map<string, any>()
     if (oldPrizes && oldPrizes.length > 0) {
       for (const prize of oldPrizes) {
-        const key = isOfficial ? prize.prize_tier : `${prize.prize_tier}_${prize.product_id}`
+        const hasOptions = (oldOptionsMap.get(prize.id) || []).length > 0
+        const key = isOfficial
+          ? prize.prize_tier
+          : hasOptions
+            ? `${prize.prize_tier}_selection`
+            : `${prize.prize_tier}_${prize.product_id}`
         if (oldPrizesMap.has(key)) {
           console.warn(`[Ichiban Kuji PUT ${id}] Duplicate prize found: ${key}`)
         }
@@ -176,7 +226,12 @@ export async function PUT(
     // 建立新 prizes 的 Map
     const newPrizesMap = new Map<string, any>()
     for (const prize of draft.prizes) {
-      const key = isOfficial ? prize.prize_tier : `${prize.prize_tier}_${prize.product_id}`
+      const isSelection = !isOfficial && prize.selection_product_ids && prize.selection_product_ids.length > 0
+      const key = isOfficial
+        ? prize.prize_tier
+        : isSelection
+          ? `${prize.prize_tier}_selection`
+          : `${prize.prize_tier}_${prize.product_id}`
       newPrizesMap.set(key, prize)
     }
 
@@ -214,16 +269,19 @@ export async function PUT(
         console.log(`[Ichiban Kuji PUT ${id}] Updated prize ${key}: quantity ${oldPrize.quantity} -> ${newPrize.quantity}, remaining ${oldPrize.remaining} -> ${newRemaining}`)
       } else {
         // 不存在，INSERT
-        const { error: insertError } = await (supabaseServer
+        const isSelection = !isOfficial && newPrize.selection_product_ids && newPrize.selection_product_ids.length > 0
+        const { data: insertedPrize, error: insertError } = await (supabaseServer
           .from('ichiban_kuji_prizes') as any)
           .insert({
             kuji_id: id,
             prize_tier: newPrize.prize_tier,
             prize_name: newPrize.prize_name || null,
-            product_id: isOfficial ? null : newPrize.product_id,
+            product_id: isOfficial ? null : (isSelection ? null : newPrize.product_id),
             quantity: newPrize.quantity,
             remaining: newPrize.quantity,
           })
+          .select('id')
+          .single()
 
         if (insertError) {
           console.error(`[Ichiban Kuji PUT ${id}] Failed to insert prize ${key}:`, insertError)
@@ -233,8 +291,56 @@ export async function PUT(
           )
         }
 
+        // 插入複選獎選項
+        if (isSelection && insertedPrize) {
+          const optInserts = newPrize.selection_product_ids!.map((pid: string) => ({
+            prize_id: insertedPrize.id,
+            product_id: pid,
+          }))
+          const { error: optErr } = await (supabaseServer
+            .from('ichiban_kuji_prize_options') as any)
+            .insert(optInserts)
+          if (optErr) {
+            console.error(`[Ichiban Kuji PUT ${id}] Failed to insert options for ${key}:`, optErr)
+          }
+        }
+
         insertedCount++
         console.log(`[Ichiban Kuji PUT ${id}] Inserted new prize ${key}`)
+      }
+
+      // 更新複選獎選項（已存在的 prize）
+      if (oldPrize && !isOfficial && newPrize.selection_product_ids && newPrize.selection_product_ids.length > 0) {
+        const existingOptions = oldOptionsMap.get(oldPrize.id) || []
+        const existingProductIds = new Set(existingOptions.map((o: any) => o.product_id))
+        const newProductIds = new Set(newPrize.selection_product_ids as string[])
+
+        // 新增不存在的選項
+        const toAdd = [...newProductIds].filter(pid => !existingProductIds.has(pid))
+        if (toAdd.length > 0) {
+          await (supabaseServer
+            .from('ichiban_kuji_prize_options') as any)
+            .insert(toAdd.map(pid => ({ prize_id: oldPrize.id, product_id: pid })))
+        }
+
+        // 刪除不再需要且未消耗的選項
+        const toRemove = existingOptions.filter(
+          (o: any) => !newProductIds.has(o.product_id) && !o.is_consumed
+        )
+        if (toRemove.length > 0) {
+          await (supabaseServer
+            .from('ichiban_kuji_prize_options') as any)
+            .delete()
+            .in('id', toRemove.map((o: any) => o.id))
+        }
+
+        // 拒絕刪除已消耗的選項
+        const consumedButRemoved = existingOptions.filter(
+          (o: any) => !newProductIds.has(o.product_id) && o.is_consumed
+        )
+        if (consumedButRemoved.length > 0) {
+          console.warn(`[Ichiban Kuji PUT ${id}] Cannot remove consumed options for ${key}`)
+        }
       }
     }
 
@@ -256,7 +362,7 @@ export async function PUT(
           )
         }
 
-        // 沒有銷售記錄，可以刪除
+        // 沒有銷售記錄，可以刪除（options 會 CASCADE 刪除）
         const { error: deleteError } = await (supabaseServer
           .from('ichiban_kuji_prizes') as any)
           .delete()
