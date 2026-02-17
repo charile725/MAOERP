@@ -8,6 +8,7 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
     const active = searchParams.get('active')
+    const all = searchParams.get('all') === 'true'
     const page = parseInt(searchParams.get('page') || '1')
     const pageSize = 20
 
@@ -55,10 +56,14 @@ export async function GET(request: NextRequest) {
       query = query.eq('set_type', setType)
     }
 
-    // Apply pagination
-    const from = (page - 1) * pageSize
-    const to = from + pageSize - 1
-    query = query.range(from, to)
+    // Apply pagination (unless all=true)
+    if (!all) {
+      const from = (page - 1) * pageSize
+      const to = from + pageSize - 1
+      query = query.range(from, to)
+    } else {
+      query = query.limit(10000)
+    }
 
     const { data, error, count } = await query
 

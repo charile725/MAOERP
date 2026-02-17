@@ -86,7 +86,7 @@ export default function BarcodePrintPage() {
       }
 
       // Fetch ichiban kujis
-      const kujisRes = await fetch('/api/ichiban-kuji')
+      const kujisRes = await fetch('/api/ichiban-kuji?all=true')
       const kujisData = await kujisRes.json()
       if (kujisData.ok) {
         setIchibanKujis(kujisData.data || [])

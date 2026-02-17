@@ -384,7 +384,7 @@ export default function POSPage() {
 
   const fetchIchibanKujis = async () => {
     try {
-      const res = await fetch('/api/ichiban-kuji?active=true')
+      const res = await fetch('/api/ichiban-kuji?active=true&all=true')
       const data = await res.json()
       if (data.ok) {
         setIchibanKujis(data.data || [])
@@ -1091,7 +1091,7 @@ export default function POSPage() {
       // Load product details for each item
       const itemsWithProducts = await Promise.all(
         draft.items.map(async (item: any) => {
-          const res = await fetch(`/api/products?active=true`)
+          const res = await fetch(`/api/products?active=true&all=true`)
           const data = await res.json()
           const product = data.data?.find((p: Product) => p.id === item.product_id)
           return {
