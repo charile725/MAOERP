@@ -977,8 +977,12 @@ export default function POSPage() {
             product_id: item.ichiban_kuji_prize_id ? (item.realProductId ?? null) : item.product_id,
             quantity: item.quantity,
             price: item.price,
+            product_name: item.product.name,
             ichiban_kuji_prize_id: item.ichiban_kuji_prize_id,
             ichiban_kuji_id: item.ichiban_kuji_id,
+            selectionOptionId: item.selectionOptionId,
+            isFreeGift: item.isFreeGift || false,
+            isNotDelivered: item.isNotDelivered || false,
           })),
         }),
       })
@@ -1009,20 +1013,38 @@ export default function POSPage() {
   const handleLoadDraft = async (draft: SaleDraft) => {
     setLoading(true)
     try {
-      // Load product details for each item
-      const itemsWithProducts = await Promise.all(
-        draft.items.map(async (item: any) => {
-          const res = await fetch(`/api/products?active=true`)
-          const data = await res.json()
-          const product = data.data?.find((p: Product) => p.id === item.product_id)
-          return {
-            product_id: item.product_id,
-            quantity: item.quantity,
+      // 用已載入的 products 比對，不再重新 fetch
+      const productMap = new Map(products.map(p => [p.id, p]))
+
+      const itemsWithProducts = draft.items.map((item: any) => {
+        const product = item.product_id ? productMap.get(item.product_id) : null
+        const fallbackName = item.product_name || item.snapshot_name || 'Unknown'
+        return {
+          product_id: item.product_id,
+          quantity: item.quantity,
+          price: item.price,
+          product: product || {
+            id: item.product_id || 'unknown',
+            item_code: '',
+            name: fallbackName,
+            barcode: null,
             price: item.price,
-            product: product || { id: item.product_id, name: 'Unknown', price: item.price },
-          }
-        })
-      )
+            cost: 0,
+            avg_cost: 0,
+            unit: '件',
+            stock: 0,
+            tags: [],
+            is_active: true,
+            allow_negative: true,
+          } as Product,
+          ichiban_kuji_prize_id: item.ichiban_kuji_prize_id,
+          ichiban_kuji_id: item.ichiban_kuji_id,
+          realProductId: item.product_id,
+          selectionOptionId: item.selectionOptionId,
+          isFreeGift: item.isFreeGift || false,
+          isNotDelivered: item.isNotDelivered || false,
+        }
+      })
 
       setCart(itemsWithProducts)
       setSelectedCustomer(
