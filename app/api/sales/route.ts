@@ -250,28 +250,27 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate sale_no - 查找所有销售记录中的最大编号
-    const generateSaleNo = async (): Promise<string> => {
-      const { data: allSales } = await supabaseServer
-        .from('sales')
-        .select('sale_no')
+    // Generate sale_no - 只取最大編號（避免 Supabase 預設 1000 筆 limit）
+    const { data: latestSale } = await (supabaseServer
+      .from('sales') as any)
+      .select('sale_no')
+      .order('created_at', { ascending: false })
+      .limit(100)
 
-      let saleCount = 0
-      if (allSales && allSales.length > 0) {
-        const maxNumber = allSales.reduce((max: number, sale: any) => {
-          const match = sale.sale_no.match(/\d+/)
-          if (match) {
-            const num = parseInt(match[0], 10)
-            return num > max ? num : max
-          }
-          return max
-        }, 0)
-        saleCount = maxNumber
-      }
-      return generateCode('S', saleCount)
+    let saleCount = 0
+    if (latestSale && latestSale.length > 0) {
+      const maxNumber = latestSale.reduce((max: number, sale: any) => {
+        const match = sale.sale_no.match(/\d+/)
+        if (match) {
+          const num = parseInt(match[0], 10)
+          return num > max ? num : max
+        }
+        return max
+      }, 0)
+      saleCount = maxNumber
     }
 
-    let saleNo = await generateSaleNo()
+    let saleNo = generateCode('S', saleCount)
 
     // Determine primary payment method and account
     // If payments array provided, use largest amount; otherwise use single payment_method
@@ -341,9 +340,11 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (error?.code === '23505' && error?.message?.includes('sale_no')) {
-        // sale_no 重複，重新產生再試
-        console.warn(`[Sales API] sale_no ${saleNo} 重複，重試 attempt ${attempt + 1}`)
-        saleNo = await generateSaleNo()
+        // sale_no 重複，直接遞增編號再試
+        const match = saleNo.match(/\d+/)
+        const currentNum = match ? parseInt(match[0], 10) : saleCount
+        saleNo = generateCode('S', currentNum)
+        console.warn(`[Sales API] sale_no 重複，重試 → ${saleNo} (attempt ${attempt + 1})`)
         continue
       }
 
