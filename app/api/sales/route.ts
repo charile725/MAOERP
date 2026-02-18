@@ -251,25 +251,27 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate sale_no - 查找所有销售记录中的最大编号
-    const { data: allSales } = await supabaseServer
-      .from('sales')
-      .select('sale_no')
+    const generateSaleNo = async (): Promise<string> => {
+      const { data: allSales } = await supabaseServer
+        .from('sales')
+        .select('sale_no')
 
-    let saleCount = 0
-    if (allSales && allSales.length > 0) {
-      // 從所有 sale_no 中找出最大的數字
-      const maxNumber = allSales.reduce((max: number, sale: any) => {
-        const match = sale.sale_no.match(/\d+/)
-        if (match) {
-          const num = parseInt(match[0], 10)
-          return num > max ? num : max
-        }
-        return max
-      }, 0)
-      saleCount = maxNumber
+      let saleCount = 0
+      if (allSales && allSales.length > 0) {
+        const maxNumber = allSales.reduce((max: number, sale: any) => {
+          const match = sale.sale_no.match(/\d+/)
+          if (match) {
+            const num = parseInt(match[0], 10)
+            return num > max ? num : max
+          }
+          return max
+        }, 0)
+        saleCount = maxNumber
+      }
+      return generateCode('S', saleCount)
     }
 
-    const saleNo = generateCode('S', saleCount)
+    let saleNo = await generateSaleNo()
 
     // Determine primary payment method and account
     // If payments array provided, use largest amount; otherwise use single payment_method
@@ -310,34 +312,49 @@ export async function POST(request: NextRequest) {
     }
 
     // Start transaction-like operations
-    // 1. Create sale (draft)
-    const { data: sale, error: saleError } = await (supabaseServer
-      .from('sales') as any)
-      .insert({
-        sale_no: saleNo,
-        customer_code: draft.customer_code || null,
-        sale_date: saleDate, // 設定台灣時間的日期
-        source: draft.source,
-        payment_method: draft.payment_method,
-        account_id: accountId,
-        is_paid: draft.is_paid,
-        note: draft.note || null,
-        discount_type: draft.discount_type || 'none',
-        discount_value: draft.discount_value || 0,
-        status: 'draft',
-        total: 0,
-        fulfillment_status: 'none', // 初始為未履約
-        delivery_method: delivery_method || null,
-        expected_delivery_date: expected_delivery_date || null,
-        delivery_note: delivery_note || null,
-        created_at: createdAt, // 手動設定為台灣時間
-      })
-      .select()
-      .single()
+    // 1. Create sale (draft) — 含重試機制避免 sale_no 重複
+    let sale: any = null
+    let saleError: any = null
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const { data, error } = await (supabaseServer
+        .from('sales') as any)
+        .insert({
+          sale_no: saleNo,
+          customer_code: draft.customer_code || null,
+          sale_date: saleDate, // 設定台灣時間的日期
+          source: draft.source,
+          payment_method: draft.payment_method,
+          account_id: accountId,
+          is_paid: draft.is_paid,
+          note: draft.note || null,
+          discount_type: draft.discount_type || 'none',
+          discount_value: draft.discount_value || 0,
+          status: 'draft',
+          total: 0,
+          fulfillment_status: 'none', // 初始為未履約
+          delivery_method: delivery_method || null,
+          expected_delivery_date: expected_delivery_date || null,
+          delivery_note: delivery_note || null,
+          created_at: createdAt, // 手動設定為台灣時間
+        })
+        .select()
+        .single()
 
-    if (saleError) {
+      if (error?.code === '23505' && error?.message?.includes('sale_no')) {
+        // sale_no 重複，重新產生再試
+        console.warn(`[Sales API] sale_no ${saleNo} 重複，重試 attempt ${attempt + 1}`)
+        saleNo = await generateSaleNo()
+        continue
+      }
+
+      sale = data
+      saleError = error
+      break
+    }
+
+    if (saleError || !sale) {
       return NextResponse.json(
-        { ok: false, error: saleError.message },
+        { ok: false, error: saleError?.message || '建立銷售單失敗' },
         { status: 500 }
       )
     }
