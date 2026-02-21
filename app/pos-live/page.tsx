@@ -713,10 +713,11 @@ export default function POSPage() {
         (p: any) => p.remaining === p.quantity
       ) ?? false
 
-      // Merge opening combo prices when set is untouched
+      // 開套優先級大於組合價：若 set 未抽過且有開套優惠，只套用開套優惠（不重複觸發組合價）
       const regularCombos = group.kuji?.combo_prices || []
       const openingCombos = isUntouched ? (group.kuji?.opening_combo_prices || []) : []
-      const comboPrices = [...regularCombos, ...openingCombos].sort((a: any, b: any) => b.draws - a.draws)
+      const comboPrices = (openingCombos.length > 0 ? openingCombos : regularCombos)
+        .sort((a: any, b: any) => b.draws - a.draws)
       const originalPrice = group.kuji?.price || 0
 
       if (comboPrices.length === 0) return
