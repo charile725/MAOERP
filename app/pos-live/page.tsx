@@ -317,14 +317,23 @@ export default function POSPage() {
         }
       }
 
-      // 先載入 20 筆最近更新的商品，讓畫面秒出
-      const firstRes = await fetch('/api/products?active=true&page=1&pageSize=20&sortBy=updated_at&sortOrder=desc')
-      const firstData = await firstRes.json()
-      if (firstData.ok && firstData.data?.length > 0) {
-        setProducts(firstData.data)
-      }
+      // 第一次載入（products 為空）時先載 20 筆讓畫面秒出
+      // 如果已有完整商品列表（快取過期重新載入），不要覆蓋成只有 20 筆
+      setProducts(prev => {
+        if (prev.length === 0) {
+          fetch('/api/products?active=true&page=1&pageSize=20&sortBy=updated_at&sortOrder=desc')
+            .then(r => r.json())
+            .then(d => {
+              if (d.ok && d.data?.length > 0) {
+                setProducts(curr => curr.length < 20 ? d.data : curr)
+              }
+            })
+            .catch(() => {})
+        }
+        return prev
+      })
 
-      // 背景載入全部商品
+      // 載入全部商品
       const res = await fetch('/api/products?all=true&active=true')
       const data = await res.json()
       if (data.ok) {
