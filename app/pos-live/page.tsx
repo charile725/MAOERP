@@ -317,31 +317,28 @@ export default function POSPage() {
         }
       }
 
-      // 第一次載入（products 為空）時先載 20 筆讓畫面秒出
-      // 如果已有完整商品列表（快取過期重新載入），不要覆蓋成只有 20 筆
-      setProducts(prev => {
-        if (prev.length === 0) {
-          fetch('/api/products?active=true&page=1&pageSize=20&sortBy=updated_at&sortOrder=desc')
-            .then(r => r.json())
-            .then(d => {
-              if (d.ok && d.data?.length > 0) {
-                setProducts(curr => curr.length < 20 ? d.data : curr)
-              }
-            })
-            .catch(() => {})
-        }
-        return prev
-      })
+      // 用分頁載入全部商品（避免 Supabase 伺服器端 row limit 截斷）
+      const allProducts: Product[] = []
+      let page = 1
+      const pageSize = 1000
 
-      // 載入全部商品
-      const res = await fetch('/api/products?all=true&active=true')
-      const data = await res.json()
-      if (data.ok) {
-        setProducts(data.data || [])
-        // 更新快取
-        localStorage.setItem(CACHE_KEY, JSON.stringify(data.data || []))
-        localStorage.setItem(CACHE_EXPIRY_KEY, String(Date.now() + CACHE_DURATION))
+      while (true) {
+        const res = await fetch(`/api/products?active=true&page=${page}&pageSize=${pageSize}`)
+        const data = await res.json()
+        if (!data.ok) break
+
+        allProducts.push(...(data.data || []))
+
+        // 如果回傳的筆數少於 pageSize，表示已經是最後一頁
+        if (!data.data || data.data.length < pageSize) break
+        page++
       }
+
+      console.log(`[POS] 載入商品完成: ${allProducts.length} 筆`)
+      setProducts(allProducts)
+      // 更新快取
+      localStorage.setItem(CACHE_KEY, JSON.stringify(allProducts))
+      localStorage.setItem(CACHE_EXPIRY_KEY, String(Date.now() + CACHE_DURATION))
     } catch (err) {
       console.error('Failed to fetch products:', err)
     }
