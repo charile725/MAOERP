@@ -352,7 +352,7 @@ export default function MobilePOS({
             const data = await res.json()
 
             if (data.ok) {
-                const newProduct: Product = data.product
+                const newProduct: Product = data.data
                 addToCart(newProduct)
                 fetchProducts()
 
