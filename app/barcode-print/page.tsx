@@ -31,22 +31,44 @@ type IchibanKuji = {
   }[]
 }
 
-type PrintFormat = 'label-4x10' | 'label-3x8'
+type PrintFormat = 'label-60x20' | 'label-50x30' | 'label-4x10-a4'
 
 const FORMATS = {
-  'label-4x10': {
-    name: '標籤紙 4x10',
-    columns: 4,
-    rows: 10,
-    width: 190,
-    height: 84,
+  'label-60x20': {
+    name: '貼紙 6×2cm',
+    description: '60×20mm 標籤貼紙（熱感/標籤機）',
+    pageWidth: 60,
+    pageHeight: 20,
+    labelWidth: 58,
+    labelHeight: 18,
+    barcodeHeight: 7,
+    nameFontSize: 6,
+    codeFontSize: 5.5,
+    perPage: 1,
   },
-  'label-3x8': {
-    name: '標籤紙 3x8',
-    columns: 3,
-    rows: 8,
-    width: 250,
-    height: 105,
+  'label-50x30': {
+    name: '貼紙 5×3cm',
+    description: '50×30mm 標籤貼紙',
+    pageWidth: 50,
+    pageHeight: 30,
+    labelWidth: 48,
+    labelHeight: 28,
+    barcodeHeight: 10,
+    nameFontSize: 7,
+    codeFontSize: 6,
+    perPage: 1,
+  },
+  'label-4x10-a4': {
+    name: 'A4 標籤紙 4×10',
+    description: 'A4 整張標籤紙（4欄×10列）',
+    pageWidth: 210,
+    pageHeight: 297,
+    labelWidth: 48,
+    labelHeight: 25,
+    barcodeHeight: 8,
+    nameFontSize: 6,
+    codeFontSize: 5.5,
+    perPage: 40,
   },
 }
 
@@ -66,7 +88,7 @@ export default function BarcodePrintPage() {
     copies: number
     source: 'product' | 'prize' | 'kuji'
   }[]>([])
-  const [format, setFormat] = useState<PrintFormat>('label-4x10')
+  const [format, setFormat] = useState<PrintFormat>('label-60x20')
   const [loading, setLoading] = useState(true)
   const [productSearchKeyword, setProductSearchKeyword] = useState('')
   const [kujiSearchKeyword, setKujiSearchKeyword] = useState('')
@@ -284,17 +306,17 @@ export default function BarcodePrintPage() {
 
   const totalLabels = selectedItems.reduce((sum, item) => sum + item.copies, 0)
   const formatConfig = FORMATS[format]
+  const isA4 = format === 'label-4x10-a4'
 
   return (
     <>
       <style jsx global>{`
         @media print {
           @page {
-            size: A4;
-            margin: 5mm 8mm;
+            size: ${isA4 ? 'A4' : `${formatConfig.pageWidth}mm ${formatConfig.pageHeight}mm`};
+            margin: ${isA4 ? '5mm 3mm' : '0'};
           }
 
-          /* 強制移除所有螢幕版面的干擾 */
           html, body {
             background: #fff !important;
             color: #000 !important;
@@ -306,14 +328,12 @@ export default function BarcodePrintPage() {
             padding: 0 !important;
           }
 
-          /* 隱藏所有非列印內容 */
           nav, header, footer, aside,
           .no-print {
             display: none !important;
             visibility: hidden !important;
           }
 
-          /* 列印容器 */
           .print-root {
             display: block !important;
             background: #fff !important;
@@ -326,18 +346,17 @@ export default function BarcodePrintPage() {
             margin: 0 !important;
           }
 
-          /* 標籤紙 grid - 一排一個，左右置中 */
           .print-area {
-            display: flex !important;
-            flex-direction: column !important;
-            align-items: center !important;
+            display: ${isA4 ? 'flex' : 'block'} !important;
+            ${isA4 ? 'flex-wrap: wrap !important;' : ''}
+            ${isA4 ? 'justify-content: center !important;' : ''}
+            ${isA4 ? 'gap: 0 !important;' : ''}
             background: #fff !important;
             width: 100% !important;
-            margin: 0 auto !important;
-            gap: 2mm !important;
+            margin: 0 !important;
+            padding: 0 !important;
           }
 
-          /* 標籤框體 - 固定寬度，內容置中 */
           .label {
             display: flex !important;
             flex-direction: column !important;
@@ -345,21 +364,28 @@ export default function BarcodePrintPage() {
             justify-content: center !important;
             background: #fff !important;
             color: #000 !important;
-            border: 1px solid #ccc !important;
-            padding: 1.5mm 2mm !important;
             box-sizing: border-box !important;
-            break-inside: avoid !important;
-            page-break-inside: avoid !important;
             text-align: center !important;
-            width: 90mm !important;
+            overflow: hidden !important;
+            width: ${formatConfig.labelWidth}mm !important;
+            height: ${formatConfig.labelHeight}mm !important;
+            padding: ${isA4 ? '0.5mm 1mm' : '0.5mm 1mm'} !important;
+            ${isA4 ? 'border: 0.5px solid #eee !important;' : 'border: none !important;'}
+            ${!isA4 ? `
+              page-break-after: always !important;
+              margin: 0 auto !important;
+            ` : ''}
           }
 
-          /* 條碼本體置中 */
+          .label:last-child {
+            page-break-after: auto !important;
+          }
+
           .barcode-wrap {
             display: flex !important;
             justify-content: center !important;
             align-items: center !important;
-            height: 11mm !important;
+            height: ${formatConfig.barcodeHeight}mm !important;
             width: 100% !important;
             margin: 0 !important;
             line-height: 0 !important;
@@ -367,44 +393,43 @@ export default function BarcodePrintPage() {
 
           .barcode-wrap img {
             display: block !important;
-            height: 11mm !important;
+            height: ${formatConfig.barcodeHeight}mm !important;
             width: auto !important;
+            max-width: 100% !important;
             margin: 0 auto !important;
           }
 
-          /* 商品名稱 */
           .meta-row .name {
             display: block !important;
-            font-size: 8pt !important;
+            font-size: ${formatConfig.nameFontSize}pt !important;
             font-weight: 600 !important;
-            line-height: 1.2 !important;
+            line-height: 1.1 !important;
             text-align: center !important;
             white-space: nowrap !important;
             overflow: hidden !important;
             text-overflow: ellipsis !important;
             max-width: 100% !important;
-            margin-top: 1mm !important;
+            margin-bottom: 0.3mm !important;
           }
 
-          /* 條碼號 + 價格同一行 */
           .meta-row .code,
           .meta-row .price {
             display: inline !important;
-            font-size: 7pt !important;
+            font-size: ${formatConfig.codeFontSize}pt !important;
             font-weight: 400 !important;
-            line-height: 1.2 !important;
+            line-height: 1.1 !important;
             text-align: center !important;
           }
 
           .meta-row .price {
-            margin-left: 2mm !important;
-            font-weight: 600 !important;
+            margin-left: 1.5mm !important;
+            font-weight: 700 !important;
           }
 
-          /* meta-row 容器 */
           .meta-row {
             text-align: center !important;
             width: 100% !important;
+            margin-top: 0.3mm !important;
           }
         }
       `}</style>
@@ -549,7 +574,11 @@ export default function BarcodePrintPage() {
                   {Object.entries(FORMATS).map(([key, config]) => (
                     <label
                       key={key}
-                      className="flex cursor-pointer items-center rounded border border-gray-200 dark:border-gray-700 p-3 hover:bg-gray-50 dark:hover:bg-gray-700"
+                      className={`flex cursor-pointer items-center rounded border p-3 hover:bg-gray-50 dark:hover:bg-gray-700 ${
+                        format === key
+                          ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30'
+                          : 'border-gray-200 dark:border-gray-700'
+                      }`}
                     >
                       <input
                         type="radio"
@@ -562,7 +591,7 @@ export default function BarcodePrintPage() {
                       <div>
                         <div className="font-medium text-gray-900 dark:text-gray-100">{config.name}</div>
                         <div className="text-sm text-gray-500 dark:text-gray-400">
-                          {config.columns} x {config.rows} ({config.width}x{config.height}mm)
+                          {config.description}
                         </div>
                       </div>
                     </label>
@@ -642,18 +671,20 @@ export default function BarcodePrintPage() {
         </div>
 
         {/* Print Area */}
-        <div className="print-area hidden print:grid" ref={printAreaRef}>
+        <div className="print-area hidden print:block" ref={printAreaRef}>
           {selectedItems.flatMap(item =>
             Array.from({ length: item.copies }).map((_, idx) => (
               <div key={`${item.id}-${item.source}-${idx}`} className="label">
+                <div className="meta-row">
+                  <span className="name">{item.name}</span>
+                </div>
                 <div className="barcode-wrap">
                   <img
-                    src={`/api/barcode?text=${encodeURIComponent(item.barcode)}&type=code128&scale=0.7&height=8`}
+                    src={`/api/barcode?text=${encodeURIComponent(item.barcode)}&type=code128&scale=${isA4 ? '0.5' : '0.4'}&height=${formatConfig.barcodeHeight}`}
                     alt={item.barcode}
                   />
                 </div>
                 <div className="meta-row">
-                  <span className="name">{item.name}</span>
                   <span className="code">{item.barcode}</span>
                   <span className="price">{formatCurrency(item.price)}</span>
                 </div>
