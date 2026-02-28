@@ -1,8 +1,10 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
+import useSWR, { useSWRConfig } from 'swr'
 import { useRouter } from 'next/navigation'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import { SWR_KEYS, expensesKey } from '@/lib/swr/keys'
 import { MoreHorizontal, Edit, Trash2 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -52,79 +54,37 @@ const EXPENSE_CATEGORIES = [
 
 export default function ExpensesPage() {
   const router = useRouter()
-  const [expenses, setExpenses] = useState<ExpenseWithAccount[]>([])
-  const [accounts, setAccounts] = useState<Account[]>([])
-  const [loading, setLoading] = useState(true)
+  const { mutate: globalMutate } = useSWRConfig()
   const [categoryFilter, setCategoryFilter] = useState<string>('')
   const [accountFilter, setAccountFilter] = useState<string>('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [deleting, setDeleting] = useState<number | null>(null)
-  const [userRole, setUserRole] = useState<'admin' | 'staff' | null>(null)
 
+  // Auth
+  const { data: authData } = useSWR<{ role: 'admin' | 'staff' }>(SWR_KEYS.AUTH_ME)
+  const userRole = authData?.role ?? null
   const isAdmin = userRole === 'admin'
 
-  useEffect(() => {
-    fetchUserRole()
-    fetchAccounts()
-  }, [])
-
-  useEffect(() => {
-    fetchExpenses()
-  }, [categoryFilter, accountFilter, dateFrom, dateTo])
-
-  const fetchUserRole = async () => {
-    try {
-      const res = await fetch('/api/auth/me')
-      const result = await res.json()
-      if (result.ok && result.data) {
-        setUserRole(result.data.role)
-      }
-    } catch (err) {
-      console.error('Failed to fetch user role:', err)
-    }
-  }
-
-  const fetchAccounts = async () => {
-    try {
-      const res = await fetch('/api/accounts')
-      const data = await res.json()
-      if (data.ok) {
-        setAccounts(data.data || [])
-      }
-    } catch (err) {
-      console.error('Failed to fetch accounts:', err)
-    }
-  }
+  // Accounts
+  const { data: accounts = [] } = useSWR<Account[]>(SWR_KEYS.ACCOUNTS)
 
   // 員工只能看到零用金帳戶
   const availableAccounts = isAdmin ? accounts : accounts.filter(acc => acc.account_type === 'petty_cash')
 
-  const fetchExpenses = async () => {
-    setLoading(true)
-    try {
-      const params = new URLSearchParams()
-      if (categoryFilter) params.append('category', categoryFilter)
-      if (accountFilter) params.append('account_id', accountFilter)
-      if (dateFrom) params.append('date_from', dateFrom)
-      if (dateTo) params.append('date_to', dateTo)
-
-      const res = await fetch(`/api/expenses?${params}`)
-      const data = await res.json()
-      if (data.ok) {
-        // API 已經包含關聯的帳戶資訊（accounts 欄位），重命名為 account
-        const expensesWithAccounts = (data.data || []).map((expense: any) => ({
-          ...expense,
-          account: expense.accounts, // Supabase 關聯查詢返回的欄位名
-        }))
-        setExpenses(expensesWithAccounts)
-      }
-    } catch (err) {
-      console.error('Failed to fetch expenses:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
+  // Expenses
+  const expenseSwrKey = expensesKey({
+    ...(categoryFilter ? { category: categoryFilter } : {}),
+    ...(accountFilter ? { account_id: accountFilter } : {}),
+    ...(dateFrom ? { date_from: dateFrom } : {}),
+    ...(dateTo ? { date_to: dateTo } : {}),
+  })
+  const { data: rawExpenses = [], isLoading: loading, mutate } = useSWR<any[]>(expenseSwrKey)
+  // API 已經包含關聯的帳戶資訊（accounts 欄位），重命名為 account
+  const expenses: ExpenseWithAccount[] = rawExpenses.map((expense: any) => ({
+    ...expense,
+    account: expense.accounts,
+  }))
 
   const handleDelete = async (id: number, category: string) => {
     if (!confirm(`確定要刪除這筆「${category}」費用嗎？\n\n此操作無法復原。`)) {
@@ -141,7 +101,8 @@ export default function ExpensesPage() {
 
       if (data.ok) {
         alert('刪除成功！')
-        fetchExpenses()
+        mutate()
+        globalMutate(SWR_KEYS.ACCOUNTS)
       } else {
         alert(`刪除失敗：${data.error}`)
       }

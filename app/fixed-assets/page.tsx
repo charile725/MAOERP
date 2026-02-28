@@ -1,8 +1,11 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import useSWR from 'swr'
 import { useRouter } from 'next/navigation'
 import { formatCurrency } from '@/lib/utils'
+import { SWR_KEYS } from '@/lib/swr/keys'
+import { rawFetcher } from '@/lib/swr/fetcher'
 import { MoreHorizontal, Edit, Trash2 } from 'lucide-react'
 import {
     DropdownMenu,
@@ -61,9 +64,12 @@ const CATEGORY_OPTIONS = [
 export default function FixedAssetsPage() {
     const router = useRouter()
     const [accessDenied, setAccessDenied] = useState(false)
-    const [assets, setAssets] = useState<FixedAsset[]>([])
-    const [summary, setSummary] = useState<Summary | null>(null)
-    const [loading, setLoading] = useState(true)
+    const { data: assets = [], isLoading: loading, mutate: mutateAssets } = useSWR<FixedAsset[]>(SWR_KEYS.FIXED_ASSETS)
+    const { data: summaryResult, mutate: mutateSummary } = useSWR<{ summary: Summary }>(
+        SWR_KEYS.FIXED_ASSETS_SUMMARY,
+        rawFetcher
+    )
+    const summary = summaryResult?.summary ?? null
     const [showForm, setShowForm] = useState(false)
     const [submitting, setSubmitting] = useState(false)
     const [editingAsset, setEditingAsset] = useState<FixedAsset | null>(null)
@@ -81,51 +87,17 @@ export default function FixedAssetsPage() {
     })
 
     // 權限檢查
+    const { data: authData, error: authError } = useSWR<{ role: string }>(SWR_KEYS.AUTH_ME)
     useEffect(() => {
-        fetch('/api/auth/me')
-            .then(res => res.json())
-            .then(data => {
-                if (!data.ok || data.data?.role !== 'admin') {
-                    setAccessDenied(true)
-                    setTimeout(() => router.push('/'), 2000)
-                }
-            })
-            .catch(() => {
-                setAccessDenied(true)
-                setTimeout(() => router.push('/'), 2000)
-            })
-    }, [router])
-
-    useEffect(() => {
-        fetchAssets()
-        fetchSummary()
-    }, [])
-
-    const fetchAssets = async () => {
-        setLoading(true)
-        try {
-            const res = await fetch('/api/fixed-assets')
-            const data = await res.json()
-            if (data.ok) {
-                setAssets(data.data || [])
-            }
-        } catch (err) {
-            console.error('Failed to fetch assets:', err)
-        } finally {
-            setLoading(false)
+        if (authError || (authData && authData.role !== 'admin')) {
+            setAccessDenied(true)
+            setTimeout(() => router.push('/'), 2000)
         }
-    }
+    }, [authData, authError, router])
 
-    const fetchSummary = async () => {
-        try {
-            const res = await fetch('/api/fixed-assets/summary')
-            const data = await res.json()
-            if (data.ok) {
-                setSummary(data.data.summary)
-            }
-        } catch (err) {
-            console.error('Failed to fetch summary:', err)
-        }
+    const revalidateAll = () => {
+        mutateAssets()
+        mutateSummary()
     }
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -167,8 +139,7 @@ export default function FixedAssetsPage() {
                 setShowForm(false)
                 setEditingAsset(null)
                 resetForm()
-                fetchAssets()
-                fetchSummary()
+                revalidateAll()
             } else {
                 alert(`操作失敗：${data.error}`)
             }
@@ -210,8 +181,7 @@ export default function FixedAssetsPage() {
 
             if (data.ok) {
                 alert('刪除成功！')
-                fetchAssets()
-                fetchSummary()
+                revalidateAll()
             } else {
                 alert(`刪除失敗：${data.error}`)
             }

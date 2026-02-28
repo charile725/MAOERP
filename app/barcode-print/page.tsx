@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useRef } from 'react'
+import useSWR from 'swr'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { formatCurrency } from '@/lib/utils'
 
@@ -77,8 +78,10 @@ export default function BarcodePrintPage() {
   const searchParams = useSearchParams()
   const printAreaRef = useRef<HTMLDivElement>(null)
 
-  const [products, setProducts] = useState<Product[]>([])
-  const [ichibanKujis, setIchibanKujis] = useState<IchibanKuji[]>([])
+  const { data: products = [], isLoading: productsLoading } = useSWR<Product[]>('/api/products?all=true')
+  const { data: ichibanKujis = [], isLoading: kujisLoading } = useSWR<IchibanKuji[]>('/api/ichiban-kuji?all=true')
+  const loading = productsLoading || kujisLoading
+
   const [selectedItems, setSelectedItems] = useState<{
     id: string
     name: string
@@ -89,36 +92,8 @@ export default function BarcodePrintPage() {
     source: 'product' | 'prize' | 'kuji'
   }[]>([])
   const [format, setFormat] = useState<PrintFormat>('label-60x20')
-  const [loading, setLoading] = useState(true)
   const [productSearchKeyword, setProductSearchKeyword] = useState('')
   const [kujiSearchKeyword, setKujiSearchKeyword] = useState('')
-
-  useEffect(() => {
-    fetchData()
-  }, [])
-
-  const fetchData = async () => {
-    setLoading(true)
-    try {
-      // Fetch products - get all products without pagination
-      const productsRes = await fetch('/api/products?all=true')
-      const productsData = await productsRes.json()
-      if (productsData.ok) {
-        setProducts(productsData.data || [])
-      }
-
-      // Fetch ichiban kujis
-      const kujisRes = await fetch('/api/ichiban-kuji?all=true')
-      const kujisData = await kujisRes.json()
-      if (kujisData.ok) {
-        setIchibanKujis(kujisData.data || [])
-      }
-    } catch (err) {
-      console.error('Failed to fetch data:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const addProduct = (product: Product) => {
     if (!product.barcode) {

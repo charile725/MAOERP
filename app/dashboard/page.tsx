@@ -1,8 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
+import useSWR from 'swr'
 import Link from 'next/link'
 import { formatCurrency } from '@/lib/utils'
+import { SWR_KEYS } from '@/lib/swr/keys'
 
 type DashboardStats = {
   // 營收口徑
@@ -85,243 +87,185 @@ type BusinessDayClosing = {
 }
 
 export default function DashboardPage() {
-  const [stats, setStats] = useState<DashboardStats>({
-    grossSales: 0,
-    totalDiscount: 0,
-    totalStoreCreditUsed: 0,
-    amountDue: 0,
-    actualCollected: 0,
-    uncollected: 0,
-    todaySales: 0, // 向後兼容
-    todayOrders: 0,
-    totalCost: 0,
-    totalExpenses: 0,
-    grossProfit: 0,
-    netProfit: 0,
-    totalAR: 0,
-    totalAP: 0,
-    overdueAR: 0,
-    overdueAP: 0,
-  })
-  const [recentSales, setRecentSales] = useState<RecentSale[]>([])
-  const [loading, setLoading] = useState(true)
   const [dateFrom, setDateFrom] = useState(new Date().toISOString().split('T')[0])
   const [dateTo, setDateTo] = useState(new Date().toISOString().split('T')[0])
   const [sourceFilter, setSourceFilter] = useState<'all' | 'pos' | 'live'>('all')
 
-  // 新增：報表模式（按日期 vs 按營業日）
+  // 報表模式（按日期 vs 按營業日）
   const [reportMode, setReportMode] = useState<'by_date' | 'by_business_day'>('by_business_day')
-  const [businessDayClosings, setBusinessDayClosings] = useState<BusinessDayClosing[]>([])
-  const [selectedClosingId, setSelectedClosingId] = useState<string>('')
+  const [selectedClosingId, setSelectedClosingId] = useState<string>('today_pos')
 
-  useEffect(() => {
-    fetchDashboardData()
-  }, [dateFrom, dateTo, sourceFilter, reportMode, selectedClosingId])
+  // 營業日模式：用 SWR 獲取兩個通路的日結記錄
+  const { data: posClosings = [] } = useSWR<BusinessDayClosing[]>(
+    reportMode === 'by_business_day' ? '/api/business-day-closing?source=pos&list=true' : null
+  )
+  const { data: liveClosings = [] } = useSWR<BusinessDayClosing[]>(
+    reportMode === 'by_business_day' ? '/api/business-day-closing?source=live&list=true' : null
+  )
 
+  // 合併日結記錄 + 加入今日虛擬選項
+  const businessDayClosings = useMemo(() => {
+    const allClosings = [...posClosings, ...liveClosings]
+      .sort((a: any, b: any) => b.business_date.localeCompare(a.business_date))
+
+    const today = new Date().toISOString().split('T')[0]
+    const todayPreviews = [
+      { id: 'today_pos', business_date: today, source: 'pos' as const, total_sales: 0, sales_count: 0 },
+      { id: 'today_live', business_date: today, source: 'live' as const, total_sales: 0, sales_count: 0 },
+    ]
+
+    return [...todayPreviews as any[], ...allClosings.slice(0, 30)]
+  }, [posClosings, liveClosings])
+
+  // 當切換到營業日模式時，重置通路篩選
   useEffect(() => {
-    // 當切換到營業日模式時，獲取日結記錄列表，並重置通路篩選
     if (reportMode === 'by_business_day') {
       setSourceFilter('pos')
-      fetchBusinessDayClosings()
     }
   }, [reportMode])
 
-  const fetchBusinessDayClosings = async () => {
-    try {
-      // 同時獲取兩個通路的日結記錄
-      const [posRes, liveRes] = await Promise.all([
-        fetch('/api/business-day-closing?source=pos&list=true'),
-        fetch('/api/business-day-closing?source=live&list=true')
-      ])
-      const [posData, liveData] = await Promise.all([posRes.json(), liveRes.json()])
-
-      // 合併並按營業日期排序
-      const allClosings = [
-        ...(posData.ok ? posData.data : []),
-        ...(liveData.ok ? liveData.data : [])
-      ].sort((a, b) => b.business_date.localeCompare(a.business_date))
-
-      // 加入「今日（未日結）」虛擬選項（分通路）
-      const today = new Date().toISOString().split('T')[0]
-      const todayPreviews = [
-        { id: 'today_pos', business_date: today, source: 'pos', total_sales: 0, sales_count: 0 },
-        { id: 'today_live', business_date: today, source: 'live', total_sales: 0, sales_count: 0 },
-      ]
-
-      setBusinessDayClosings([...todayPreviews as any[], ...allClosings.slice(0, 30)])
-      setSelectedClosingId('today_pos')
-    } catch (err) {
-      console.error('Failed to fetch business day closings:', err)
+  // 建立動態 SWR key
+  const salesSwrKey = useMemo(() => {
+    if (reportMode === 'by_business_day') {
+      if (!selectedClosingId || businessDayClosings.length === 0) return null
+      const selectedClosing = businessDayClosings.find((c: any) => c.id === selectedClosingId)
+      if (!selectedClosing) return null
+      const sourceParam = sourceFilter === 'all' ? '' : `&source=${selectedClosing.source}`
+      return `/api/sales?business_date=${selectedClosing.business_date}${sourceParam}`
+    } else {
+      const sourceParam = sourceFilter !== 'all' ? `&source=${sourceFilter}` : ''
+      return `/api/sales?date_from=${dateFrom}&date_to=${dateTo}${sourceParam}`
     }
-  }
+  }, [reportMode, selectedClosingId, businessDayClosings, dateFrom, dateTo, sourceFilter])
 
-  const fetchDashboardData = async () => {
-    setLoading(true)
-    try {
-      // 建立查詢參數
-      let salesUrl = ''
-      let expensesUrl = ''
+  const expensesSwrKey = useMemo(() => {
+    if (reportMode === 'by_business_day') {
+      if (!selectedClosingId || businessDayClosings.length === 0) return null
+      const selectedClosing = businessDayClosings.find((c: any) => c.id === selectedClosingId)
+      if (!selectedClosing) return null
+      return `/api/expenses?date_from=${selectedClosing.business_date}&date_to=${selectedClosing.business_date}`
+    } else {
+      return `/api/expenses?date_from=${dateFrom}&date_to=${dateTo}`
+    }
+  }, [reportMode, selectedClosingId, businessDayClosings, dateFrom, dateTo])
 
-      if (reportMode === 'by_business_day') {
-        if (!selectedClosingId || businessDayClosings.length === 0) {
-          setLoading(false)
-          return
-        }
+  // SWR hooks
+  const { data: salesInRange = [], isLoading: salesLoading } = useSWR<any[]>(salesSwrKey)
+  const { data: expensesInRange = [], isLoading: expensesLoading } = useSWR<any[]>(expensesSwrKey)
+  const { data: extendedData = {} } = useSWR<any>(SWR_KEYS.FINANCE_DASHBOARD)
+  const { data: depData } = useSWR<any>(SWR_KEYS.FIXED_ASSETS_SUMMARY)
 
-        const selectedClosing = businessDayClosings.find(c => c.id === selectedClosingId)
-        if (!selectedClosing) {
-          setLoading(false)
-          return
-        }
+  const loading = salesLoading || expensesLoading
 
-        // 全部通路 → 不帶 source；否則用該筆日結的 source
-        const sourceParam = sourceFilter === 'all' ? '' : `&source=${selectedClosing.source}`
-        salesUrl = `/api/sales?business_date=${selectedClosing.business_date}${sourceParam}`
-        expensesUrl = `/api/expenses?date_from=${selectedClosing.business_date}&date_to=${selectedClosing.business_date}`
-      } else {
-        const sourceParam = sourceFilter !== 'all' ? `&source=${sourceFilter}` : ''
-        salesUrl = `/api/sales?date_from=${dateFrom}&date_to=${dateTo}${sourceParam}`
-        expensesUrl = `/api/expenses?date_from=${dateFrom}&date_to=${dateTo}`
-      }
+  // 所有統計計算移到 useMemo
+  const stats = useMemo<DashboardStats>(() => {
+    const confirmedSales = salesInRange.filter((s: any) => s.status === 'confirmed')
 
-      // 平行呼叫所有 API
-      const [salesRes, expensesRes, dashboardRes, depRes] = await Promise.all([
-        fetch(salesUrl),
-        fetch(expensesUrl),
-        fetch('/api/finance/dashboard'),
-        fetch('/api/fixed-assets/summary')
-      ])
+    // Gross Sales (交易額/原始銷售額)
+    const grossSales = confirmedSales.reduce((sum: number, s: any) => {
+      if (s.subtotal) return sum + s.subtotal
+      const itemsSubtotal = (s.sale_items || []).reduce(
+        (itemSum: number, item: any) => itemSum + (item.price * item.quantity), 0
+      )
+      return sum + itemsSubtotal
+    }, 0)
 
-      const [salesData, expensesData, dashboardData, depData] = await Promise.all([
-        salesRes.json(),
-        expensesRes.json(),
-        dashboardRes.json(),
-        depRes.json()
-      ])
+    const totalDiscount = confirmedSales.reduce((sum: number, s: any) => sum + (s.discount_amount || 0), 0)
+    const totalStoreCreditUsed = confirmedSales.reduce((sum: number, s: any) => sum + (s.store_credit_used || 0), 0)
+    const amountDue = confirmedSales.reduce((sum: number, s: any) => sum + s.total, 0)
+    const actualCollected = confirmedSales
+      .filter((s: any) => s.is_paid)
+      .reduce((sum: number, s: any) => sum + s.total, 0)
+    const uncollected = amountDue - actualCollected
 
-      const salesInRange = salesData.ok ? salesData.data : []
-      const expensesInRange = expensesData.ok ? expensesData.data : []
-      const extendedData = dashboardData.ok ? dashboardData.data : {}
-
-      // 設定最近銷售（直接用已查詢的資料）
-      setRecentSales(salesInRange.slice(0, 10))
-
-      // 繼續原有的統計邏輯
-      const confirmedSales = salesInRange.filter((s: any) => s.status === 'confirmed')
-
-      // Gross Sales (交易額/原始銷售額)
-      const grossSales = confirmedSales.reduce((sum: number, s: any) => {
-        if (s.subtotal) return sum + s.subtotal
-        const itemsSubtotal = (s.sale_items || []).reduce(
-          (itemSum: number, item: any) => itemSum + (item.price * item.quantity), 0
-        )
-        return sum + itemsSubtotal
-      }, 0)
-
-      const totalDiscount = confirmedSales.reduce((sum: number, s: any) => sum + (s.discount_amount || 0), 0)
-      const totalStoreCreditUsed = confirmedSales.reduce((sum: number, s: any) => sum + (s.store_credit_used || 0), 0)
-      const amountDue = confirmedSales.reduce((sum: number, s: any) => sum + s.total, 0)
-      const actualCollected = confirmedSales
-        .filter((s: any) => s.is_paid)
-        .reduce((sum: number, s: any) => sum + s.total, 0)
-      const uncollected = amountDue - actualCollected
-
-      // Calculate total cost（追蹤實際總成本）
-      const costBreakdownMap = new Map<string, { unitCost: number; totalCost: number; quantity: number; name: string }>()
-      let totalStoreCreditGranted = 0
-      const totalCost = confirmedSales.reduce((sum: number, s: any) => {
-        const saleCost = (s.sale_items || []).reduce(
-          (itemSum: number, item: any) => {
-            const effectiveQty = item.quantity - (item.store_credit_qty || 0)
-            const unitCost = item.cost || 0
-            const itemCost = unitCost * effectiveQty
-            const storeCreditCost = item.store_credit_amount || 0
-            totalStoreCreditGranted += storeCreditCost
-            if (effectiveQty > 0) {
-              const key = item.product_id || item.snapshot_name || 'unknown'
-              if (costBreakdownMap.has(key)) {
-                const existing = costBreakdownMap.get(key)!
-                existing.quantity += effectiveQty
-                existing.totalCost += itemCost
-                // 如果單位成本不同，用加權平均
-                if (existing.unitCost !== unitCost && unitCost > 0) {
-                  existing.unitCost = existing.totalCost / existing.quantity
-                }
-              } else {
-                costBreakdownMap.set(key, {
-                  unitCost: unitCost,
-                  totalCost: itemCost,
-                  quantity: effectiveQty,
-                  name: item.snapshot_name || '未知商品'
-                })
+    // Calculate total cost（追蹤實際總成本）
+    const costBreakdownMap = new Map<string, { unitCost: number; totalCost: number; quantity: number; name: string }>()
+    const totalCost = confirmedSales.reduce((sum: number, s: any) => {
+      const saleCost = (s.sale_items || []).reduce(
+        (itemSum: number, item: any) => {
+          const effectiveQty = item.quantity - (item.store_credit_qty || 0)
+          const unitCost = item.cost || 0
+          const itemCost = unitCost * effectiveQty
+          if (effectiveQty > 0) {
+            const key = item.product_id || item.snapshot_name || 'unknown'
+            if (costBreakdownMap.has(key)) {
+              const existing = costBreakdownMap.get(key)!
+              existing.quantity += effectiveQty
+              existing.totalCost += itemCost
+              if (existing.unitCost !== unitCost && unitCost > 0) {
+                existing.unitCost = existing.totalCost / existing.quantity
               }
+            } else {
+              costBreakdownMap.set(key, {
+                unitCost: unitCost,
+                totalCost: itemCost,
+                quantity: effectiveQty,
+                name: item.snapshot_name || '未知商品'
+              })
             }
-            return itemSum + itemCost + storeCreditCost
-          },
-          0
-        )
-        return sum + saleCost
-      }, 0)
+          }
+          return itemSum + itemCost + (item.store_credit_amount || 0)
+        },
+        0
+      )
+      return sum + saleCost
+    }, 0)
 
-      const costBreakdown = Array.from(costBreakdownMap.values()).map(item => ({
-        product_name: item.name,
-        cost: item.unitCost,
-        quantity: item.quantity,
-        total_cost: item.totalCost
-      }))
+    const costBreakdown = Array.from(costBreakdownMap.values()).map(item => ({
+      product_name: item.name,
+      cost: item.unitCost,
+      quantity: item.quantity,
+      total_cost: item.totalCost
+    }))
 
-      const totalExpenses = expensesInRange.reduce((sum: number, e: any) => sum + e.amount, 0)
-      const grossProfit = grossSales - totalCost
-      const netProfit = grossProfit - totalExpenses
+    const totalExpenses = expensesInRange.reduce((sum: number, e: any) => sum + e.amount, 0)
+    const grossProfit = grossSales - totalCost
+    const netProfit = grossProfit - totalExpenses
 
-      // AR/AP 數據
-      const totalAR = extendedData.arAging?.total || 0
-      const overdueAR = (extendedData.arAging?.days31_60 || 0) +
-        (extendedData.arAging?.days61_90 || 0) +
-        (extendedData.arAging?.over90 || 0)
-      const totalAP = extendedData.apAging?.total || 0
-      const overdueAP = (extendedData.apAging?.days31_60 || 0) +
-        (extendedData.apAging?.days61_90 || 0) +
-        (extendedData.apAging?.over90 || 0)
+    // AR/AP 數據
+    const totalAR = extendedData.arAging?.total || 0
+    const overdueAR = (extendedData.arAging?.days31_60 || 0) +
+      (extendedData.arAging?.days61_90 || 0) +
+      (extendedData.arAging?.over90 || 0)
+    const totalAP = extendedData.apAging?.total || 0
+    const overdueAP = (extendedData.apAging?.days31_60 || 0) +
+      (extendedData.apAging?.days61_90 || 0) +
+      (extendedData.apAging?.over90 || 0)
 
-      // 折舊數據
-      const depreciation = depData.ok ? {
-        total_monthly: depData.data.summary.total_monthly_depreciation,
-        total_assets: depData.data.summary.total_assets,
-        total_remaining: depData.data.summary.total_remaining_value
-      } : { total_monthly: 0, total_assets: 0, total_remaining: 0 }
+    // 折舊數據
+    const depSummary = depData?.summary
+    const depreciation = depSummary ? {
+      total_monthly: depSummary.total_monthly_depreciation,
+      total_assets: depSummary.total_assets,
+      total_remaining: depSummary.total_remaining_value
+    } : { total_monthly: 0, total_assets: 0, total_remaining: 0 }
 
-      setStats({
-        grossSales,
-        totalDiscount,
-        totalStoreCreditUsed,
-        amountDue,
-        actualCollected,
-        uncollected,
-        todaySales: grossSales,
-        todayOrders: salesInRange.length,
-        totalCost,
-        totalExpenses,
-        grossProfit,
-        netProfit,
-        totalAR,
-        totalAP,
-        overdueAR,
-        overdueAP,
-        costBreakdown,
-        arAging: extendedData.arAging,
-        apAging: extendedData.apAging,
-        arOverdueList: extendedData.arOverdueList,
-        apOverdueList: extendedData.apOverdueList,
-        profitTrend: extendedData.profitTrend,
-        depreciation,
-      })
-    } catch (err) {
-      console.error('Failed to fetch dashboard data:', err)
-    } finally {
-      setLoading(false)
+    return {
+      grossSales,
+      totalDiscount,
+      totalStoreCreditUsed,
+      amountDue,
+      actualCollected,
+      uncollected,
+      todaySales: grossSales,
+      todayOrders: salesInRange.length,
+      totalCost,
+      totalExpenses,
+      grossProfit,
+      netProfit,
+      totalAR,
+      totalAP,
+      overdueAR,
+      overdueAP,
+      costBreakdown,
+      arAging: extendedData.arAging,
+      apAging: extendedData.apAging,
+      arOverdueList: extendedData.arOverdueList,
+      apOverdueList: extendedData.apOverdueList,
+      profitTrend: extendedData.profitTrend,
+      depreciation,
     }
-  }
+  }, [salesInRange, expensesInRange, extendedData, depData])
 
   if (loading) {
     return (

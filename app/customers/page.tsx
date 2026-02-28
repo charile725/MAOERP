@@ -1,8 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import useSWR from 'swr'
 import Link from 'next/link'
 import type { Customer } from '@/types'
+import { customersKey } from '@/lib/swr/keys'
 import { MoreHorizontal, Edit, Trash2, Wallet, TrendingUp, TrendingDown, History } from 'lucide-react'
 import {
   DropdownMenu,
@@ -13,10 +15,15 @@ import {
 import { Button } from '@/components/ui/button'
 
 export default function CustomersPage() {
-  const [customers, setCustomers] = useState<Customer[]>([])
-  const [loading, setLoading] = useState(true)
   const [keyword, setKeyword] = useState('')
+  const [searchKeyword, setSearchKeyword] = useState('')
   const [activeFilter, setActiveFilter] = useState<boolean | null>(null)
+
+  const swrKey = customersKey({
+    ...(searchKeyword ? { keyword: searchKeyword } : {}),
+    ...(activeFilter !== null ? { active: String(activeFilter) } : {}),
+  })
+  const { data: customers = [], isLoading: loading, mutate } = useSWR<Customer[]>(swrKey)
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null)
   const [formData, setFormData] = useState<Partial<Customer>>({})
   const [error, setError] = useState('')
@@ -65,25 +72,6 @@ export default function CustomersPage() {
   const [profitSortField, setProfitSortField] = useState<'net_profit' | 'total_sales' | 'total_cost' | null>('net_profit')
   const [profitSortDir, setProfitSortDir] = useState<'asc' | 'desc'>('desc')
 
-  const fetchCustomers = async () => {
-    setLoading(true)
-    try {
-      const params = new URLSearchParams()
-      if (keyword) params.set('keyword', keyword)
-      if (activeFilter !== null) params.set('active', String(activeFilter))
-
-      const res = await fetch(`/api/customers?${params}`)
-      const data = await res.json()
-      if (data.ok) {
-        setCustomers(data.data || [])
-      }
-    } catch (err) {
-      console.error('Failed to fetch customers:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const fetchProfitData = async (dateFrom?: string, dateTo?: string) => {
     setProfitLoading(true)
     try {
@@ -108,14 +96,13 @@ export default function CustomersPage() {
   }
 
   useEffect(() => {
-    fetchCustomers()
     fetchProfitData()
   }, [activeFilter])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
-    setCurrentPage(1) // 搜尋時重置到第一頁
-    fetchCustomers()
+    setCurrentPage(1)
+    setSearchKeyword(keyword)
   }
 
   // 排序和分頁計算
@@ -171,7 +158,7 @@ export default function CustomersPage() {
       const data = await res.json()
 
       if (data.ok) {
-        fetchCustomers()
+        mutate()
         closeEditModal()
       } else {
         setError(data.error || '更新失敗')
@@ -196,7 +183,7 @@ export default function CustomersPage() {
       const data = await res.json()
 
       if (data.ok) {
-        fetchCustomers()
+        mutate()
         alert('刪除成功')
       } else {
         alert(data.error || '刪除失敗')
@@ -258,7 +245,7 @@ export default function CustomersPage() {
       const data = await res.json()
 
       if (data.ok) {
-        fetchCustomers()
+        mutate()
         closeAdjustModal()
         alert('調整成功')
       } else {

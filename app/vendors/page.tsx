@@ -1,8 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
+import useSWR from 'swr'
 import Link from 'next/link'
 import type { Vendor } from '@/types'
+import { vendorsKey } from '@/lib/swr/keys'
 import { MoreHorizontal, Edit, Trash2 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -13,10 +15,16 @@ import {
 import { Button } from '@/components/ui/button'
 
 export default function VendorsPage() {
-  const [vendors, setVendors] = useState<Vendor[]>([])
-  const [loading, setLoading] = useState(true)
   const [keyword, setKeyword] = useState('')
+  const [searchKeyword, setSearchKeyword] = useState('')
   const [activeFilter, setActiveFilter] = useState<boolean | null>(null)
+
+  const swrKey = vendorsKey({
+    ...(searchKeyword ? { keyword: searchKeyword } : {}),
+    ...(activeFilter !== null ? { active: String(activeFilter) } : {}),
+  })
+  const { data: vendors = [], isLoading: loading, mutate } = useSWR<Vendor[]>(swrKey)
+
   const [editingVendor, setEditingVendor] = useState<Vendor | null>(null)
   const [formData, setFormData] = useState<Partial<Vendor>>({})
   const [error, setError] = useState('')
@@ -26,33 +34,10 @@ export default function VendorsPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
 
-  const fetchVendors = async () => {
-    setLoading(true)
-    try {
-      const params = new URLSearchParams()
-      if (keyword) params.set('keyword', keyword)
-      if (activeFilter !== null) params.set('active', String(activeFilter))
-
-      const res = await fetch(`/api/vendors?${params}`)
-      const data = await res.json()
-      if (data.ok) {
-        setVendors(data.data || [])
-      }
-    } catch (err) {
-      console.error('Failed to fetch vendors:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    fetchVendors()
-  }, [activeFilter])
-
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
     setCurrentPage(1) // 搜尋時重置到第一頁
-    fetchVendors()
+    setSearchKeyword(keyword)
   }
 
   // 分頁計算
@@ -88,7 +73,7 @@ export default function VendorsPage() {
       const data = await res.json()
 
       if (data.ok) {
-        fetchVendors()
+        mutate()
         closeEditModal()
       } else {
         setError(data.error || '更新失敗')
@@ -113,7 +98,7 @@ export default function VendorsPage() {
       const data = await res.json()
 
       if (data.ok) {
-        fetchVendors()
+        mutate()
         alert('刪除成功')
       } else {
         alert(data.error || '刪除失敗')

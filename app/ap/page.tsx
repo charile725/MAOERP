@@ -1,7 +1,10 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
+import useSWR, { useSWRConfig } from 'swr'
+import { SWR_KEYS } from '@/lib/swr/keys'
+import { rawFetcher } from '@/lib/swr/fetcher'
 import { formatCurrency, formatDate } from '@/lib/utils'
 
 type APAccount = {
@@ -54,134 +57,98 @@ type PaymentAccount = {
 
 export default function APPageV2() {
   const router = useRouter()
+  const { mutate: globalMutate } = useSWRConfig()
   const [accessDenied, setAccessDenied] = useState(false)
-  const [vendorGroups, setVendorGroups] = useState<VendorGroup[]>([])
-  const [loading, setLoading] = useState(true)
   const [expandedVendors, setExpandedVendors] = useState<Set<string>>(new Set())
   const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set())
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentAccountId, setPaymentAccountId] = useState('')
-  const [paymentAccounts, setPaymentAccounts] = useState<PaymentAccount[]>([])
   const [processing, setProcessing] = useState(false)
   const [error, setError] = useState('')
+  const [searchKeyword, setSearchKeyword] = useState('')
   const [keyword, setKeyword] = useState('')
   const [currentVendor, setCurrentVendor] = useState<string | null>(null)
 
   // 分頁狀態
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
-  const [totalPages, setTotalPages] = useState(0)
-  const [totalCount, setTotalCount] = useState(0)
-
-  // 全域統計（跨所有頁面）
-  const [globalTotalUnpaid, setGlobalTotalUnpaid] = useState(0)
-  const [globalUnpaidCount, setGlobalUnpaidCount] = useState(0)
 
   // 權限檢查
+  const { data: authData, error: authError } = useSWR<{ role: string }>(SWR_KEYS.AUTH_ME)
   useEffect(() => {
-    fetch('/api/auth/me')
-      .then(res => res.json())
-      .then(data => {
-        if (!data.ok || data.data?.role !== 'admin') {
-          setAccessDenied(true)
-          setTimeout(() => router.push('/'), 2000)
-        }
-      })
-      .catch(() => {
-        setAccessDenied(true)
-        setTimeout(() => router.push('/'), 2000)
-      })
-  }, [router])
-
-  // 載入付款帳戶列表
-  const fetchPaymentAccounts = async () => {
-    try {
-      const res = await fetch('/api/accounts?active_only=true')
-      const data = await res.json()
-      if (data.ok) {
-        // 顯示所有活躍帳戶（排除 pending）
-        const accounts = (data.data as PaymentAccount[])
-          .filter(a => a.payment_method_code !== 'pending')
-          .sort((a, b) => a.sort_order - b.sort_order)
-        setPaymentAccounts(accounts)
-        // 預設選擇第一個帳戶
-        if (accounts.length > 0 && !paymentAccountId) {
-          setPaymentAccountId(accounts[0].id)
-        }
-      }
-    } catch (err) {
-      console.error('Failed to fetch payment accounts:', err)
+    if (authError || (authData && authData.role !== 'admin')) {
+      setAccessDenied(true)
+      setTimeout(() => router.push('/'), 2000)
     }
-  }
+  }, [authData, authError, router])
 
-  const fetchAccounts = async (page = currentPage) => {
-    setLoading(true)
-    try {
-      const params = new URLSearchParams()
-      if (keyword) params.set('keyword', keyword)
-      params.set('page', String(page))
-      params.set('pageSize', String(pageSize))
+  // 付款帳戶列表
+  const { data: rawPaymentAccounts = [] } = useSWR<PaymentAccount[]>('/api/accounts?active_only=true')
+  const paymentAccounts = useMemo(() => {
+    return rawPaymentAccounts
+      .filter(a => a.payment_method_code !== 'pending')
+      .sort((a, b) => a.sort_order - b.sort_order)
+  }, [rawPaymentAccounts])
 
-      const res = await fetch(`/api/ap?${params}`)
-      const data = await res.json()
-
-      if (data.pagination) {
-        setTotalPages(data.pagination.totalPages)
-        setTotalCount(data.pagination.total)
-      }
-
-      if (data.summary) {
-        setGlobalTotalUnpaid(data.summary.globalTotalUnpaid)
-        setGlobalUnpaidCount(data.summary.globalUnpaidCount)
-      }
-
-      if (data.ok) {
-        // 按廠商分組
-        const groups: { [key: string]: VendorGroup } = {}
-
-        data.data.forEach((account: any) => {
-          const key = account.partner_code
-
-          if (!groups[key]) {
-            groups[key] = {
-              partner_code: account.partner_code,
-              vendor_name: account.vendors?.vendor_name || account.partner_code,
-              accounts: [],
-              total_balance: 0,
-              unpaid_count: 0
-            }
-          }
-
-          groups[key].accounts.push({
-            ...account,
-            ref_no: account.purchases?.purchase_no || account.ref_id
-          })
-
-          if (account.status !== 'paid') {
-            groups[key].total_balance += account.balance
-            groups[key].unpaid_count += 1
-          }
-        })
-
-        setVendorGroups(Object.values(groups))
-      }
-    } catch (err) {
-      console.error('Failed to fetch AP:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
+  // 預設選擇第一個帳戶
   useEffect(() => {
-    fetchAccounts()
-    fetchPaymentAccounts()
-  }, [])
+    if (paymentAccounts.length > 0 && !paymentAccountId) {
+      setPaymentAccountId(paymentAccounts[0].id)
+    }
+  }, [paymentAccounts, paymentAccountId])
+
+  // AP 資料
+  const apParams = new URLSearchParams()
+  if (keyword) apParams.set('keyword', keyword)
+  apParams.set('page', String(currentPage))
+  apParams.set('pageSize', String(pageSize))
+  const apUrl = `/api/ap?${apParams}`
+
+  const { data: apResult, isLoading: loading, mutate } = useSWR<any>(apUrl, rawFetcher)
+
+  const totalPages = apResult?.pagination?.totalPages ?? 0
+  const totalCount = apResult?.pagination?.total ?? 0
+  const globalTotalUnpaid = apResult?.summary?.globalTotalUnpaid ?? 0
+  const globalUnpaidCount = apResult?.summary?.globalUnpaidCount ?? 0
+
+  // 按廠商分組
+  const vendorGroups = useMemo<VendorGroup[]>(() => {
+    if (!apResult?.data) return []
+
+    const groups: { [key: string]: VendorGroup } = {}
+
+    apResult.data.forEach((account: any) => {
+      const key = account.partner_code
+
+      if (!groups[key]) {
+        groups[key] = {
+          partner_code: account.partner_code,
+          vendor_name: account.vendors?.vendor_name || account.partner_code,
+          accounts: [],
+          total_balance: 0,
+          unpaid_count: 0
+        }
+      }
+
+      groups[key].accounts.push({
+        ...account,
+        ref_no: account.purchases?.purchase_no || account.ref_id
+      })
+
+      if (account.status !== 'paid') {
+        groups[key].total_balance += account.balance
+        groups[key].unpaid_count += 1
+      }
+    })
+
+    return Object.values(groups)
+  }, [apResult])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
     setCurrentPage(1)
-    fetchAccounts(1)
+    setKeyword(searchKeyword)
   }
 
   const toggleVendor = (partnerCode: string) => {
@@ -316,8 +283,8 @@ export default function APPageV2() {
         setSelectedAccounts(new Set())
         setPaymentAmount('')
         setCurrentVendor(null)
-        fetchAccounts()
-        fetchPaymentAccounts() // 重新載入帳戶餘額
+        mutate()
+        globalMutate(SWR_KEYS.ACCOUNTS)
       } else {
         setError(data.error || '付款失敗')
       }
@@ -383,8 +350,8 @@ export default function APPageV2() {
           <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-2">
             <input
               type="text"
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
+              value={searchKeyword}
+              onChange={(e) => setSearchKeyword(e.target.value)}
               placeholder="搜尋廠商名稱或代碼"
               className="flex-1 rounded border border-gray-300 dark:border-gray-600 px-3 sm:px-4 py-2 text-gray-900 dark:text-gray-100 dark:bg-gray-700 placeholder:text-gray-500 dark:placeholder:text-gray-400 min-h-[44px]"
             />
@@ -645,7 +612,6 @@ export default function APPageV2() {
                   onChange={(e) => {
                     setPageSize(Number(e.target.value))
                     setCurrentPage(1)
-                    fetchAccounts(1)
                   }}
                   className="rounded border border-gray-300 dark:border-gray-600 px-2 py-2 text-sm text-gray-900 dark:text-gray-100 dark:bg-gray-700 min-h-[44px]"
                 >
@@ -658,9 +624,7 @@ export default function APPageV2() {
             <div className="flex items-center gap-2 w-full sm:w-auto justify-center">
               <button
                 onClick={() => {
-                  const newPage = currentPage - 1
-                  setCurrentPage(newPage)
-                  fetchAccounts(newPage)
+                  setCurrentPage(currentPage - 1)
                 }}
                 disabled={currentPage === 1}
                 className="flex-1 sm:flex-none rounded px-4 py-2 text-sm font-medium bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
@@ -672,9 +636,7 @@ export default function APPageV2() {
               </span>
               <button
                 onClick={() => {
-                  const newPage = currentPage + 1
-                  setCurrentPage(newPage)
-                  fetchAccounts(newPage)
+                  setCurrentPage(currentPage + 1)
                 }}
                 disabled={currentPage === totalPages}
                 className="flex-1 sm:flex-none rounded px-4 py-2 text-sm font-medium bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"

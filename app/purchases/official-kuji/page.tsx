@@ -1,7 +1,9 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import Link from 'next/link'
+import useSWR, { useSWRConfig } from 'swr'
+import { SWR_KEYS } from '@/lib/swr/keys'
 import { formatCurrency, formatDate } from '@/lib/utils'
 
 type OfficialKuji = {
@@ -28,47 +30,17 @@ type Account = {
 }
 
 export default function OfficialKujiPurchasesPage() {
-  const [kujis, setKujis] = useState<OfficialKuji[]>([])
-  const [loading, setLoading] = useState(true)
+  const { mutate: globalMutate } = useSWRConfig()
+  const { data: kujis = [], isLoading: loading, mutate } = useSWR<OfficialKuji[]>('/api/ichiban-kuji/official-purchases')
+  const { data: allAccounts = [] } = useSWR<Account[]>(SWR_KEYS.ACCOUNTS)
+  const accounts = allAccounts.filter(a => a.account_type !== 'virtual')
+
   const [processing, setProcessing] = useState<string | null>(null)
-  const [accounts, setAccounts] = useState<Account[]>([])
   // 付款彈窗
   const [payingKuji, setPayingKuji] = useState<OfficialKuji | null>(null)
   const [payAccountId, setPayAccountId] = useState('')
   const [payAmount, setPayAmount] = useState('')
   const [payNote, setPayNote] = useState('')
-
-  useEffect(() => {
-    fetchData()
-    fetchAccounts()
-  }, [])
-
-  const fetchData = async () => {
-    setLoading(true)
-    try {
-      const res = await fetch('/api/ichiban-kuji/official-purchases')
-      const data = await res.json()
-      if (data.ok) {
-        setKujis(data.data || [])
-      }
-    } catch (err) {
-      console.error('Failed to fetch:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const fetchAccounts = async () => {
-    try {
-      const res = await fetch('/api/accounts')
-      const data = await res.json()
-      if (data.ok) {
-        setAccounts((data.data || []).filter((a: Account) => a.account_type !== 'virtual'))
-      }
-    } catch (err) {
-      console.error('Failed to fetch accounts:', err)
-    }
-  }
 
   const handleReceive = async (kuji: OfficialKuji) => {
     if (!confirm(`確定要將「${kuji.name}」標記為已收貨嗎？`)) return
@@ -82,7 +54,7 @@ export default function OfficialKujiPurchasesPage() {
       })
       const data = await res.json()
       if (data.ok) {
-        fetchData()
+        mutate()
       } else {
         alert(data.error || '操作失敗')
       }
@@ -128,7 +100,8 @@ export default function OfficialKujiPurchasesPage() {
       if (data.ok) {
         alert(`付款成功！已付 ${formatCurrency(data.data.paid_amount)}`)
         setPayingKuji(null)
-        fetchData()
+        mutate()
+        globalMutate(SWR_KEYS.ACCOUNTS)
       } else {
         alert(`付款失敗：${data.error}`)
       }

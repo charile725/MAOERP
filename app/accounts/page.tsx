@@ -1,7 +1,9 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import useSWR, { useSWRConfig } from 'swr'
 import { formatCurrency } from '@/lib/utils'
+import { SWR_KEYS } from '@/lib/swr/keys'
 import Link from 'next/link'
 import { MoreHorizontal, Edit, Trash2, FileText } from 'lucide-react'
 import {
@@ -32,8 +34,8 @@ const ACCOUNT_TYPE_LABELS = {
 }
 
 export default function AccountsPage() {
-  const [accounts, setAccounts] = useState<Account[]>([])
-  const [loading, setLoading] = useState(true)
+  const { data: accounts = [], isLoading: loading, mutate } = useSWR<Account[]>(SWR_KEYS.ACCOUNTS)
+  const { mutate: globalMutate } = useSWRConfig()
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingAccount, setEditingAccount] = useState<Account | null>(null)
   const { isSubmitting, guardSubmit, stopSubmitting } = useSubmitGuard()
@@ -66,27 +68,8 @@ export default function AccountsPage() {
 
   useEffect(() => {
     // 自動修復沒有 payment_method_code 的帳戶
-    const fixAndFetch = async () => {
-      await fetch('/api/accounts/fix-payment-codes', { method: 'POST' })
-      fetchAccounts()
-    }
-    fixAndFetch()
-  }, [])
-
-  const fetchAccounts = async () => {
-    setLoading(true)
-    try {
-      const res = await fetch('/api/accounts')
-      const data = await res.json()
-      if (data.ok) {
-        setAccounts(data.data || [])
-      }
-    } catch (err) {
-      console.error('Failed to fetch accounts:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
+    fetch('/api/accounts/fix-payment-codes', { method: 'POST' }).then(() => mutate())
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleAdjustment = (account: Account) => {
     setAdjustmentData({
@@ -117,7 +100,8 @@ export default function AccountsPage() {
       if (data.ok) {
         alert('餘額調整成功！')
         setShowAdjustmentModal(false)
-        fetchAccounts()
+        mutate()
+        globalMutate(SWR_KEYS.ACCOUNTS_ACTIVE)
       } else {
         alert(`調整失敗: ${data.error}`)
       }
@@ -148,7 +132,8 @@ export default function AccountsPage() {
           date: new Date().toISOString().split('T')[0],
           note: ''
         })
-        fetchAccounts()
+        mutate()
+        globalMutate(SWR_KEYS.ACCOUNTS_ACTIVE)
       } else {
         alert(`轉帳失敗: ${data.error}`)
       }
@@ -180,7 +165,8 @@ export default function AccountsPage() {
         setShowAddForm(false)
         setEditingAccount(null)
         resetForm()
-        fetchAccounts()
+        mutate()
+        globalMutate(SWR_KEYS.ACCOUNTS_ACTIVE)
       } else {
         alert(`操作失敗：${data.error}`)
       }
@@ -216,7 +202,8 @@ export default function AccountsPage() {
 
       if (data.ok) {
         alert('刪除成功！')
-        fetchAccounts()
+        mutate()
+        globalMutate(SWR_KEYS.ACCOUNTS_ACTIVE)
       } else {
         alert(`刪除失敗：${data.error}`)
       }

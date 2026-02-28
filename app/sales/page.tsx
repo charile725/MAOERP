@@ -1,8 +1,11 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
+import useSWR, { useSWRConfig } from 'swr'
+import { SWR_KEYS, salesKey } from '@/lib/swr/keys'
+import { paginatedFetcher } from '@/lib/swr/fetcher'
 import { formatCurrency, formatDate, formatDateTime, formatPaymentMethod } from '@/lib/utils'
 
 // Portal Dropdown 組件
@@ -199,11 +202,10 @@ const getFulfillmentLabel = (sale: Sale): { text: string, className: string } =>
 }
 
 export default function SalesPage() {
-  const [customerGroups, setCustomerGroups] = useState<CustomerGroup[]>([])
-  const [loading, setLoading] = useState(true)
   const [expandedCustomers, setExpandedCustomers] = useState<Set<string>>(new Set())
   const [expandedSales, setExpandedSales] = useState<Set<string>>(new Set())
   const [keyword, setKeyword] = useState('')
+  const [searchKeyword, setSearchKeyword] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [deleting, setDeleting] = useState<string | null>(null)
@@ -211,11 +213,8 @@ export default function SalesPage() {
   const [showUndeliveredOnly, setShowUndeliveredOnly] = useState(false)
   const [groupByCustomer, setGroupByCustomer] = useState(false)
   const [sourceFilter, setSourceFilter] = useState<'all' | 'pos' | 'live'>('all')
-  const [currentPage, setCurrentPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(1)
-  const [totalRecords, setTotalRecords] = useState(0)
+  const [page, setPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(20)
-  const [productStats, setProductStats] = useState<ProductStats | null>(null)
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set())
   const [batchDelivering, setBatchDelivering] = useState(false)
   const [selectedItemsDetails, setSelectedItemsDetails] = useState<SaleItem[]>([])
@@ -233,6 +232,200 @@ export default function SalesPage() {
   const [convertingItemId, setConvertingItemId] = useState<string | null>(null)
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null)
   const [undoingItemId, setUndoingItemId] = useState<string | null>(null)
+
+  const { mutate: globalMutate } = useSWRConfig()
+
+  // SWR: 銷售資料
+  const salesParams: Record<string, string> = {}
+  if (searchKeyword) salesParams.keyword = searchKeyword
+  if (dateFrom) salesParams.date_from = dateFrom
+  if (dateTo) salesParams.date_to = dateTo
+  if (sourceFilter !== 'all') salesParams.source = sourceFilter
+  if (groupByCustomer) salesParams.group_by_customer = 'true'
+  salesParams.page = String(page)
+  salesParams.limit = String(itemsPerPage)
+
+  const { data: salesResult, isLoading: loading, mutate } = useSWR<{ data: Sale[]; pagination: any }>(
+    salesKey(salesParams),
+    paginatedFetcher
+  )
+  const allSales = salesResult?.data ?? []
+  const pagination = salesResult?.pagination ?? { page: 1, pageSize: 20, total: 0, totalPages: 0 }
+  const currentPage = pagination.page
+  const totalPages = pagination.totalPages
+  const totalRecords = pagination.total
+
+  // Reset page when filters change
+  useEffect(() => {
+    setPage(1)
+  }, [showUndeliveredOnly, groupByCustomer, sourceFilter, itemsPerPage, dateFrom, dateTo])
+
+  // 計算商品統計（只在有關鍵字時）
+  const productStats = useMemo<ProductStats | null>(() => {
+    if (!searchKeyword || allSales.length === 0) return null
+
+    const stats: { [key: string]: ProductStats } = {}
+    const customerMap: { [productKey: string]: { [customerKey: string]: { customer_name: string, customer_code: string | null, quantity: number, pending_quantity: number, sales_count: number } } } = {}
+    const kw = searchKeyword.toLowerCase()
+
+    allSales.forEach((sale: Sale) => {
+      if (sale.sale_items) {
+        sale.sale_items.forEach((item: SaleItem) => {
+          const matchesKeyword =
+            item.snapshot_name?.toLowerCase().includes(kw) ||
+            item.products?.item_code?.toLowerCase().includes(kw)
+          if (!matchesKeyword) return
+
+          const productKey = `${item.product_id}`
+          const customerKey = sale.customer_code || 'WALK_IN'
+          const customerName = sale.customer_code ? (sale.customers?.customer_name || sale.customer_code) : '散客'
+
+          const deliveredQty = item.delivered_quantity || 0
+          const storeCreditQty = item.store_credit_qty || 0
+          const pendingQty = Math.max(0, item.quantity - deliveredQty - storeCreditQty)
+
+          if (!stats[productKey]) {
+            stats[productKey] = {
+              product_name: item.snapshot_name,
+              item_code: item.products?.item_code || '-',
+              total_quantity: 0,
+              total_sales: 0,
+              pending_quantity: 0,
+              customer_purchases: []
+            }
+            customerMap[productKey] = {}
+          }
+
+          stats[productKey].total_quantity += item.quantity
+          stats[productKey].total_sales += item.quantity * item.price
+          stats[productKey].pending_quantity += pendingQty
+
+          if (!customerMap[productKey][customerKey]) {
+            customerMap[productKey][customerKey] = {
+              customer_name: customerName,
+              customer_code: sale.customer_code,
+              quantity: 0,
+              pending_quantity: 0,
+              sales_count: 0
+            }
+          }
+          customerMap[productKey][customerKey].quantity += item.quantity
+          customerMap[productKey][customerKey].pending_quantity += pendingQty
+          customerMap[productKey][customerKey].sales_count += 1
+        })
+      }
+    })
+
+    Object.keys(stats).forEach(productKey => {
+      stats[productKey].customer_purchases = Object.values(customerMap[productKey])
+        .sort((a, b) => b.quantity - a.quantity)
+    })
+
+    return Object.values(stats)[0] || null
+  }, [allSales, searchKeyword])
+
+  // 計算客戶分組
+  const customerGroups = useMemo<CustomerGroup[]>(() => {
+    if (allSales.length === 0) return []
+
+    if (groupByCustomer) {
+      const groups: { [key: string]: CustomerGroup } = {}
+
+      allSales.forEach((sale: Sale) => {
+        if (showUndeliveredOnly && getActualFulfillmentStatus(sale) === 'completed') {
+          return
+        }
+
+        const grossSales = sale.subtotal || sale.sale_items?.reduce((sum, item) =>
+          sum + (item.price * item.quantity), 0) || 0
+
+        const totalCost = sale.sale_items?.reduce((sum, item) => {
+          const effectiveQty = item.quantity - (item.store_credit_qty || 0)
+          return sum + (item.cost || 0) * effectiveQty + (item.store_credit_amount || 0)
+        }, 0) || 0
+        const saleProfit = grossSales - totalCost
+        sale.profit = saleProfit
+        sale.total_cost = totalCost
+
+        const key = sale.customer_code || 'WALK_IN'
+
+        if (!groups[key]) {
+          groups[key] = {
+            customer_code: sale.customer_code,
+            customer_name: sale.customer_code
+              ? (sale.customers?.customer_name || sale.customer_code)
+              : '散客',
+            sales: [],
+            total_pending: 0,
+            pending_count: 0,
+            total_revenue: 0,
+            total_profit: 0,
+            pending_items: []
+          }
+        }
+
+        groups[key].sales.push(sale)
+        groups[key].total_revenue += grossSales
+        groups[key].total_profit += saleProfit
+
+        if (getActualFulfillmentStatus(sale) !== 'completed') {
+          groups[key].total_pending += sale.total
+          groups[key].pending_count += 1
+        }
+      })
+
+      Object.values(groups).forEach(group => {
+        const pendingMap: { [name: string]: number } = {}
+        group.sales.forEach(sale => {
+          sale.sale_items?.forEach(item => {
+            const deliveredQty = item.delivered_quantity || 0
+            const storeCreditQty = item.store_credit_qty || 0
+            const pendingQty = item.quantity - deliveredQty - storeCreditQty
+            if (pendingQty > 0) {
+              const name = item.snapshot_name
+              pendingMap[name] = (pendingMap[name] || 0) + pendingQty
+            }
+          })
+        })
+        group.pending_items = Object.entries(pendingMap)
+          .map(([name, quantity]) => ({ name, quantity }))
+          .sort((a, b) => b.quantity - a.quantity)
+      })
+
+      return Object.values(groups)
+    } else {
+      const filteredSales = showUndeliveredOnly
+        ? allSales.filter((s: Sale) => getActualFulfillmentStatus(s) !== 'completed')
+        : allSales
+
+      let totalRevenue = 0
+      let totalProfit = 0
+      const salesWithProfit = filteredSales.map((sale: Sale) => {
+        const grossSales = sale.subtotal || sale.sale_items?.reduce((sum: number, item: SaleItem) =>
+          sum + (item.price * item.quantity), 0) || 0
+
+        const totalCost = sale.sale_items?.reduce((sum: number, item: SaleItem) => {
+          const effectiveQty = item.quantity - (item.store_credit_qty || 0)
+          return sum + (item.cost || 0) * effectiveQty + (item.store_credit_amount || 0)
+        }, 0) || 0
+        const saleProfit = grossSales - totalCost
+        totalRevenue += grossSales
+        totalProfit += saleProfit
+        return { ...sale, profit: saleProfit, total_cost: totalCost }
+      })
+
+      return [{
+        customer_code: null,
+        customer_name: '所有銷售',
+        sales: salesWithProfit,
+        total_pending: 0,
+        pending_count: 0,
+        total_revenue: totalRevenue,
+        total_profit: totalProfit,
+        pending_items: []
+      }]
+    }
+  }, [allSales, groupByCustomer, showUndeliveredOnly])
 
   const toggleCustomer = (customerKey: string) => {
     const newExpanded = new Set(expandedCustomers)
@@ -254,229 +447,15 @@ export default function SalesPage() {
     setExpandedSales(newExpanded)
   }
 
-  const fetchSales = async (page = 1) => {
-    setLoading(true)
-    try {
-      const params = new URLSearchParams()
-      if (keyword) params.set('keyword', keyword)
-      if (dateFrom) params.set('date_from', dateFrom)
-      if (dateTo) params.set('date_to', dateTo)
-      if (sourceFilter !== 'all') params.set('source', sourceFilter)
-      if (groupByCustomer) params.set('group_by_customer', 'true') // 按客戶分組時不分頁
-      params.set('page', page.toString())
-      params.set('limit', itemsPerPage.toString())
-
-      const res = await fetch(`/api/sales?${params}`)
-      const data = await res.json()
-      if (data.ok) {
-        const allSales = data.data || []
-
-        // 更新分頁信息
-        if (data.pagination) {
-          setTotalPages(data.pagination.totalPages)
-          setTotalRecords(data.pagination.total)
-          setCurrentPage(data.pagination.page)
-        }
-
-        // 計算商品統計（只在有關鍵字時）
-        if (keyword && allSales.length > 0) {
-          const stats: { [key: string]: ProductStats } = {}
-          const customerMap: { [productKey: string]: { [customerKey: string]: { customer_name: string, customer_code: string | null, quantity: number, pending_quantity: number, sales_count: number } } } = {}
-          const kw = keyword.toLowerCase()
-
-          allSales.forEach((sale: Sale) => {
-            if (sale.sale_items) {
-              sale.sale_items.forEach((item: SaleItem) => {
-                // 只統計符合關鍵字的商品
-                const matchesKeyword =
-                  item.snapshot_name?.toLowerCase().includes(kw) ||
-                  item.products?.item_code?.toLowerCase().includes(kw)
-                if (!matchesKeyword) return
-
-                const productKey = `${item.product_id}`
-                const customerKey = sale.customer_code || 'WALK_IN'
-                const customerName = sale.customer_code ? (sale.customers?.customer_name || sale.customer_code) : '散客'
-
-                // 計算未出貨數量
-                const deliveredQty = item.delivered_quantity || 0
-                const storeCreditQty = item.store_credit_qty || 0
-                const pendingQty = Math.max(0, item.quantity - deliveredQty - storeCreditQty)
-
-                // 初始化商品統計
-                if (!stats[productKey]) {
-                  stats[productKey] = {
-                    product_name: item.snapshot_name,
-                    item_code: item.products?.item_code || '-',
-                    total_quantity: 0,
-                    total_sales: 0,
-                    pending_quantity: 0,
-                    customer_purchases: []
-                  }
-                  customerMap[productKey] = {}
-                }
-
-                // 累加總數量、總銷售額和未出貨數量
-                stats[productKey].total_quantity += item.quantity
-                stats[productKey].total_sales += item.quantity * item.price
-                stats[productKey].pending_quantity += pendingQty
-
-                // 累加客戶購買記錄
-                if (!customerMap[productKey][customerKey]) {
-                  customerMap[productKey][customerKey] = {
-                    customer_name: customerName,
-                    customer_code: sale.customer_code,
-                    quantity: 0,
-                    pending_quantity: 0,
-                    sales_count: 0
-                  }
-                }
-                customerMap[productKey][customerKey].quantity += item.quantity
-                customerMap[productKey][customerKey].pending_quantity += pendingQty
-                customerMap[productKey][customerKey].sales_count += 1
-              })
-            }
-          })
-
-          // 轉換客戶購買記錄為陣列並排序
-          Object.keys(stats).forEach(productKey => {
-            stats[productKey].customer_purchases = Object.values(customerMap[productKey])
-              .sort((a, b) => b.quantity - a.quantity)
-          })
-
-          // 取第一個商品的統計（如果搜尋結果有多個商品，顯示第一個）
-          const firstProduct = Object.values(stats)[0]
-          setProductStats(firstProduct || null)
-        } else {
-          setProductStats(null)
-        }
-
-        if (groupByCustomer) {
-          // 按客戶分組
-          const groups: { [key: string]: CustomerGroup } = {}
-
-          allSales.forEach((sale: Sale) => {
-            // 根据showUndeliveredOnly过滤（考慮出貨和購物金轉換）
-            if (showUndeliveredOnly && getActualFulfillmentStatus(sale) === 'completed') {
-              return // 只显示未處理完的
-            }
-
-            // 計算 Gross Sales（優先用 subtotal，否則從 sale_items 計算）
-            const grossSales = sale.subtotal || sale.sale_items?.reduce((sum, item) =>
-              sum + (item.price * item.quantity), 0) || 0
-
-            // 計算這筆銷售的毛利（扣除已轉購物金的數量，加上購物金轉換金額作為成本）
-            const totalCost = sale.sale_items?.reduce((sum, item) => {
-              const effectiveQty = item.quantity - (item.store_credit_qty || 0)
-              return sum + (item.cost || 0) * effectiveQty + (item.store_credit_amount || 0)
-            }, 0) || 0
-            const saleProfit = grossSales - totalCost
-            sale.profit = saleProfit
-            sale.total_cost = totalCost
-
-            const key = sale.customer_code || 'WALK_IN'
-
-            if (!groups[key]) {
-              groups[key] = {
-                customer_code: sale.customer_code,
-                customer_name: sale.customer_code
-                  ? (sale.customers?.customer_name || sale.customer_code)
-                  : '散客',
-                sales: [],
-                total_pending: 0,
-                pending_count: 0,
-                total_revenue: 0,
-                total_profit: 0,
-                pending_items: []
-              }
-            }
-
-            groups[key].sales.push(sale)
-            groups[key].total_revenue += grossSales // 使用 Gross Sales
-            groups[key].total_profit += saleProfit
-
-            // 统计待處理（考慮出貨和購物金轉換）
-            if (getActualFulfillmentStatus(sale) !== 'completed') {
-              groups[key].total_pending += sale.total
-              groups[key].pending_count += 1
-            }
-          })
-
-          // 計算每個客戶的未出貨商品統計
-          Object.values(groups).forEach(group => {
-            const pendingMap: { [name: string]: number } = {}
-            group.sales.forEach(sale => {
-              sale.sale_items?.forEach(item => {
-                const deliveredQty = item.delivered_quantity || 0
-                const storeCreditQty = item.store_credit_qty || 0
-                const pendingQty = item.quantity - deliveredQty - storeCreditQty
-                if (pendingQty > 0) {
-                  const name = item.snapshot_name
-                  pendingMap[name] = (pendingMap[name] || 0) + pendingQty
-                }
-              })
-            })
-            group.pending_items = Object.entries(pendingMap)
-              .map(([name, quantity]) => ({ name, quantity }))
-              .sort((a, b) => b.quantity - a.quantity) // 數量多的排前面
-          })
-
-          setCustomerGroups(Object.values(groups))
-        } else {
-          // 不分组，直接显示列表，但根据showUndeliveredOnly过滤（考慮出貨和購物金轉換）
-          const filteredSales = showUndeliveredOnly
-            ? allSales.filter((s: Sale) => getActualFulfillmentStatus(s) !== 'completed')
-            : allSales
-
-          // 不分组情況，計算每筆銷售的毛利（扣除已轉購物金的數量，加上購物金轉換金額作為成本）
-          let totalRevenue = 0
-          let totalProfit = 0
-          const salesWithProfit = filteredSales.map((sale: Sale) => {
-            // 計算 Gross Sales
-            const grossSales = sale.subtotal || sale.sale_items?.reduce((sum: number, item: SaleItem) =>
-              sum + (item.price * item.quantity), 0) || 0
-
-            const totalCost = sale.sale_items?.reduce((sum: number, item: SaleItem) => {
-              const effectiveQty = item.quantity - (item.store_credit_qty || 0)
-              return sum + (item.cost || 0) * effectiveQty + (item.store_credit_amount || 0)
-            }, 0) || 0
-            const saleProfit = grossSales - totalCost
-            totalRevenue += grossSales // 使用 Gross Sales
-            totalProfit += saleProfit
-            return { ...sale, profit: saleProfit, total_cost: totalCost }
-          })
-
-          // 用单个组包装所有销售
-          setCustomerGroups([{
-            customer_code: null,
-            customer_name: '所有銷售',
-            sales: salesWithProfit,
-            total_pending: 0,
-            pending_count: 0,
-            total_revenue: totalRevenue,
-            total_profit: totalProfit,
-            pending_items: []
-          }])
-        }
-      }
-    } catch (err) {
-      console.error('Failed to fetch sales:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    fetchSales(1) // 篩選條件變更時重置到第一頁
-  }, [showUndeliveredOnly, groupByCustomer, sourceFilter, itemsPerPage])
-
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
-    fetchSales(1) // 搜尋時重置到第一頁
+    setPage(1)
+    setSearchKeyword(keyword)
   }
 
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= totalPages) {
-      fetchSales(newPage)
+      setPage(newPage)
     }
   }
 
@@ -491,7 +470,8 @@ export default function SalesPage() {
 
       if (data.ok) {
         alert('刪除成功，庫存已回補')
-        fetchSales(currentPage) // 保持在當前頁面
+        mutate()
+        globalMutate(SWR_KEYS.ACCOUNTS)
       } else {
         alert(`刪除失敗：${data.error}`)
       }
@@ -547,7 +527,7 @@ export default function SalesPage() {
 
       if (data.ok) {
         alert(data.message || '出貨成功！')
-        fetchSales(currentPage) // 保持在當前頁面
+        mutate()
       } else {
         alert(`出貨失敗：${data.error}`)
       }
@@ -609,7 +589,7 @@ export default function SalesPage() {
       if (data.ok) {
         alert(data.message || '批量出貨成功！')
         setSelectedItemIds(new Set())
-        fetchSales(currentPage) // 保持在當前頁面
+        mutate()
       } else {
         alert(`批量出貨失敗：${data.error}`)
       }
@@ -651,7 +631,7 @@ export default function SalesPage() {
         setSelectedItemIds(new Set())
         setItemQuantities(new Map())
         setShowQuantityModal(false)
-        fetchSales(currentPage) // 保持在當前頁面
+        mutate()
       } else {
         alert(`批量出貨失敗：${data.error}`)
       }
@@ -718,7 +698,8 @@ export default function SalesPage() {
         alert(`銷貨更正成功！\n\n原金額：${formatCurrency(data.data.original_total)}\n更正後：${formatCurrency(data.data.corrected_total)}\n差額：${formatCurrency(data.data.adjustment_amount)}\n回補庫存：${data.data.inventory_restored} 件`)
         setShowCorrectionModal(false)
         setSelectedSale(null)
-        fetchSales(currentPage) // 保持在當前頁面
+        mutate()
+        globalMutate(SWR_KEYS.ACCOUNTS)
       } else {
         alert(`更正失敗：${data.error}`)
       }
@@ -771,7 +752,8 @@ export default function SalesPage() {
         alert(`轉購物金成功！\n\n客戶：${data.data.customer_name}\n轉換金額：${formatCurrency(data.data.conversion_amount)}\n購物金餘額：${formatCurrency(data.data.store_credit_before)} → ${formatCurrency(data.data.store_credit_after)}\n回補庫存：${data.data.inventory_restored} 件`)
         setShowStoreCreditModal(false)
         setSelectedSale(null)
-        fetchSales(currentPage) // 保持在當前頁面
+        mutate()
+        globalMutate(SWR_KEYS.CUSTOMERS_ACTIVE)
       } else {
         alert(`轉換失敗：${data.error}`)
       }
@@ -862,7 +844,8 @@ export default function SalesPage() {
 
       if (data.ok) {
         alert(`轉購物金成功！\n\n客戶：${data.data.customer_name}\n商品：${data.data.product_name}\n轉換數量：${data.data.converted_quantity} / ${data.data.original_quantity} 件\n購物金：${formatCurrency(data.data.store_credit_before)} → ${formatCurrency(data.data.store_credit_after)}\n回補庫存：${data.data.inventory_restored} 件\n新平均成本：${formatCurrency(data.data.new_avg_cost)}`)
-        fetchSales(currentPage) // 保持在當前頁面
+        mutate()
+        globalMutate(SWR_KEYS.CUSTOMERS_ACTIVE)
       } else {
         alert(`轉換失敗：${data.error}`)
       }
@@ -916,7 +899,7 @@ export default function SalesPage() {
 
       if (data.ok) {
         alert(data.message || '撤銷出貨成功！')
-        fetchSales(currentPage)
+        mutate()
       } else {
         alert(`撤銷失敗：${data.error}`)
       }
@@ -1375,7 +1358,7 @@ export default function SalesPage() {
                       value={itemsPerPage}
                       onChange={(e) => {
                         setItemsPerPage(Number(e.target.value))
-                        setCurrentPage(1)
+                        setPage(1)
                       }}
                       className="rounded border border-gray-300 dark:border-gray-600 px-2 py-1 text-sm text-gray-900 dark:text-gray-100 dark:bg-gray-700"
                     >

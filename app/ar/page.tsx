@@ -1,7 +1,10 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
+import useSWR, { useSWRConfig } from 'swr'
+import { SWR_KEYS } from '@/lib/swr/keys'
+import { rawFetcher } from '@/lib/swr/fetcher'
 import { formatCurrency, formatDate, formatPaymentMethod } from '@/lib/utils'
 
 type ARAccount = {
@@ -68,9 +71,8 @@ type PaymentAccount = {
 
 export default function ARPageV2() {
   const router = useRouter()
+  const { mutate: globalMutate } = useSWRConfig()
   const [accessDenied, setAccessDenied] = useState(false)
-  const [customerGroups, setCustomerGroups] = useState<CustomerGroup[]>([])
-  const [loading, setLoading] = useState(true)
   const [expandedCustomers, setExpandedCustomers] = useState<Set<string>>(new Set())
   const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set())
   const [showReceiptModal, setShowReceiptModal] = useState(false)
@@ -79,25 +81,18 @@ export default function ARPageV2() {
   const [processing, setProcessing] = useState(false)
   const [error, setError] = useState('')
   const [keyword, setKeyword] = useState('')
+  const [searchKeyword, setSearchKeyword] = useState('')
   const [currentCustomer, setCurrentCustomer] = useState<string | null>(null)
   const [updatingPayment, setUpdatingPayment] = useState<string | null>(null)
-  const [paymentAccounts, setPaymentAccounts] = useState<PaymentAccount[]>([])
 
   // 權限檢查
+  const { data: authData, error: authError } = useSWR<{ role: string }>(SWR_KEYS.AUTH_ME)
   useEffect(() => {
-    fetch('/api/auth/me')
-      .then(res => res.json())
-      .then(data => {
-        if (!data.ok || data.data?.role !== 'admin') {
-          setAccessDenied(true)
-          setTimeout(() => router.push('/'), 2000)
-        }
-      })
-      .catch(() => {
-        setAccessDenied(true)
-        setTimeout(() => router.push('/'), 2000)
-      })
-  }, [router])
+    if (authError || (authData && authData.role !== 'admin')) {
+      setAccessDenied(true)
+      setTimeout(() => router.push('/'), 2000)
+    }
+  }, [authData, authError, router])
 
   // 新增：篩選狀態
   const [filterOverdue, setFilterOverdue] = useState(false)
@@ -110,12 +105,31 @@ export default function ARPageV2() {
   // 分頁狀態
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
-  const [totalPages, setTotalPages] = useState(0)
-  const [totalCount, setTotalCount] = useState(0)
 
-  // 全域總額（跨所有頁面）
-  const [globalTotalUnpaid, setGlobalTotalUnpaid] = useState(0)
-  const [globalUnpaidCount, setGlobalUnpaidCount] = useState(0)
+  // 付款帳戶 SWR
+  const { data: paymentAccountsRaw = [] } = useSWR<PaymentAccount[]>('/api/accounts?active_only=true')
+  const paymentAccounts = useMemo(
+    () => paymentAccountsRaw.filter(acc => acc.payment_method_code !== 'pending'),
+    [paymentAccountsRaw]
+  )
+
+  // AR 資料 SWR
+  const arParams = new URLSearchParams()
+  if (searchKeyword) arParams.set('keyword', searchKeyword)
+  arParams.set('page', String(currentPage))
+  arParams.set('pageSize', String(pageSize))
+  const arUrl = `/api/ar?${arParams}`
+
+  const { data: arResult, isLoading: loading, mutate } = useSWR<{
+    data: any[];
+    pagination: { page: number; pageSize: number; total: number; totalPages: number };
+    summary: { globalTotalUnpaid: number; globalUnpaidCount: number };
+  }>(arUrl, rawFetcher)
+
+  const totalPages = arResult?.pagination?.totalPages ?? 0
+  const totalCount = arResult?.pagination?.total ?? 0
+  const globalTotalUnpaid = arResult?.summary?.globalTotalUnpaid ?? 0
+  const globalUnpaidCount = arResult?.summary?.globalUnpaidCount ?? 0
 
   // 工具函數：計算逾期天數
   const getDaysOverdue = (dueDate: string) => {
@@ -154,191 +168,147 @@ export default function ARPageV2() {
     return formatDate(dueDate)
   }
 
-  // 取得付款帳戶列表
-  const fetchPaymentAccounts = async () => {
-    try {
-      const res = await fetch('/api/accounts?active_only=true')
-      const data = await res.json()
-      if (data.ok) {
-        // 過濾掉 pending（待定不應該用於收款）
-        const accounts = (data.data || []).filter(
-          (acc: PaymentAccount) => acc.payment_method_code !== 'pending'
-        )
-        setPaymentAccounts(accounts)
-      }
-    } catch (err) {
-      console.error('Failed to fetch payment accounts:', err)
+  // 將 AR 資料分組（useMemo 取代原本在 fetchAccounts 裡的分組邏輯）
+  const customerGroups = useMemo(() => {
+    const rawData = arResult?.data
+    if (!rawData || rawData.length === 0) return []
+
+    if (groupMode === 'sale') {
+      // 按單號分組
+      const groups: { [key: string]: CustomerGroup } = {}
+
+      rawData.forEach((account: any) => {
+        const saleNo = account.sales?.sale_no || account.ref_no || account.ref_id
+        const key = saleNo
+
+        if (!groups[key]) {
+          groups[key] = {
+            partner_code: saleNo,
+            customer_name: `${saleNo} - ${account.customers?.customer_name || account.partner_code}`,
+            store_credit: account.customers?.store_credit || 0,
+            accounts: [],
+            total_balance: 0,
+            unpaid_count: 0
+          }
+        }
+
+        groups[key].accounts.push({
+          ...account,
+          ref_no: saleNo,
+          sale_item: account.sale_item || null,
+          sale_items: account.sale_items || [],
+          sales: account.sales || null
+        })
+
+        if (account.status !== 'paid') {
+          groups[key].total_balance += account.balance
+          groups[key].unpaid_count++
+        }
+      })
+
+      const sortedGroups = Object.values(groups).sort((a, b) => {
+        // 按單號排序，新的在前面
+        return b.partner_code.localeCompare(a.partner_code)
+      })
+
+      return sortedGroups
+    } else {
+      // 按客戶分組
+      const groups: { [key: string]: CustomerGroup } = {}
+
+      rawData.forEach((account: any) => {
+        const key = account.partner_code
+
+        if (!groups[key]) {
+          groups[key] = {
+            partner_code: account.partner_code,
+            customer_name: account.customers?.customer_name || account.partner_code,
+            store_credit: account.customers?.store_credit || 0,
+            accounts: [],
+            total_balance: 0,
+            unpaid_count: 0
+          }
+        }
+
+        groups[key].accounts.push({
+          ...account,
+          ref_no: account.sales?.sale_no || account.ref_no || account.ref_id,
+          sale_item: account.sale_item || null,
+          sale_items: account.sale_items || [],
+          sales: account.sales || null
+        })
+
+        // 只計算未收清的金額
+        if (account.status !== 'paid') {
+          groups[key].total_balance += account.balance
+          groups[key].unpaid_count++
+        }
+      })
+
+      // 轉換為陣列並排序（風險排序：逾期金額 > 逾期天數 > 總金額）
+      const sortedGroups = Object.values(groups).sort((a, b) => {
+        // 計算逾期金額
+        const getOverdueAmount = (group: CustomerGroup) => {
+          return group.accounts
+            .filter(acc => acc.status !== 'paid' && new Date(acc.due_date) < new Date())
+            .reduce((sum, acc) => sum + acc.balance, 0)
+        }
+
+        // 計算最長逾期天數
+        const getMaxOverdueDays = (group: CustomerGroup) => {
+          const overdueDays = group.accounts
+            .filter(acc => acc.status !== 'paid' && new Date(acc.due_date) < new Date())
+            .map(acc => getDaysOverdue(acc.due_date))
+          return overdueDays.length > 0 ? Math.max(...overdueDays) : 0
+        }
+
+        const aOverdue = getOverdueAmount(a)
+        const bOverdue = getOverdueAmount(b)
+
+        if (aOverdue !== bOverdue) return bOverdue - aOverdue
+
+        const aMaxDays = getMaxOverdueDays(a)
+        const bMaxDays = getMaxOverdueDays(b)
+
+        if (aMaxDays !== bMaxDays) return bMaxDays - aMaxDays
+
+        return b.total_balance - a.total_balance
+      })
+
+      // 應用篩選
+      const filtered = sortedGroups.filter(group => {
+        if (filterOverdue) {
+          const hasOverdue = group.accounts.some(acc =>
+            acc.status !== 'paid' && new Date(acc.due_date) < new Date()
+          )
+          if (!hasOverdue) return false
+        }
+
+        if (filterMinAmount !== null && group.total_balance < filterMinAmount) {
+          return false
+        }
+
+        if (filterDueThisWeek) {
+          const weekEnd = new Date()
+          weekEnd.setDate(weekEnd.getDate() + 7)
+          const hasDueThisWeek = group.accounts.some(acc => {
+            const due = new Date(acc.due_date)
+            return acc.status !== 'paid' && due <= weekEnd && due >= new Date()
+          })
+          if (!hasDueThisWeek) return false
+        }
+
+        return true
+      })
+
+      return filtered
     }
-  }
-
-  const fetchAccounts = async (page = currentPage) => {
-    setLoading(true)
-    try {
-      const params = new URLSearchParams()
-      if (keyword) params.set('keyword', keyword)
-      params.set('page', String(page))
-      params.set('pageSize', String(pageSize))
-
-      const res = await fetch(`/api/ar?${params}`)
-      const data = await res.json()
-
-      if (data.pagination) {
-        setTotalPages(data.pagination.totalPages)
-        setTotalCount(data.pagination.total)
-      }
-
-      if (data.summary) {
-        setGlobalTotalUnpaid(data.summary.globalTotalUnpaid)
-        setGlobalUnpaidCount(data.summary.globalUnpaidCount)
-      }
-
-      if (data.ok) {
-        if (groupMode === 'sale') {
-          // 按單號分組
-          const groups: { [key: string]: CustomerGroup } = {}
-
-          data.data.forEach((account: any) => {
-            const saleNo = account.sales?.sale_no || account.ref_no || account.ref_id
-            const key = saleNo
-
-            if (!groups[key]) {
-              groups[key] = {
-                partner_code: saleNo,
-                customer_name: `${saleNo} - ${account.customers?.customer_name || account.partner_code}`,
-                store_credit: account.customers?.store_credit || 0,
-                accounts: [],
-                total_balance: 0,
-                unpaid_count: 0
-              }
-            }
-
-            groups[key].accounts.push({
-              ...account,
-              ref_no: saleNo,
-              sale_item: account.sale_item || null,
-              sale_items: account.sale_items || [],
-              sales: account.sales || null
-            })
-
-            if (account.status !== 'paid') {
-              groups[key].total_balance += account.balance
-              groups[key].unpaid_count++
-            }
-          })
-
-          const sortedGroups = Object.values(groups).sort((a, b) => {
-            // 按單號排序，新的在前面
-            return b.partner_code.localeCompare(a.partner_code)
-          })
-
-          setCustomerGroups(sortedGroups)
-        } else {
-          // 按客戶分組
-          const groups: { [key: string]: CustomerGroup } = {}
-
-          data.data.forEach((account: any) => {
-            const key = account.partner_code
-
-            if (!groups[key]) {
-              groups[key] = {
-                partner_code: account.partner_code,
-                customer_name: account.customers?.customer_name || account.partner_code,
-                store_credit: account.customers?.store_credit || 0,
-                accounts: [],
-                total_balance: 0,
-                unpaid_count: 0
-              }
-            }
-
-            groups[key].accounts.push({
-              ...account,
-              ref_no: account.sales?.sale_no || account.ref_no || account.ref_id,
-              sale_item: account.sale_item || null,
-              sale_items: account.sale_items || [],
-              sales: account.sales || null
-            })
-
-            // 只計算未收清的金額
-            if (account.status !== 'paid') {
-              groups[key].total_balance += account.balance
-              groups[key].unpaid_count++
-            }
-          })
-
-          // 轉換為陣列並排序（風險排序：逾期金額 > 逾期天數 > 總金額）
-          const sortedGroups = Object.values(groups).sort((a, b) => {
-            // 計算逾期金額
-            const getOverdueAmount = (group: CustomerGroup) => {
-              return group.accounts
-                .filter(acc => acc.status !== 'paid' && new Date(acc.due_date) < new Date())
-                .reduce((sum, acc) => sum + acc.balance, 0)
-            }
-
-            // 計算最長逾期天數
-            const getMaxOverdueDays = (group: CustomerGroup) => {
-              const overdueDays = group.accounts
-                .filter(acc => acc.status !== 'paid' && new Date(acc.due_date) < new Date())
-                .map(acc => getDaysOverdue(acc.due_date))
-              return overdueDays.length > 0 ? Math.max(...overdueDays) : 0
-            }
-
-            const aOverdue = getOverdueAmount(a)
-            const bOverdue = getOverdueAmount(b)
-
-            if (aOverdue !== bOverdue) return bOverdue - aOverdue
-
-            const aMaxDays = getMaxOverdueDays(a)
-            const bMaxDays = getMaxOverdueDays(b)
-
-            if (aMaxDays !== bMaxDays) return bMaxDays - aMaxDays
-
-            return b.total_balance - a.total_balance
-          })
-
-          // 應用篩選
-          const filtered = sortedGroups.filter(group => {
-            if (filterOverdue) {
-              const hasOverdue = group.accounts.some(acc =>
-                acc.status !== 'paid' && new Date(acc.due_date) < new Date()
-              )
-              if (!hasOverdue) return false
-            }
-
-            if (filterMinAmount !== null && group.total_balance < filterMinAmount) {
-              return false
-            }
-
-            if (filterDueThisWeek) {
-              const weekEnd = new Date()
-              weekEnd.setDate(weekEnd.getDate() + 7)
-              const hasDueThisWeek = group.accounts.some(acc => {
-                const due = new Date(acc.due_date)
-                return acc.status !== 'paid' && due <= weekEnd && due >= new Date()
-              })
-              if (!hasDueThisWeek) return false
-            }
-
-            return true
-          })
-
-          setCustomerGroups(filtered)
-        } // end of customer grouping
-      }
-    } catch (err) {
-      console.error('Failed to fetch AR:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    fetchAccounts()
-    fetchPaymentAccounts()
-  }, [groupMode])
+  }, [arResult?.data, groupMode, filterOverdue, filterMinAmount, filterDueThisWeek])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
-    fetchAccounts()
+    setCurrentPage(1)
+    setSearchKeyword(keyword)
   }
 
   const toggleCustomer = (partnerCode: string) => {
@@ -475,7 +445,8 @@ export default function ARPageV2() {
         setSelectedAccounts(new Set())
         setReceiptAmount('')
         setCurrentCustomer(null)
-        fetchAccounts()
+        mutate()
+        globalMutate(SWR_KEYS.ACCOUNTS)
       } else {
         setError(data.error || '收款失敗')
       }
@@ -498,17 +469,7 @@ export default function ARPageV2() {
       const data = await res.json()
 
       if (data.ok) {
-        // Update local state
-        setCustomerGroups(prevGroups =>
-          prevGroups.map(group => ({
-            ...group,
-            accounts: group.accounts.map(account =>
-              account.sales?.id === saleId && account.sales
-                ? { ...account, sales: { ...account.sales, payment_method: paymentMethod } }
-                : account
-            )
-          }))
-        )
+        mutate()
       } else {
         alert('更新失敗: ' + (data.error || '未知錯誤'))
       }
@@ -698,7 +659,8 @@ export default function ARPageV2() {
                 onClick={() => {
                   if (saleNoInput.trim()) {
                     setKeyword(saleNoInput.trim())
-                    fetchAccounts()
+                    setCurrentPage(1)
+                    setSearchKeyword(saleNoInput.trim())
                   }
                 }}
                 className="rounded bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700"
@@ -986,7 +948,6 @@ export default function ARPageV2() {
                   onChange={(e) => {
                     setPageSize(Number(e.target.value))
                     setCurrentPage(1)
-                    fetchAccounts(1)
                   }}
                   className="rounded border border-gray-300 dark:border-gray-600 px-2 py-2 text-sm text-gray-900 dark:text-gray-100 dark:bg-gray-700 min-h-[44px]"
                 >
@@ -998,11 +959,7 @@ export default function ARPageV2() {
             </div>
             <div className="flex items-center gap-2 w-full sm:w-auto justify-center">
               <button
-                onClick={() => {
-                  const newPage = currentPage - 1
-                  setCurrentPage(newPage)
-                  fetchAccounts(newPage)
-                }}
+                onClick={() => setCurrentPage(p => p - 1)}
                 disabled={currentPage === 1}
                 className="flex-1 sm:flex-none rounded px-4 py-2 text-sm font-medium bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
               >
@@ -1012,11 +969,7 @@ export default function ARPageV2() {
                 {currentPage} / {totalPages}
               </span>
               <button
-                onClick={() => {
-                  const newPage = currentPage + 1
-                  setCurrentPage(newPage)
-                  fetchAccounts(newPage)
-                }}
+                onClick={() => setCurrentPage(p => p + 1)}
                 disabled={currentPage === totalPages}
                 className="flex-1 sm:flex-none rounded px-4 py-2 text-sm font-medium bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
               >

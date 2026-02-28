@@ -1,6 +1,8 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React from 'react'
+import useSWR from 'swr'
+import { SWR_KEYS } from '@/lib/swr/keys'
 import { formatCurrency } from '@/lib/utils'
 
 type UserRole = 'admin' | 'staff'
@@ -55,43 +57,12 @@ const ACCOUNT_TYPE_LABELS = {
 }
 
 export default function FinanceDashboardPage() {
-  const [data, setData] = useState<FinanceData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [userRole, setUserRole] = useState<UserRole | null>(null)
+  const { data: authData } = useSWR<{ role: UserRole }>(SWR_KEYS.AUTH_ME)
+  const userRole = authData?.role ?? null
+
+  const { data, isLoading: loading } = useSWR<FinanceData>(SWR_KEYS.FINANCE_DASHBOARD)
 
   const isAdmin = userRole === 'admin'
-
-  const fetchUserRole = async () => {
-    try {
-      const res = await fetch('/api/auth/me')
-      const result = await res.json()
-      if (result.ok && result.data) {
-        setUserRole(result.data.role)
-      }
-    } catch (err) {
-      console.error('Failed to fetch user role:', err)
-    }
-  }
-
-  const fetchFinanceData = async () => {
-    setLoading(true)
-    try {
-      const res = await fetch('/api/finance/dashboard')
-      const result = await res.json()
-      if (result.ok) {
-        setData(result.data)
-      }
-    } catch (err) {
-      console.error('Failed to fetch finance data:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    fetchUserRole()
-    fetchFinanceData()
-  }, [])
 
   if (loading) {
     return (

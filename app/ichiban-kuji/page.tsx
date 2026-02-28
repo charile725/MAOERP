@@ -2,6 +2,9 @@
 
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import useSWR, { useSWRConfig } from 'swr'
+import { SWR_KEYS, ichibanKujiKey } from '@/lib/swr/keys'
+import { paginatedFetcher } from '@/lib/swr/fetcher'
 import { formatCurrency, formatDate } from '@/lib/utils'
 
 type Product = {
@@ -63,12 +66,10 @@ type IchibanKuji = {
 
 export default function IchibanKujiPage() {
   const router = useRouter()
-  const [kujis, setKujis] = useState<IchibanKuji[]>([])
-  const [loading, setLoading] = useState(true)
+  const { mutate: globalMutate } = useSWRConfig()
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
   const [deleting, setDeleting] = useState<string | null>(null)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
-  const [userRole, setUserRole] = useState<'admin' | 'staff' | null>(null)
   const [typeFilter, setTypeFilter] = useState<'all' | 'custom' | 'official'>('all')
   // 廢套結算
   const [closeSetDialog, setCloseSetDialog] = useState<{
@@ -81,56 +82,27 @@ export default function IchibanKujiPage() {
   const [closeSetAccountId, setCloseSetAccountId] = useState<string>('')
   const [closeSetLastPrize, setCloseSetLastPrize] = useState(false)
   const [closeSetExecuting, setCloseSetExecuting] = useState(false)
-  const [accounts, setAccounts] = useState<{ id: string; account_name: string }[]>([])
   const [page, setPage] = useState(1)
-  const [pagination, setPagination] = useState({
-    page: 1,
-    pageSize: 20,
-    total: 0,
-    totalPages: 0
-  })
 
-  useEffect(() => {
-    fetch('/api/auth/me')
-      .then(res => res.json())
-      .then(data => {
-        if (data.ok) {
-          setUserRole(data.data.role)
-        }
-      })
-      .catch(() => { })
-    // 載入帳戶列表（廢套結算用）
-    fetch('/api/accounts?active_only=true')
-      .then(res => res.json())
-      .then(data => {
-        if (data.ok) setAccounts(data.data || [])
-      })
-      .catch(() => { })
-  }, [])
+  // SWR: auth/me
+  const { data: authData } = useSWR<{ role: 'admin' | 'staff' }>(SWR_KEYS.AUTH_ME)
+  const userRole = authData?.role ?? null
 
-  useEffect(() => {
-    fetchKujis(page)
-  }, [page, typeFilter])
+  // SWR: accounts (for close-set dialog)
+  const { data: accounts = [] } = useSWR<{ id: string; account_name: string }[]>(SWR_KEYS.ACCOUNTS)
 
-  const fetchKujis = async (currentPage: number = page) => {
-    setLoading(true)
-    try {
-      const params = new URLSearchParams({ page: String(currentPage) })
-      if (typeFilter !== 'all') params.set('set_type', typeFilter)
-      const res = await fetch(`/api/ichiban-kuji?${params}`)
-      const data = await res.json()
-      if (data.ok) {
-        setKujis(data.data || [])
-        if (data.pagination) {
-          setPagination(data.pagination)
-        }
-      }
-    } catch (err) {
-      console.error('Failed to fetch ichiban kuji:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
+  // SWR: kuji list with pagination
+  const kujiParams: Record<string, string> = { page: String(page) }
+  if (typeFilter !== 'all') kujiParams.set_type = typeFilter
+
+  const { data: kujiResult, isLoading: loading, mutate } = useSWR<{ data: IchibanKuji[]; pagination: any }>(
+    ichibanKujiKey(kujiParams),
+    paginatedFetcher
+  )
+  const kujis = kujiResult?.data ?? []
+  const pagination = kujiResult?.pagination ?? { page: 1, pageSize: 20, total: 0, totalPages: 0 }
+
+  useEffect(() => { setPage(1) }, [typeFilter])
 
   const handlePageChange = (newPage: number) => {
     setPage(newPage)
@@ -169,7 +141,7 @@ export default function IchibanKujiPage() {
 
       if (data.ok) {
         alert('刪除成功！')
-        fetchKujis(page)
+        mutate()
       } else {
         alert(`刪除失敗：${data.error}`)
       }
@@ -190,7 +162,7 @@ export default function IchibanKujiPage() {
       })
       const data = await res.json()
       if (data.ok) {
-        fetchKujis(page)
+        mutate()
       } else {
         alert(data.error || '操作失敗')
       }
@@ -210,7 +182,7 @@ export default function IchibanKujiPage() {
       const data = await res.json()
       if (data.ok) {
         alert('已標記為收貨')
-        fetchKujis(page)
+        mutate()
       } else {
         alert(data.error || '操作失敗')
       }
@@ -288,7 +260,8 @@ export default function IchibanKujiPage() {
       if (data.ok) {
         alert('廢套結算完成')
         setCloseSetDialog(null)
-        fetchKujis(page)
+        mutate()
+        globalMutate(SWR_KEYS.ACCOUNTS)
       } else {
         alert(data.error || '結算失敗')
       }
@@ -540,7 +513,7 @@ export default function IchibanKujiPage() {
                                           const data = await res.json()
                                           if (data.ok) {
                                             alert(`已復活「${kuji.name}」${data.data.expense_reversed ? `，已回補費用 $${data.data.amount_reversed}` : ''}`)
-                                            fetchKujis(page)
+                                            mutate()
                                           } else {
                                             alert(data.error || '復活失敗')
                                           }

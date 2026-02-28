@@ -1,6 +1,8 @@
 'use client'
 
-import React, { useState, useEffect, use } from 'react'
+import React, { useState, use } from 'react'
+import useSWR from 'swr'
+import { rawFetcher } from '@/lib/swr/fetcher'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -47,9 +49,6 @@ const TRANSACTION_TYPE_LABELS: Record<string, string> = {
 
 export default function AccountDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params)
-    const [account, setAccount] = useState<Account | null>(null)
-    const [transactions, setTransactions] = useState<Transaction[]>([])
-    const [loading, setLoading] = useState(true)
 
     // Filtering & Pagination State
     const [dateRange, setDateRange] = useState({
@@ -60,57 +59,30 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
     const [pagination, setPagination] = useState({
         page: 1,
         limit: 20,
-        total: 0,
-        totalPages: 0
     })
 
-    useEffect(() => {
-        fetchAccountInfo()
-    }, [id])
+    // SWR: Account info
+    const { data: account } = useSWR<Account>(`/api/accounts/${id}`)
 
-    useEffect(() => {
-        fetchTransactions()
-    }, [id, pagination.page, pagination.limit, dateRange])
+    // SWR: Transactions
+    const txParams = new URLSearchParams({
+        page: pagination.page.toString(),
+        limit: pagination.limit.toString(),
+    })
+    if (dateRange.startDate) txParams.append('startDate', dateRange.startDate)
+    if (dateRange.endDate) txParams.append('endDate', dateRange.endDate)
 
-    const fetchAccountInfo = async () => {
-        try {
-            const accRes = await fetch(`/api/accounts/${id}`)
-            const accData = await accRes.json()
-            if (accData.ok) {
-                setAccount(accData.data)
-            }
-        } catch (err) {
-            console.error('Failed to fetch account:', err)
-        }
-    }
+    const { data: txResult, isLoading: loading } = useSWR<{ data: Transaction[]; meta: { total: number; totalPages: number } }>(
+        `/api/accounts/${id}/transactions?${txParams}`,
+        rawFetcher
+    )
+    const transactions = txResult?.data ?? []
 
-    const fetchTransactions = async () => {
-        setLoading(true)
-        try {
-            const params = new URLSearchParams({
-                page: pagination.page.toString(),
-                limit: pagination.limit.toString(),
-            })
-
-            if (dateRange.startDate) params.append('startDate', dateRange.startDate)
-            if (dateRange.endDate) params.append('endDate', dateRange.endDate)
-
-            const txRes = await fetch(`/api/accounts/${id}/transactions?${params.toString()}`)
-            const txData = await txRes.json()
-
-            if (txData.ok) {
-                setTransactions(txData.data || [])
-                setPagination(prev => ({
-                    ...prev,
-                    total: txData.meta?.total || 0,
-                    totalPages: txData.meta?.totalPages || 0
-                }))
-            }
-        } catch (err) {
-            console.error('Failed to fetch transactions:', err)
-        } finally {
-            setLoading(false)
-        }
+    // Derive pagination metadata from SWR result
+    const paginationMeta = {
+        ...pagination,
+        total: txResult?.meta?.total ?? 0,
+        totalPages: txResult?.meta?.totalPages ?? 0,
     }
 
     const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -346,7 +318,7 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
                         {/* Mobile Pagination */}
                         <div className="flex flex-col gap-3 sm:hidden">
                             <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
-                                <span>共 {pagination.total} 筆</span>
+                                <span>共 {paginationMeta.total} 筆</span>
                                 <div className="flex items-center gap-2">
                                     <span>每頁</span>
                                     <select
@@ -373,12 +345,12 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
                                     上一頁
                                 </Button>
                                 <span className="text-sm text-gray-600 dark:text-gray-400 px-2">
-                                    {pagination.page} / {pagination.totalPages || 1}
+                                    {pagination.page} / {paginationMeta.totalPages || 1}
                                 </span>
                                 <Button
                                     variant="outline"
-                                    onClick={() => setPagination(prev => ({ ...prev, page: Math.min(prev.totalPages, prev.page + 1) }))}
-                                    disabled={pagination.page >= pagination.totalPages}
+                                    onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
+                                    disabled={pagination.page >= paginationMeta.totalPages}
                                     className="flex-1 min-h-[44px]"
                                 >
                                     下一頁
@@ -390,7 +362,7 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
                         <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
                             <div className="flex items-center gap-4">
                                 <p className="text-sm text-gray-700 dark:text-gray-300">
-                                    顯示第 <span className="font-medium">{(pagination.page - 1) * pagination.limit + 1}</span> 到 <span className="font-medium">{Math.min(pagination.page * pagination.limit, pagination.total)}</span> 筆，共 <span className="font-medium">{pagination.total}</span> 筆
+                                    顯示第 <span className="font-medium">{(pagination.page - 1) * pagination.limit + 1}</span> 到 <span className="font-medium">{Math.min(pagination.page * pagination.limit, paginationMeta.total)}</span> 筆，共 <span className="font-medium">{paginationMeta.total}</span> 筆
                                 </p>
                                 <div className="flex items-center gap-2">
                                     <span className="text-sm text-gray-600 dark:text-gray-400">每頁</span>
@@ -422,13 +394,13 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
                                         <ChevronLeft className="h-4 w-4" />
                                     </Button>
                                     <span className="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 dark:text-white dark:ring-gray-600">
-                                        {pagination.page} / {pagination.totalPages || 1}
+                                        {pagination.page} / {paginationMeta.totalPages || 1}
                                     </span>
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        onClick={() => setPagination(prev => ({ ...prev, page: Math.min(prev.totalPages, prev.page + 1) }))}
-                                        disabled={pagination.page >= pagination.totalPages}
+                                        onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
+                                        disabled={pagination.page >= paginationMeta.totalPages}
                                         className="rounded-r-md px-2 py-2"
                                     >
                                         <span className="sr-only">Next</span>

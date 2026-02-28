@@ -4,6 +4,7 @@ import "./globals.css";
 import Navigation from "@/components/Navigation";
 import GlobalSplashScreen from "@/components/GlobalSplashScreen";
 import DisableNumberInputScroll from "@/components/DisableNumberInputScroll";
+import SWRProvider from "@/components/SWRProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -41,10 +42,12 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <DisableNumberInputScroll />
-        <GlobalSplashScreen showOnEveryVisit={true}>
-          <Navigation />
-          {children}
-        </GlobalSplashScreen>
+        <SWRProvider>
+          <GlobalSplashScreen showOnEveryVisit={true}>
+            <Navigation />
+            {children}
+          </GlobalSplashScreen>
+        </SWRProvider>
       </body>
     </html>
   );

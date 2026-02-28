@@ -1,8 +1,10 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useMemo } from 'react'
+import useSWR from 'swr'
 import Link from 'next/link'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import { SWR_KEYS, purchasesKey } from '@/lib/swr/keys'
 
 type PurchaseItem = {
   id: string
@@ -92,39 +94,117 @@ type ProductPurchaseStats = {
   }[]
 }
 
-type UserRole = 'admin' | 'staff'
-
 export default function PurchasesPage() {
-  const [purchases, setPurchases] = useState<Purchase[]>([])
-  const [loading, setLoading] = useState(true)
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
   const [expandedVendors, setExpandedVendors] = useState<Set<string>>(new Set())
   const [groupByVendor, setGroupByVendor] = useState(false)
   const [keyword, setKeyword] = useState('')
+  const [searchKeyword, setSearchKeyword] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [showUnreceivedOnly, setShowUnreceivedOnly] = useState(false)
-  const [productStats, setProductStats] = useState<ProductPurchaseStats | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
-  const [userRole, setUserRole] = useState<UserRole | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(20)
 
-  useEffect(() => {
-    // Fetch current user role
-    fetch('/api/auth/me')
-      .then(res => res.json())
-      .then(data => {
-        if (data.ok) {
-          setUserRole(data.data.role)
-        }
-      })
-      .catch(() => {
-        // Ignore error
-      })
-  }, [])
-
+  // Auth
+  const { data: authData } = useSWR<{ role: 'admin' | 'staff' }>(SWR_KEYS.AUTH_ME)
+  const userRole = authData?.role ?? null
   const isAdmin = userRole === 'admin'
+
+  // Purchases data via SWR
+  const purchaseParams: Record<string, string> = {}
+  if (searchKeyword) purchaseParams.keyword = searchKeyword
+  if (dateFrom) purchaseParams.date_from = dateFrom
+  if (dateTo) purchaseParams.date_to = dateTo
+
+  const { data: rawPurchases = [], isLoading: loading, mutate } = useSWR<Purchase[]>(purchasesKey(purchaseParams))
+
+  // Post-process purchases: compute receiving_status
+  const purchases = useMemo(() => {
+    return rawPurchases.map((purchase) => {
+      const items = purchase.purchase_items || []
+      let receiving_status = 'none'
+
+      if (items.length > 0) {
+        const allReceived = items.every(item => item.is_received === true)
+        const anyReceived = items.some(item => (item.received_quantity || 0) > 0)
+
+        if (allReceived) {
+          receiving_status = 'completed'
+        } else if (anyReceived) {
+          receiving_status = 'partial'
+        }
+      }
+
+      return {
+        ...purchase,
+        receiving_status
+      }
+    })
+  }, [rawPurchases])
+
+  // Compute product stats when keyword is active
+  const productStats = useMemo<ProductPurchaseStats | null>(() => {
+    if (!searchKeyword || purchases.length === 0) return null
+
+    const stats: { [key: string]: ProductPurchaseStats } = {}
+    const vendorMap: { [productKey: string]: { [vendorKey: string]: { vendor_name: string, vendor_code: string, quantity: number, pending_quantity: number, purchase_count: number } } } = {}
+    const kw = searchKeyword.toLowerCase()
+
+    purchases.forEach((purchase: Purchase) => {
+      if (purchase.purchase_items) {
+        purchase.purchase_items.forEach((item: PurchaseItem) => {
+          const matchesKeyword =
+            item.products?.name?.toLowerCase().includes(kw) ||
+            item.products?.item_code?.toLowerCase().includes(kw)
+          if (!matchesKeyword) return
+
+          const productKey = `${item.product_id}`
+          const vendorKey = purchase.vendor_code
+
+          const pendingQty = Math.max(0, item.quantity - (item.received_quantity || 0))
+
+          if (!stats[productKey]) {
+            stats[productKey] = {
+              product_name: item.products.name,
+              item_code: item.products.item_code,
+              total_quantity: 0,
+              total_cost: 0,
+              pending_quantity: 0,
+              vendor_purchases: []
+            }
+            vendorMap[productKey] = {}
+          }
+
+          stats[productKey].total_quantity += item.quantity
+          stats[productKey].total_cost += item.subtotal || Math.round(item.quantity * item.cost)
+          stats[productKey].pending_quantity += pendingQty
+
+          if (!vendorMap[productKey][vendorKey]) {
+            vendorMap[productKey][vendorKey] = {
+              vendor_name: purchase.vendors?.vendor_name || purchase.vendor_code,
+              vendor_code: purchase.vendor_code,
+              quantity: 0,
+              pending_quantity: 0,
+              purchase_count: 0
+            }
+          }
+          vendorMap[productKey][vendorKey].quantity += item.quantity
+          vendorMap[productKey][vendorKey].pending_quantity += pendingQty
+          vendorMap[productKey][vendorKey].purchase_count += 1
+        })
+      }
+    })
+
+    Object.keys(stats).forEach(productKey => {
+      stats[productKey].vendor_purchases = Object.values(vendorMap[productKey])
+        .sort((a, b) => b.quantity - a.quantity)
+    })
+
+    const firstProduct = Object.values(stats)[0]
+    return firstProduct || null
+  }, [purchases, searchKeyword])
 
   const toggleRow = (id: string) => {
     const newExpanded = new Set(expandedRows)
@@ -235,119 +315,10 @@ export default function PurchasesPage() {
     )
   }, [displayedPurchases, groupByVendor])
 
-  const fetchPurchases = async () => {
-    setLoading(true)
-    setCurrentPage(1) // 重置到第一頁
-    try {
-      const params = new URLSearchParams()
-      if (keyword) params.set('keyword', keyword)
-      if (dateFrom) params.set('date_from', dateFrom)
-      if (dateTo) params.set('date_to', dateTo)
-
-      const res = await fetch(`/api/purchases?${params}`)
-      const data = await res.json()
-      if (data.ok) {
-        // 计算每个进货单的收货状态
-        const purchasesWithStatus = (data.data || []).map((purchase: Purchase) => {
-          const items = purchase.purchase_items || []
-          let receiving_status = 'none'
-
-          if (items.length > 0) {
-            // 安全地检查字段是否存在
-            const allReceived = items.every(item => item.is_received === true)
-            const anyReceived = items.some(item => (item.received_quantity || 0) > 0)
-
-            if (allReceived) {
-              receiving_status = 'completed'
-            } else if (anyReceived) {
-              receiving_status = 'partial'
-            }
-          }
-
-          return {
-            ...purchase,
-            receiving_status
-          }
-        })
-
-        setPurchases(purchasesWithStatus)
-
-        // 計算商品統計（只在有關鍵字時）
-        if (keyword && purchasesWithStatus.length > 0) {
-          const stats: { [key: string]: ProductPurchaseStats } = {}
-          const vendorMap: { [productKey: string]: { [vendorKey: string]: { vendor_name: string, vendor_code: string, quantity: number, pending_quantity: number, purchase_count: number } } } = {}
-          const kw = keyword.toLowerCase()
-
-          purchasesWithStatus.forEach((purchase: Purchase) => {
-            if (purchase.purchase_items) {
-              purchase.purchase_items.forEach((item: PurchaseItem) => {
-                const matchesKeyword =
-                  item.products?.name?.toLowerCase().includes(kw) ||
-                  item.products?.item_code?.toLowerCase().includes(kw)
-                if (!matchesKeyword) return
-
-                const productKey = `${item.product_id}`
-                const vendorKey = purchase.vendor_code
-
-                const pendingQty = Math.max(0, item.quantity - (item.received_quantity || 0))
-
-                if (!stats[productKey]) {
-                  stats[productKey] = {
-                    product_name: item.products.name,
-                    item_code: item.products.item_code,
-                    total_quantity: 0,
-                    total_cost: 0,
-                    pending_quantity: 0,
-                    vendor_purchases: []
-                  }
-                  vendorMap[productKey] = {}
-                }
-
-                stats[productKey].total_quantity += item.quantity
-                stats[productKey].total_cost += item.subtotal || Math.round(item.quantity * item.cost)
-                stats[productKey].pending_quantity += pendingQty
-
-                if (!vendorMap[productKey][vendorKey]) {
-                  vendorMap[productKey][vendorKey] = {
-                    vendor_name: purchase.vendors?.vendor_name || purchase.vendor_code,
-                    vendor_code: purchase.vendor_code,
-                    quantity: 0,
-                    pending_quantity: 0,
-                    purchase_count: 0
-                  }
-                }
-                vendorMap[productKey][vendorKey].quantity += item.quantity
-                vendorMap[productKey][vendorKey].pending_quantity += pendingQty
-                vendorMap[productKey][vendorKey].purchase_count += 1
-              })
-            }
-          })
-
-          Object.keys(stats).forEach(productKey => {
-            stats[productKey].vendor_purchases = Object.values(vendorMap[productKey])
-              .sort((a, b) => b.quantity - a.quantity)
-          })
-
-          const firstProduct = Object.values(stats)[0]
-          setProductStats(firstProduct || null)
-        } else {
-          setProductStats(null)
-        }
-      }
-    } catch (err) {
-      console.error('Failed to fetch purchases:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    fetchPurchases()
-  }, [])
-
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
-    fetchPurchases()
+    setCurrentPage(1)
+    setSearchKeyword(keyword)
   }
 
   const handleDeletePurchase = async (id: string, purchaseNo: string) => {
@@ -365,7 +336,7 @@ export default function PurchasesPage() {
 
       if (data.ok) {
         alert('刪除成功，庫存已回補')
-        fetchPurchases()
+        mutate()
       } else {
         alert(`刪除失敗：${data.error}`)
       }
@@ -391,7 +362,7 @@ export default function PurchasesPage() {
 
       if (data.ok) {
         alert('刪除成功，庫存已回補')
-        fetchPurchases()
+        mutate()
       } else {
         alert(`刪除失敗：${data.error}`)
       }
@@ -429,7 +400,7 @@ export default function PurchasesPage() {
 
       if (data.ok) {
         alert(data.message || '收貨成功，庫存已增加')
-        fetchPurchases()
+        mutate()
       } else {
         alert(`收貨失敗：${data.error}`)
       }

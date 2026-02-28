@@ -3,6 +3,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
+import useSWR from 'swr'
+import { SWR_KEYS } from '@/lib/swr/keys'
+import { paginatedFetcher } from '@/lib/swr/fetcher'
 import { formatCurrency } from '@/lib/utils'
 import type { Product } from '@/types'
 import ProductImportModal from '@/components/ProductImportModal'
@@ -12,97 +15,57 @@ type SortField = 'item_code' | 'name' | 'price' | 'avg_cost' | 'stock' | 'update
 type SortOrder = 'asc' | 'desc'
 
 export default function ProductsPage() {
-  const [products, setProducts] = useState<Product[]>([])
-  const [loading, setLoading] = useState(true)
   const [keyword, setKeyword] = useState('')
+  const [searchKeyword, setSearchKeyword] = useState('')
   const [activeFilter, setActiveFilter] = useState<boolean | null>(null)
   const [page, setPage] = useState(1)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null)
   const menuButtonRefs = useRef<{ [key: string]: HTMLButtonElement | null }>({})
-  const [pagination, setPagination] = useState({
-    page: 1,
-    pageSize: 20,
-    total: 0,
-    totalPages: 0
-  })
   const [sortBy, setSortBy] = useState<SortField>('updated_at')
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
-  const [userRole, setUserRole] = useState<'admin' | 'staff' | null>(null)
   const [showImportModal, setShowImportModal] = useState(false)
   const [showScanner, setShowScanner] = useState(false)
 
   // 獲取用戶角色
-  useEffect(() => {
-    fetch('/api/auth/me')
-      .then(res => res.json())
-      .then(data => {
-        if (data.ok) {
-          setUserRole(data.data.role)
-        }
-      })
-      .catch(() => { })
-  }, [])
+  const { data: authData } = useSWR<{ role: 'admin' | 'staff' }>(SWR_KEYS.AUTH_ME)
+  const userRole = authData?.role ?? null
 
-  const fetchProducts = async (currentPage: number = page) => {
-    setLoading(true)
-    try {
-      const params = new URLSearchParams()
-      if (keyword) params.set('keyword', keyword)
-      if (activeFilter !== null) params.set('active', String(activeFilter))
-      params.set('page', String(currentPage))
-      params.set('sortBy', sortBy)
-      params.set('sortOrder', sortOrder)
+  // 產品列表
+  const productsParams = new URLSearchParams()
+  if (searchKeyword) productsParams.set('keyword', searchKeyword)
+  if (activeFilter !== null) productsParams.set('active', String(activeFilter))
+  productsParams.set('page', String(page))
+  productsParams.set('sortBy', sortBy)
+  productsParams.set('sortOrder', sortOrder)
+  const productsUrl = `/api/products?${productsParams}`
 
-      const res = await fetch(`/api/products?${params}`)
-      const data = await res.json()
-      if (data.ok) {
-        setProducts(data.data || [])
-        setPagination(data.pagination)
-      }
-    } catch (err) {
-      console.error('Failed to fetch products:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
+  const { data: productsResult, isLoading: loading, mutate } = useSWR<{ data: Product[]; pagination: { page: number; pageSize: number; total: number; totalPages: number } }>(
+    productsUrl,
+    paginatedFetcher
+  )
+  const products = productsResult?.data ?? []
+  const pagination = productsResult?.pagination ?? { page: 1, pageSize: 20, total: 0, totalPages: 0 }
 
+  // Reset page when filters change
   useEffect(() => {
     setPage(1)
-    fetchProducts(1)
   }, [activeFilter, sortBy, sortOrder])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
     setPage(1)
-    fetchProducts(1)
+    setSearchKeyword(keyword)
   }
 
   const handleScan = useCallback((code: string) => {
     setKeyword(code)
+    setSearchKeyword(code)
     setPage(1)
-    // 需要延遲一下讓 state 更新後再搜尋
-    setTimeout(() => {
-      const params = new URLSearchParams()
-      params.set('keyword', code)
-      if (activeFilter !== null) params.set('active', String(activeFilter))
-      params.set('page', '1')
-      params.set('sortBy', sortBy)
-      params.set('sortOrder', sortOrder)
-      fetch(`/api/products?${params}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.ok) {
-            setProducts(data.data || [])
-            setPagination(data.pagination)
-          }
-        })
-    }, 100)
-  }, [activeFilter, sortBy, sortOrder])
+  }, [])
 
   const handlePageChange = (newPage: number) => {
     setPage(newPage)
-    fetchProducts(newPage)
   }
 
   const toggleActive = async (id: string, isActive: boolean) => {
@@ -114,7 +77,7 @@ export default function ProductsPage() {
       })
 
       if (res.ok) {
-        fetchProducts()
+        mutate()
       }
     } catch (err) {
       console.error('Failed to update product:', err)
@@ -135,7 +98,7 @@ export default function ProductsPage() {
 
       if (data.ok) {
         alert('商品已刪除')
-        fetchProducts()
+        mutate()
       } else {
         alert(`刪除失敗：${data.error}`)
       }
@@ -545,7 +508,7 @@ export default function ProductsPage() {
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
         onSuccess={() => {
-          fetchProducts(1)
+          mutate()
           setPage(1)
         }}
       />

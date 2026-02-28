@@ -1,6 +1,8 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useMemo } from 'react'
+import useSWR from 'swr'
+import { rawFetcher } from '@/lib/swr/fetcher'
 
 type CustomerOwed = {
   customerCode: string | null
@@ -44,33 +46,17 @@ type CustomerGroup = {
 }
 
 export default function ShortageStatsPage() {
-  const [shortageStats, setShortageStats] = useState<ProductShortage[]>([])
-  const [summary, setSummary] = useState<Summary | null>(null)
-  const [loading, setLoading] = useState(true)
+  const { data: result, isLoading: loading } = useSWR<{ data: ProductShortage[]; summary: Summary }>(
+    '/api/shortage-stats',
+    rawFetcher
+  )
+  const shortageStats = result?.data ?? []
+  const summary = result?.summary ?? null
+
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
   const [showOnlyShortage, setShowOnlyShortage] = useState(false)
   const [groupByCustomer, setGroupByCustomer] = useState(false)
   const [keyword, setKeyword] = useState('')
-
-  useEffect(() => {
-    fetchShortageStats()
-  }, [])
-
-  const fetchShortageStats = async () => {
-    setLoading(true)
-    try {
-      const res = await fetch('/api/shortage-stats')
-      const data = await res.json()
-      if (data.ok) {
-        setShortageStats(data.data || [])
-        setSummary(data.summary || null)
-      }
-    } catch (err) {
-      console.error('Failed to fetch shortage stats:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const toggleRow = (id: string) => {
     const newExpanded = new Set(expandedRows)

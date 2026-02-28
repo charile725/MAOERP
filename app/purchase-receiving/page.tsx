@@ -1,6 +1,8 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useMemo } from 'react'
+import useSWR from 'swr'
+import { rawFetcher } from '@/lib/swr/fetcher'
 import { formatCurrency, formatDate } from '@/lib/utils'
 
 type VendorOwed = {
@@ -48,32 +50,15 @@ type VendorGroup = {
 }
 
 export default function PurchaseReceivingStatsPage() {
-  const [receivingStats, setReceivingStats] = useState<ProductReceiving[]>([])
-  const [summary, setSummary] = useState<Summary | null>(null)
-  const [loading, setLoading] = useState(true)
+  const { data: result, isLoading: loading } = useSWR<{ data: ProductReceiving[]; summary: Summary }>(
+    '/api/purchase-receiving-stats',
+    rawFetcher
+  )
+  const receivingStats = result?.data ?? []
+  const summary = result?.summary ?? null
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
   const [groupByVendor, setGroupByVendor] = useState(false)
   const [keyword, setKeyword] = useState('')
-
-  useEffect(() => {
-    fetchReceivingStats()
-  }, [])
-
-  const fetchReceivingStats = async () => {
-    setLoading(true)
-    try {
-      const res = await fetch('/api/purchase-receiving-stats')
-      const data = await res.json()
-      if (data.ok) {
-        setReceivingStats(data.data || [])
-        setSummary(data.summary || null)
-      }
-    } catch (err) {
-      console.error('Failed to fetch receiving stats:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const toggleRow = (id: string) => {
     const newExpanded = new Set(expandedRows)
