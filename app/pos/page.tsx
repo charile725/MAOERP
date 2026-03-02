@@ -1,8 +1,10 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
+import useSWR, { useSWRConfig } from 'swr'
 import dynamic from 'next/dynamic'
 import { formatCurrency } from '@/lib/utils'
+import { SWR_KEYS } from '@/lib/swr/keys'
 import type { Product, SaleItem, PaymentMethod } from '@/types'
 
 // 動態載入相機掃描元件（避免 SSR 問題）
@@ -73,6 +75,22 @@ type TodaySale = {
   customers?: { customer_name: string }
 }
 
+// Custom fetcher for POS: loads all products via pagination
+const posProductsFetcher = async (url: string) => {
+  const allProducts: Product[] = []
+  let page = 1
+  const pageSize = 1000
+  while (true) {
+    const res = await fetch(`${url}&page=${page}&pageSize=${pageSize}`)
+    const data = await res.json()
+    if (!data.ok) break
+    allProducts.push(...(data.data || []))
+    if (!data.data || data.data.length < pageSize) break
+    page++
+  }
+  return allProducts
+}
+
 export default function POSPage() {
   const [barcode, setBarcode] = useState('')
   const [cart, setCart] = useState<CartItem[]>([])
@@ -80,12 +98,9 @@ export default function POSPage() {
   const [isPaid, setIsPaid] = useState(true)
 
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
-  const [customers, setCustomers] = useState<Customer[]>([])
-  const [paymentAccounts, setPaymentAccounts] = useState<PaymentAccount[]>([])
   const [note, setNote] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [products, setProducts] = useState<Product[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [showQuickAdd, setShowQuickAdd] = useState(false)
   const [discountType, setDiscountType] = useState<'none' | 'percent' | 'amount'>('none')
@@ -136,8 +151,6 @@ export default function POSPage() {
   `
 
   // Draft orders and today's sales
-  const [drafts, setDrafts] = useState<SaleDraft[]>([])
-  const [todaySales, setTodaySales] = useState<TodaySale[]>([])
   const [showDrafts, setShowDrafts] = useState(false)
   const [showTodaySales, setShowTodaySales] = useState(false)
 
@@ -155,7 +168,6 @@ export default function POSPage() {
 
   // Inventory mode (products or ichiban kuji)
   const [inventoryMode, setInventoryMode] = useState<'products' | 'ichiban'>('products')
-  const [ichibanKujis, setIchibanKujis] = useState<any[]>([])
   const [selectedKuji, setSelectedKuji] = useState<any | null>(null)
   const [expandedKujiId, setExpandedKujiId] = useState<string | null>(null)
   // 複選獎選項彈窗
@@ -224,6 +236,49 @@ export default function POSPage() {
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
 
+  // === SWR Hooks ===
+  const { mutate: globalMutate } = useSWRConfig()
+
+  const { data: customers = [], mutate: mutateCustomers } = useSWR<Customer[]>(SWR_KEYS.CUSTOMERS_ACTIVE)
+
+  const { data: products = [], mutate: mutateProducts } = useSWR<Product[]>(
+    '/api/products?active=true',
+    posProductsFetcher,
+    { dedupingInterval: 300000 } // 5 min cache, replaces localStorage cache
+  )
+
+  const { data: ichibanKujis = [], mutate: mutateIchibanKujis } = useSWR<any[]>('/api/ichiban-kuji?active=true&all=true')
+
+  const { data: drafts = [], mutate: mutateDrafts } = useSWR<SaleDraft[]>('/api/sale-drafts')
+
+  const { data: rawPaymentAccounts = [] } = useSWR<PaymentAccount[]>('/api/accounts?active_only=true')
+
+  const paymentAccounts = useMemo(() => {
+    const POS_ALLOWED_CODES = ['cash', 'pending']
+    const POS_ALLOWED_NAMES = ['國泰公司戶', 'LinePay', 'LINE Pay', 'Line Pay', 'linepay']
+    return rawPaymentAccounts.filter((acc) =>
+      acc.payment_method_code && (
+        POS_ALLOWED_CODES.includes(acc.payment_method_code) ||
+        POS_ALLOWED_NAMES.some(name => acc.account_name.toLowerCase().includes(name.toLowerCase()))
+      )
+    )
+  }, [rawPaymentAccounts])
+
+  const { data: todaySales = [], mutate: mutateTodaySales } = useSWR<TodaySale[]>(
+    businessDateLoaded ? `/api/sales?business_date=${businessDate}&source=${salesMode}` : null
+  )
+
+  // Set default payment method when paymentAccounts load
+  useEffect(() => {
+    if (paymentAccounts.length > 0 && paymentMethod === 'cash') {
+      const defaultAccount = paymentAccounts.find((acc) => acc.payment_method_code === 'cash') || paymentAccounts[0]
+      if (defaultAccount.payment_method_code) {
+        setPaymentMethod(defaultAccount.payment_method_code as PaymentMethod)
+        setIsPaid(defaultAccount.payment_method_code !== 'pending')
+      }
+    }
+  }, [paymentAccounts])
+
   // 獲取當前營業日
   const fetchCurrentBusinessDate = async () => {
     try {
@@ -245,12 +300,7 @@ export default function POSPage() {
   }
 
   useEffect(() => {
-    fetchCurrentBusinessDate() // 先獲取當前營業日
-    fetchCustomers()
-    fetchProducts()
-    fetchIchibanKujis()
-    fetchDrafts()
-    fetchPaymentAccounts() // 載入付款帳戶選項
+    fetchCurrentBusinessDate()
   }, [])
 
   // 營業日載入完成後，再獲取日結統計
@@ -291,116 +341,6 @@ export default function POSPage() {
     }
   }, [showCustomerDropdown])
 
-  const fetchCustomers = async () => {
-    try {
-      const res = await fetch('/api/customers?active=true')
-      const data = await res.json()
-      if (data.ok) {
-        setCustomers(data.data || [])
-      }
-    } catch (err) {
-      console.error('Failed to fetch customers:', err)
-    }
-  }
-
-  const fetchPaymentAccounts = async () => {
-    try {
-      const res = await fetch('/api/accounts?active_only=true')
-      const data = await res.json()
-      if (data.ok) {
-        // POS 只顯示指定的付款方式：現金、國泰公司戶、LinePay、待定
-        const POS_ALLOWED_CODES = ['cash', 'pending']
-        const POS_ALLOWED_NAMES = ['國泰公司戶', 'LinePay', 'LINE Pay', 'Line Pay', 'linepay']
-        const accounts = (data.data || []).filter((acc: PaymentAccount) =>
-          acc.payment_method_code && (
-            POS_ALLOWED_CODES.includes(acc.payment_method_code) ||
-            POS_ALLOWED_NAMES.some(name => acc.account_name.toLowerCase().includes(name.toLowerCase()))
-          )
-        )
-        setPaymentAccounts(accounts)
-        // 設定預設付款方式為第一個帳戶（通常是現金）
-        if (accounts.length > 0 && !paymentMethod) {
-          const defaultAccount = accounts.find((acc: PaymentAccount) => acc.payment_method_code === 'cash') || accounts[0]
-          if (defaultAccount.payment_method_code) {
-            setPaymentMethod(defaultAccount.payment_method_code as PaymentMethod)
-            // 只有待定是未收款，其他都是已收款
-            setIsPaid(defaultAccount.payment_method_code !== 'pending')
-          }
-        }
-      }
-    } catch (err) {
-      console.error('Failed to fetch payment accounts:', err)
-    }
-  }
-
-  const fetchProducts = async (forceRefresh = false) => {
-    try {
-      // 快取機制：5 分鐘內使用 localStorage 快取
-      const CACHE_KEY = 'pos_products_cache'
-      const CACHE_EXPIRY_KEY = 'pos_products_cache_expiry'
-      const CACHE_DURATION = 5 * 60 * 1000 // 5 分鐘
-
-      if (!forceRefresh) {
-        const cached = localStorage.getItem(CACHE_KEY)
-        const expiry = localStorage.getItem(CACHE_EXPIRY_KEY)
-
-        if (cached && expiry && Date.now() < parseInt(expiry)) {
-          setProducts(JSON.parse(cached))
-          return
-        }
-      }
-
-      // 用分頁載入全部商品（避免 Supabase 伺服器端 row limit 截斷）
-      const allProducts: Product[] = []
-      let page = 1
-      const pageSize = 1000
-
-      while (true) {
-        const res = await fetch(`/api/products?active=true&page=${page}&pageSize=${pageSize}`)
-        const data = await res.json()
-        if (!data.ok) break
-
-        allProducts.push(...(data.data || []))
-
-        // 如果回傳的筆數少於 pageSize，表示已經是最後一頁
-        if (!data.data || data.data.length < pageSize) break
-        page++
-      }
-
-      console.log(`[POS] 載入商品完成: ${allProducts.length} 筆`)
-      setProducts(allProducts)
-      // 更新快取
-      localStorage.setItem(CACHE_KEY, JSON.stringify(allProducts))
-      localStorage.setItem(CACHE_EXPIRY_KEY, String(Date.now() + CACHE_DURATION))
-    } catch (err) {
-      console.error('Failed to fetch products:', err)
-    }
-  }
-
-  const fetchIchibanKujis = async () => {
-    try {
-      const res = await fetch('/api/ichiban-kuji?active=true&all=true')
-      const data = await res.json()
-      if (data.ok) {
-        setIchibanKujis(data.data || [])
-      }
-    } catch (err) {
-      console.error('Failed to fetch ichiban kujis:', err)
-    }
-  }
-
-  const fetchDrafts = async () => {
-    try {
-      const res = await fetch('/api/sale-drafts')
-      const data = await res.json()
-      if (data.ok) {
-        setDrafts(data.data || [])
-      }
-    } catch (err) {
-      console.error('Failed to fetch drafts:', err)
-    }
-  }
-
   const fetchClosingStats = async (dateOverride?: string) => {
     try {
       const date = dateOverride || businessDate
@@ -412,25 +352,11 @@ export default function POSPage() {
         setAlreadyClosed(data.data.already_closed)
         if (dateOverride) setBusinessDate(dateOverride)
 
-        // 獲取該營業日的銷售記錄
-        await fetchTodaySales(date)
+        // Refresh today's sales via SWR
+        mutateTodaySales()
       }
     } catch (err) {
       console.error('Failed to fetch closing stats:', err)
-    }
-  }
-
-  const fetchTodaySales = async (date?: string) => {
-    try {
-      const dateParam = date || businessDate
-      const res = await fetch(`/api/sales?business_date=${dateParam}&source=${salesMode}`)
-      const data = await res.json()
-
-      if (data.ok) {
-        setTodaySales(data.data || [])
-      }
-    } catch (err) {
-      console.error('Failed to fetch today sales:', err)
     }
   }
 
@@ -1000,9 +926,10 @@ export default function POSPage() {
         // 重置多元付款
         setIsMultiPayment(false)
         setMultiPayments([{ method: 'cash', amount: '' }])
-        fetchTodaySales() // Refresh today's sales
-        fetchIchibanKujis() // Refresh ichiban kuji inventory
-        fetchCustomers() // Refresh customers to update store credit
+        mutateTodaySales() // Refresh today's sales
+        mutateIchibanKujis() // Refresh ichiban kuji inventory
+        mutateCustomers() // Refresh customers to update store credit
+        globalMutate(SWR_KEYS.ACCOUNTS) // Refresh account balances
 
         // 顯示成功 Toast（現金才顯示找零）
         const received = parseFloat(receivedAmount) || finalTotal
@@ -1073,7 +1000,7 @@ export default function POSPage() {
         setNote('')
         setDiscountType('none')
         setDiscountValue(0)
-        fetchDrafts()
+        mutateDrafts()
         alert('訂單已暫存')
       } else {
         setError(data.error || '暫存失敗')
@@ -1137,7 +1064,7 @@ export default function POSPage() {
 
       // Delete the draft
       await fetch(`/api/sale-drafts/${draft.id}`, { method: 'DELETE' })
-      fetchDrafts()
+      mutateDrafts()
     } catch (err) {
       setError('載入失敗')
     } finally {
@@ -1153,7 +1080,7 @@ export default function POSPage() {
       const data = await res.json()
 
       if (data.ok) {
-        fetchDrafts()
+        mutateDrafts()
         alert('已刪除')
       } else {
         setError(data.error || '刪除失敗')
@@ -1205,7 +1132,7 @@ export default function POSPage() {
         setCustomerSearchQuery('')
 
         // Refresh customers list in background
-        fetchCustomers()
+        mutateCustomers()
 
         // Clear form and close modal
         setNewCustomerName('')
@@ -1285,7 +1212,7 @@ export default function POSPage() {
         addToCart(newProduct, 1)
 
         // 重新載入商品列表
-        fetchProducts()
+        mutateProducts()
 
         // 清空並關閉
         setQuickProductName('')
@@ -1385,8 +1312,8 @@ export default function POSPage() {
           setBusinessDate(date)
           await fetchClosingStats(date)
         }}
-        fetchCustomers={fetchCustomers}
-        fetchProducts={fetchProducts}
+        fetchCustomers={mutateCustomers}
+        fetchProducts={mutateProducts}
       />
     )
   }
