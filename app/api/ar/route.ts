@@ -83,8 +83,18 @@ export async function GET(request: NextRequest) {
     const globalUnpaidCount = (allAccounts || [])
       .filter((a: any) => a.status !== 'paid').length
 
-    // 取得唯一的 partner_codes 並按照它們分頁
-    const uniquePartnerCodes = [...new Set((allAccounts || []).map((a: any) => a.partner_code))]
+    // 取得唯一的 partner_codes，按未收金額降冪排序後再分頁
+    const balanceByPartner = new Map<string, number>()
+    for (const a of (allAccounts || []) as any[]) {
+      if (a.status !== 'paid') {
+        balanceByPartner.set(a.partner_code, (balanceByPartner.get(a.partner_code) || 0) + (a.balance || 0))
+      } else if (!balanceByPartner.has(a.partner_code)) {
+        balanceByPartner.set(a.partner_code, 0)
+      }
+    }
+    const uniquePartnerCodes = [...balanceByPartner.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([code]) => code)
     const totalCustomers = uniquePartnerCodes.length
     const totalPages = Math.ceil(totalCustomers / pageSize)
 

@@ -245,35 +245,8 @@ export default function ARPageV2() {
         }
       })
 
-      // 轉換為陣列並排序（風險排序：逾期金額 > 逾期天數 > 總金額）
-      const sortedGroups = Object.values(groups).sort((a, b) => {
-        // 計算逾期金額
-        const getOverdueAmount = (group: CustomerGroup) => {
-          return group.accounts
-            .filter(acc => acc.status !== 'paid' && new Date(acc.due_date) < new Date())
-            .reduce((sum, acc) => sum + acc.balance, 0)
-        }
-
-        // 計算最長逾期天數
-        const getMaxOverdueDays = (group: CustomerGroup) => {
-          const overdueDays = group.accounts
-            .filter(acc => acc.status !== 'paid' && new Date(acc.due_date) < new Date())
-            .map(acc => getDaysOverdue(acc.due_date))
-          return overdueDays.length > 0 ? Math.max(...overdueDays) : 0
-        }
-
-        const aOverdue = getOverdueAmount(a)
-        const bOverdue = getOverdueAmount(b)
-
-        if (aOverdue !== bOverdue) return bOverdue - aOverdue
-
-        const aMaxDays = getMaxOverdueDays(a)
-        const bMaxDays = getMaxOverdueDays(b)
-
-        if (aMaxDays !== bMaxDays) return bMaxDays - aMaxDays
-
-        return b.total_balance - a.total_balance
-      })
+      // 轉換為陣列並按金額降冪排序
+      const sortedGroups = Object.values(groups).sort((a, b) => b.total_balance - a.total_balance)
 
       // 應用篩選
       const filtered = sortedGroups.filter(group => {
