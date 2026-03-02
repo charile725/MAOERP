@@ -95,7 +95,30 @@ export async function GET(request: NextRequest) {
       query = query.range(offset, offset + limit - 1)
     }
 
-    const { data, error, count } = await query
+    let data: any[] | null = null
+    let error: any = null
+    let count: number | null = null
+
+    if (noPagination) {
+      // Supabase 預設最多回傳 1000 筆，需要分批載入全部資料
+      const allData: any[] = []
+      const BATCH = 1000
+      let from = 0
+      while (true) {
+        const { data: batch, error: batchError, count: batchCount } = await query.range(from, from + BATCH - 1)
+        if (batchError) { error = batchError; break }
+        if (batchCount != null && count == null) count = batchCount
+        allData.push(...(batch || []))
+        if (!batch || batch.length < BATCH) break
+        from += BATCH
+      }
+      if (!error) data = allData
+    } else {
+      const result = await query
+      data = result.data
+      error = result.error
+      count = result.count
+    }
 
     if (error) {
       console.error('[Sales API] Query error:', {

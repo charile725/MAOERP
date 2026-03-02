@@ -321,7 +321,21 @@ export default function SalesPage() {
         .sort((a, b) => b.quantity - a.quantity)
     })
 
-    return Object.values(stats)[0] || null
+    // 多個商品匹配時，優先選擇名稱最接近關鍵字的（精確匹配 > 名稱較短 > 數量最多）
+    const allStats = Object.values(stats)
+    if (allStats.length === 0) return null
+    if (allStats.length === 1) return allStats[0]
+
+    allStats.sort((a, b) => {
+      const aExact = a.product_name?.toLowerCase() === kw ? 1 : 0
+      const bExact = b.product_name?.toLowerCase() === kw ? 1 : 0
+      if (aExact !== bExact) return bExact - aExact
+      const aLen = a.product_name?.length ?? 999
+      const bLen = b.product_name?.length ?? 999
+      if (aLen !== bLen) return aLen - bLen
+      return b.total_quantity - a.total_quantity
+    })
+    return allStats[0]
   }, [allSales, searchKeyword])
 
   // 計算客戶分組
