@@ -138,18 +138,22 @@ export default function ProductsPage() {
             >
               打印條碼
             </Link>
-            <button
-              onClick={() => setShowImportModal(true)}
-              className="rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700"
-            >
-              匯入
-            </button>
-            <Link
-              href="/products/new"
-              className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
-            >
-              + 新增商品
-            </Link>
+            {userRole === 'admin' && (
+              <>
+                <button
+                  onClick={() => setShowImportModal(true)}
+                  className="rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700"
+                >
+                  匯入
+                </button>
+                <Link
+                  href="/products/new"
+                  className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+                >
+                  + 新增商品
+                </Link>
+              </>
+            )}
           </div>
         </div>
 

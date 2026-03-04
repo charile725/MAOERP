@@ -3,6 +3,7 @@ import { supabaseServer } from '@/lib/supabase/server'
 import { productSchema } from '@/lib/schemas'
 import { fromZodError } from 'zod-validation-error'
 import { generateCode } from '@/lib/utils'
+import { getCurrentUser } from '@/lib/auth'
 
 // GET /api/products - Search products
 export async function GET(request: NextRequest) {
@@ -131,8 +132,13 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/products - Create new product
+// POST /api/products - Create new product (admin only)
 export async function POST(request: NextRequest) {
+  const user = await getCurrentUser()
+  if (!user || user.role !== 'admin') {
+    return NextResponse.json({ ok: false, error: '無權限' }, { status: 403 })
+  }
+
   const requestId = Math.random().toString(36).substring(7)
   console.log(`[${requestId}] === POST /api/products START ===`)
 
