@@ -41,7 +41,10 @@ export async function POST(
           price,
           cost,
           subtotal,
-          snapshot_name
+          snapshot_name,
+          is_points_redemption,
+          points_earned,
+          points_used
         )
       `)
             .eq('id', id)
@@ -177,9 +180,27 @@ export async function POST(
             console.log('[Sale Correction] Skipping inventory restoration - hasConfirmedDelivery:', hasConfirmedDelivery, 'inventoryChanges.length:', inventoryChanges.length)
         }
 
-        // 5. 更新銷售明細
+        // 5. 更新銷售明細（含積分欄位同步）
+        let pointsDelta = 0
         for (const adjustment of items) {
-            if (adjustment.new_quantity === 0) {
+            const originalItem = originalItems.find((item: any) => item.id === adjustment.sale_item_id)
+            if (!originalItem) continue
+
+            const oldQty = originalItem.quantity
+            const newQty = adjustment.new_quantity
+
+            // 計算積分變化量
+            if (originalItem.points_earned > 0 && oldQty > 0) {
+                const newPointsEarned = newQty // 1 點/個
+                pointsDelta += (newPointsEarned - originalItem.points_earned)
+            }
+            if (originalItem.points_used > 0 && oldQty > 0) {
+                const pointsCostPerUnit = originalItem.points_used / oldQty
+                const newPointsUsed = Math.round(pointsCostPerUnit * newQty)
+                pointsDelta -= (newPointsUsed - originalItem.points_used)
+            }
+
+            if (newQty === 0) {
                 // 釋放一番賞複選獎選項（如果有的話）
                 await (supabaseServer
                     .from('ichiban_kuji_prize_options') as any)
@@ -192,18 +213,54 @@ export async function POST(
                     .delete()
                     .eq('id', adjustment.sale_item_id)
             } else {
-                // 更新數量和價格
+                // 更新數量、價格，同步積分欄位
                 const newPrice = adjustment.new_price
-                const updateData: any = {
-                    quantity: adjustment.new_quantity,
-                }
+                const updateData: any = { quantity: newQty }
                 if (newPrice !== undefined) {
                     updateData.price = newPrice
+                }
+                if (originalItem.points_earned > 0) {
+                    updateData.points_earned = newQty
+                }
+                if (originalItem.points_used > 0 && oldQty > 0) {
+                    const pointsCostPerUnit = originalItem.points_used / oldQty
+                    updateData.points_used = Math.round(pointsCostPerUnit * newQty)
                 }
                 await (supabaseServer
                     .from('sale_items') as any)
                     .update(updateData)
                     .eq('id', adjustment.sale_item_id)
+            }
+        }
+
+        // 5.5. 更新客戶積分（若有積分變化）
+        if (pointsDelta !== 0 && sale.customer_code) {
+            const { data: customerForPoints } = await (supabaseServer
+                .from('customers') as any)
+                .select('loyalty_points')
+                .eq('customer_code', sale.customer_code)
+                .single()
+
+            if (customerForPoints) {
+                const newPoints = Math.max(0, customerForPoints.loyalty_points + pointsDelta)
+                await (supabaseServer
+                    .from('customers') as any)
+                    .update({ loyalty_points: newPoints })
+                    .eq('customer_code', sale.customer_code)
+
+                await (supabaseServer
+                    .from('customer_points_logs') as any)
+                    .insert({
+                        customer_code: sale.customer_code,
+                        amount: pointsDelta,
+                        balance_before: customerForPoints.loyalty_points,
+                        balance_after: newPoints,
+                        type: 'refund',
+                        ref_type: 'correction',
+                        ref_id: id.toString(),
+                        ref_no: sale.sale_no,
+                        note: `銷貨更正 ${sale.sale_no}，積分調整`,
+                    })
             }
         }
 

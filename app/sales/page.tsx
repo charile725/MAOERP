@@ -84,6 +84,9 @@ type SaleItem = {
   delivered_quantity?: number
   store_credit_qty?: number
   store_credit_amount?: number
+  is_points_redemption?: boolean
+  points_earned?: number
+  points_used?: number
 }
 
 type Sale = {
@@ -1565,7 +1568,17 @@ export default function SalesPage() {
                                         return (
                                           <tr key={item.id}>
                                             <td className="py-2 text-sm text-gray-900 dark:text-gray-100">{item.products?.item_code || '-'}</td>
-                                            <td className="py-2 text-sm text-gray-900 dark:text-gray-100">{item.snapshot_name}</td>
+                                            <td className="py-2 text-sm text-gray-900 dark:text-gray-100">
+                                              <div className="flex items-center gap-1 flex-wrap">
+                                                <span>{item.snapshot_name}</span>
+                                                {item.is_points_redemption && (
+                                                  <span className="text-[10px] bg-yellow-500 text-black px-1.5 py-0.5 rounded font-medium">🎫 積分兌換 -{item.points_used}點</span>
+                                                )}
+                                                {(item.points_earned || 0) > 0 && (
+                                                  <span className="text-[10px] bg-amber-600 text-white px-1.5 py-0.5 rounded font-medium">⭐ +{item.points_earned}積分</span>
+                                                )}
+                                              </div>
+                                            </td>
                                             <td className="py-2 text-right text-sm text-gray-900 dark:text-gray-100">
                                               {item.quantity} {item.products?.unit || ''}
                                             </td>

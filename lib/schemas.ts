@@ -12,6 +12,8 @@ export const productSchema = z.object({
   stock: z.number().min(0, 'Stock cannot be negative').default(0),
   allow_negative: z.boolean().default(true),
   is_active: z.boolean().default(true),
+  is_points_base: z.boolean().optional(),
+  points_cost: z.number().int().min(1).nullable().optional(),
 })
 
 // Update schema excludes stock (managed via inventory operations only)
@@ -74,6 +76,7 @@ export const saleDraftSchema = z.object({
       ichiban_kuji_id: z.string().uuid().optional(), // 所屬一番賞ID
       selection_option_id: z.string().uuid().optional(), // 複選獎：選中的選項ID
       isNotDelivered: z.boolean().optional(), // 是否未出貨（支援部分出貨）
+      is_points_redemption: z.boolean().optional(), // 是否為積分兌換
     })
   ).min(1, 'At least one item is required'),
 })

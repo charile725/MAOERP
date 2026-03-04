@@ -27,6 +27,7 @@ type CartItem = SaleItem & {
   selectionOptionId?: string  // 複選獎：選中的選項ID
   isFreeGift?: boolean
   isNotDelivered?: boolean
+  isPointsRedemption?: boolean  // 積分兌換
 }
 
 type Customer = {
@@ -37,6 +38,7 @@ type Customer = {
   is_active: boolean
   store_credit: number  // 购物金余额
   credit_limit: number  // 信用额度
+  loyalty_points: number  // 積分
 }
 
 type PaymentAccount = {
@@ -159,6 +161,9 @@ export default function POSPage() {
   const [newCustomerPhone, setNewCustomerPhone] = useState('')
   const [addingCustomer, setAddingCustomer] = useState(false)
   const phoneInputRef = useRef<HTMLInputElement>(null)
+
+  // 購物金折抵開關（預設自動折抵）
+  const [useStoreCredit, setUseStoreCredit] = useState(true)
 
   // Customer search
   const [customerSearchQuery, setCustomerSearchQuery] = useState('')
@@ -431,6 +436,36 @@ export default function POSPage() {
           product,
           isFreeGift: false,
           isNotDelivered: false,
+        },
+      ]
+    })
+  }
+
+  // 積分兌換：將商品以 price=0、isPointsRedemption=true 加入購物車
+  const addToCartAsRedemption = (product: Product) => {
+    if (!product.points_cost) return
+    setCart((prev) => {
+      const existingIndex = prev.findIndex(
+        item =>
+          item.product_id === product.id &&
+          item.isPointsRedemption === true &&
+          !item.ichiban_kuji_prize_id
+      )
+      if (existingIndex !== -1) {
+        return prev.map((item, i) =>
+          i === existingIndex ? { ...item, quantity: item.quantity + 1 } : item
+        )
+      }
+      return [
+        ...prev,
+        {
+          product_id: product.id,
+          quantity: 1,
+          price: 0,
+          product,
+          isFreeGift: false,
+          isNotDelivered: false,
+          isPointsRedemption: true,
         },
       ]
     })
@@ -767,6 +802,16 @@ export default function POSPage() {
 
   const subtotal = cartWithComboPrice.reduce((sum, item) => sum + item.price * item.quantity, 0)
 
+  // 積分計算
+  const totalPointsEarned = cart.reduce((sum, item) => {
+    if (item.product.is_points_base && !item.isFreeGift) return sum + item.quantity
+    return sum
+  }, 0)
+  const totalPointsUsed = cart.reduce((sum, item) => {
+    if (item.isPointsRedemption && item.product.points_cost) return sum + item.product.points_cost * item.quantity
+    return sum
+  }, 0)
+
   let discountAmount = 0
   if (discountType === 'percent') {
     discountAmount = (subtotal * discountValue) / 100
@@ -777,7 +822,7 @@ export default function POSPage() {
   const total = Math.max(0, subtotal - discountAmount)
 
   // 计算购物金抵扣（预览）
-  const storeCreditUsed = selectedCustomer && selectedCustomer.store_credit > 0
+  const storeCreditUsed = useStoreCredit && selectedCustomer && selectedCustomer.store_credit > 0
     ? Math.min(selectedCustomer.store_credit, total)
     : 0
   const finalTotal = total - storeCreditUsed
@@ -806,6 +851,27 @@ export default function POSPage() {
     if (cart.length === 0) {
       setError('購物車是空的')
       return
+    }
+
+    // 積分底數商品必須選擇客戶
+    const hasPointsBaseItems = cart.some(item => item.product.is_points_base && !item.isFreeGift)
+    if (hasPointsBaseItems && !selectedCustomer) {
+      setError('銷售積分底數時必須選擇客戶')
+      return
+    }
+
+    // 積分兌換必須選擇客戶且積分足夠
+    const cartHasRedemption = cart.some(item => item.isPointsRedemption)
+    if (cartHasRedemption) {
+      if (!selectedCustomer) {
+        setError('積分兌換時必須選擇客戶')
+        return
+      }
+      const availablePoints = (selectedCustomer.loyalty_points || 0) + totalPointsEarned
+      if (totalPointsUsed > availablePoints) {
+        setError(`積分不足！需要 ${totalPointsUsed} 積分，目前 ${availablePoints} 積分`)
+        return
+      }
     }
 
     // 有未出貨商品時，必須選擇客戶（否則無法追蹤配送）
@@ -866,6 +932,7 @@ export default function POSPage() {
             ichiban_kuji_id: item.ichiban_kuji_id,
             selection_option_id: item.selectionOptionId,
             isNotDelivered: item.isNotDelivered || false,
+            is_points_redemption: item.isPointsRedemption || false,
           })),
         }),
       })
@@ -878,7 +945,7 @@ export default function POSPage() {
         setCustomerSearchQuery('')
         setPaymentMethod('pending') // 直播模式預設待定
         setIsPaid(false) // 待定付款方式預設為未收款
-
+        setUseStoreCredit(true)
         setNote('')
         setDiscountType('none')
         setDiscountValue(0)
@@ -942,6 +1009,7 @@ export default function POSPage() {
         setCustomerSearchQuery('')
         setPaymentMethod('pending') // 直播模式預設待定
         setIsPaid(false) // 待定付款方式預設為未收款
+        setUseStoreCredit(true)
         setNote('')
         setDiscountType('none')
         setDiscountValue(0)
@@ -1070,6 +1138,7 @@ export default function POSPage() {
           is_active: true,
           store_credit: 0,
           credit_limit: 0,
+          loyalty_points: 0,
         }
 
         // Select the newly created customer
@@ -1234,6 +1303,8 @@ export default function POSPage() {
         finalTotal={finalTotal}
         discountAmount={discountAmount}
         storeCreditUsed={storeCreditUsed}
+        useStoreCredit={useStoreCredit}
+        setUseStoreCredit={setUseStoreCredit}
         handleCheckout={handleCheckout}
         addToCart={addToCart}
         removeFromCart={removeFromCart}
@@ -1387,33 +1458,46 @@ export default function POSPage() {
                       const isLowStock = product.stock <= 3 && product.stock > 0
                       const isNegativeStock = product.stock <= 0
                       return (
-                        <button
+                        <div
                           key={product.id}
-                          onContextMenu={(e) => {
-                            e.preventDefault()
-                            togglePinProduct(product.id)
-                          }}
-                          className={`rounded-lg p-2.5 transition-all active:scale-95 flex flex-col min-h-[90px] relative ${isNegativeStock
-                            ? 'bg-slate-700 hover:bg-slate-600 cursor-pointer border border-red-500/50'
-                            : 'bg-slate-700 hover:bg-slate-600 cursor-pointer'
+                          className={`rounded-lg p-2.5 transition-all flex flex-col min-h-[90px] relative ${isNegativeStock
+                            ? 'bg-slate-700 border border-red-500/50'
+                            : product.is_points_base
+                              ? 'bg-amber-900/50 border border-amber-600/70'
+                              : 'bg-slate-700'
                             }`}
-                          title={isPinned ? '右鍵取消固定' : '右鍵固定到最上面'}
-                          onClick={() => {
-                            addToCart(product, 1)
-                          }}
                         >
                           {/* 標籤區 */}
                           <div className="absolute top-1.5 right-1.5 flex gap-1">
                             {isPinned && <span className="text-xs">已固定</span>}
                             {isLowStock && <span className="text-[10px] bg-amber-500 text-white px-1 rounded">低庫存</span>}
+                            {product.is_points_base && <span className="text-[10px] bg-yellow-500 text-black px-1 rounded">積分</span>}
                           </div>
-                          {/* 商品名 */}
-                          <div className="text-xs text-slate-300 line-clamp-2 mb-auto pr-6">{product.name}</div>
-                          {/* 價格 - 最大 */}
-                          <div className="text-lg font-bold text-white mt-1">{formatCurrency(product.price)}</div>
-                          {/* 庫存 - 小字 */}
-                          <div className="text-[10px] text-slate-400">庫存 {product.stock}</div>
-                        </button>
+                          {/* 主按鈕區（點擊加入購物車）*/}
+                          <button
+                            onContextMenu={(e) => { e.preventDefault(); togglePinProduct(product.id) }}
+                            className="flex-1 flex flex-col text-left active:scale-95 cursor-pointer"
+                            title={isPinned ? '右鍵取消固定' : '右鍵固定到最上面'}
+                            onClick={() => addToCart(product, 1)}
+                          >
+                            {/* 商品名 */}
+                            <div className="text-xs text-slate-300 line-clamp-2 mb-auto pr-6">{product.name}</div>
+                            {/* 價格 - 最大 */}
+                            <div className="text-lg font-bold text-white mt-1">{formatCurrency(product.price)}</div>
+                            {/* 庫存 - 小字 */}
+                            <div className="text-[10px] text-slate-400">庫存 {product.stock}</div>
+                          </button>
+                          {/* 積分兌換按鈕 */}
+                          {product.points_cost && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); addToCartAsRedemption(product) }}
+                              className="mt-1 w-full text-[10px] bg-yellow-600 hover:bg-yellow-500 text-white py-0.5 rounded text-center transition-colors"
+                              title={`使用 ${product.points_cost} 積分兌換`}
+                            >
+                              🎫 {product.points_cost}點兌換
+                            </button>
+                          )}
+                        </div>
                       )
                     })}
 
@@ -1636,6 +1720,12 @@ export default function POSPage() {
                             {cart[item.indices![0]]?.isNotDelivered && (
                               <span className="ml-2 text-xs bg-orange-500 text-white px-2 py-0.5 rounded">未出貨</span>
                             )}
+                            {cart[item.indices![0]]?.isPointsRedemption && (
+                              <span className="ml-2 text-xs bg-yellow-600 text-white px-2 py-0.5 rounded">🎫 積分兌換</span>
+                            )}
+                            {item.product.is_points_base && !cart[item.indices![0]]?.isFreeGift && !cart[item.indices![0]]?.isPointsRedemption && (
+                              <span className="ml-2 text-xs bg-yellow-500 text-black px-2 py-0.5 rounded">⭐ +{item.quantity}積分</span>
+                            )}
                           </div>
                           <div className="text-xs text-gray-600 dark:text-gray-400">
                             {hasComboDiscount && (
@@ -1812,6 +1902,20 @@ export default function POSPage() {
                   已使用購物金 {formatCurrency(storeCreditUsed)}，餘額將變為 {formatCurrency(selectedCustomer!.store_credit - storeCreditUsed)}
                 </div>
               )}
+              {/* 積分摘要 */}
+              {selectedCustomer && (totalPointsEarned > 0 || totalPointsUsed > 0) && (
+                <div className="mt-2 p-2 bg-yellow-900/20 border border-yellow-600/50 rounded-lg text-xs">
+                  {totalPointsEarned > 0 && (
+                    <div className="text-yellow-400">⭐ 本次獲得 +{totalPointsEarned} 積分</div>
+                  )}
+                  {totalPointsUsed > 0 && (
+                    <div className="text-yellow-400">🎫 本次使用 -{totalPointsUsed} 積分</div>
+                  )}
+                  <div className="text-yellow-300 mt-0.5 font-medium">
+                    結帳後積分：{(selectedCustomer.loyalty_points || 0) + totalPointsEarned - totalPointsUsed} 點
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -1882,11 +1986,18 @@ export default function POSPage() {
                       >
                         <div className="flex items-center justify-between">
                           <div className="font-bold">{customer.customer_name}</div>
-                          <div className={`text-sm font-semibold ${customer.store_credit >= 0
-                            ? 'text-green-600 dark:text-green-400'
-                            : 'text-red-600 dark:text-red-400'
-                            }`}>
-                            ${customer.store_credit?.toFixed(2) || '0.00'}
+                          <div className="flex items-center gap-2">
+                            {(customer.loyalty_points || 0) > 0 && (
+                              <div className="text-xs text-yellow-600 dark:text-yellow-400 font-semibold">
+                                ★{customer.loyalty_points}積
+                              </div>
+                            )}
+                            <div className={`text-sm font-semibold ${customer.store_credit >= 0
+                              ? 'text-green-600 dark:text-green-400'
+                              : 'text-red-600 dark:text-red-400'
+                              }`}>
+                              ${customer.store_credit?.toFixed(2) || '0.00'}
+                            </div>
                           </div>
                         </div>
                         <div className="text-xs text-gray-500 dark:text-gray-400">
@@ -1910,7 +2021,7 @@ export default function POSPage() {
                   + 新增客戶
                 </button>
 
-                {/* 显示选中客户的购物金余额 */}
+                {/* 显示选中客户的购物金余额 & 積分 */}
                 {selectedCustomer && (
                   <div className="mt-2 p-2.5 bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-300 dark:border-blue-700 rounded-lg">
                     <div className="flex items-center justify-between">
@@ -1922,6 +2033,24 @@ export default function POSPage() {
                         ${selectedCustomer.store_credit?.toFixed(2) || '0.00'}
                       </span>
                     </div>
+                    <div className="flex items-center justify-between mt-1">
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">積分</span>
+                      <span className="text-lg font-bold text-yellow-600 dark:text-yellow-400">
+                        ★ {selectedCustomer.loyalty_points || 0} 點
+                      </span>
+                    </div>
+                    {selectedCustomer.store_credit > 0 && (
+                      <button
+                        onClick={() => setUseStoreCredit(!useStoreCredit)}
+                        className={`mt-1.5 w-full py-1.5 rounded text-xs font-medium transition-colors ${
+                          useStoreCredit
+                            ? 'bg-green-600 text-white hover:bg-green-700'
+                            : 'bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-400 dark:hover:bg-gray-500'
+                        }`}
+                      >
+                        {useStoreCredit ? '自動折抵購物金' : '不使用購物金'}
+                      </button>
+                    )}
                     {selectedCustomer.credit_limit > 0 && (
                       <div className="flex items-center justify-between mt-1">
                         <span className="text-xs text-gray-600 dark:text-gray-400">信用額度</span>

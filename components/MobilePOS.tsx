@@ -29,6 +29,7 @@ type Customer = {
     is_active: boolean
     store_credit: number
     credit_limit: number
+    loyalty_points: number
 }
 
 type PaymentAccount = {
@@ -91,6 +92,8 @@ type MobilePOSProps = {
     finalTotal: number
     discountAmount: number
     storeCreditUsed: number
+    useStoreCredit: boolean
+    setUseStoreCredit: (v: boolean) => void
     handleCheckout: () => void
     addToCart: (product: Product, quantity?: number) => void
     removeFromCart: (productId: string, index?: number) => void
@@ -137,6 +140,8 @@ export default function MobilePOS({
     finalTotal,
     discountAmount,
     storeCreditUsed,
+    useStoreCredit,
+    setUseStoreCredit,
     handleCheckout,
     addToCart,
     removeFromCart,
@@ -280,6 +285,7 @@ export default function MobilePOS({
                     is_active: true,
                     store_credit: 0,
                     credit_limit: 0,
+                    loyalty_points: 0,
                 }
 
                 setSelectedCustomer(newCustomer)
@@ -623,6 +629,20 @@ export default function MobilePOS({
                             </div>
                         )}
                     </div>
+                )}
+
+                {/* 購物金開關 */}
+                {selectedCustomer && selectedCustomer.store_credit > 0 && (
+                    <button
+                        onClick={() => setUseStoreCredit(!useStoreCredit)}
+                        className={`w-full py-1.5 rounded text-xs font-medium transition-colors ${
+                            useStoreCredit
+                                ? 'bg-green-600 text-white hover:bg-green-700'
+                                : 'bg-gray-600 text-gray-300 hover:bg-gray-500'
+                        }`}
+                    >
+                        {useStoreCredit ? '自動折抵購物金' : '不使用購物金'}
+                    </button>
                 )}
 
                 {/* 備註輸入框 */}

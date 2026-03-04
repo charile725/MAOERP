@@ -260,6 +260,59 @@ export async function DELETE(
       )
     }
 
+    // 1.4. 退還積分（查找積分日誌並還原）
+    if (sale.customer_code) {
+      const { data: pointsLogs } = await (supabaseServer
+        .from('customer_points_logs') as any)
+        .select('amount')
+        .eq('ref_type', 'sale')
+        .eq('ref_id', id.toString())
+        .eq('customer_code', sale.customer_code)
+
+      if (pointsLogs && pointsLogs.length > 0) {
+        const netPoints = pointsLogs.reduce((sum: number, log: any) => sum + (log.amount || 0), 0)
+
+        if (netPoints !== 0) {
+          const { data: customerForPoints } = await (supabaseServer
+            .from('customers') as any)
+            .select('loyalty_points')
+            .eq('customer_code', sale.customer_code)
+            .single()
+
+          if (customerForPoints) {
+            const newPoints = customerForPoints.loyalty_points - netPoints
+
+            await (supabaseServer
+              .from('customers') as any)
+              .update({ loyalty_points: Math.max(0, newPoints) })
+              .eq('customer_code', sale.customer_code)
+
+            await (supabaseServer
+              .from('customer_points_logs') as any)
+              .insert({
+                customer_code: sale.customer_code,
+                amount: -netPoints,
+                balance_before: customerForPoints.loyalty_points,
+                balance_after: Math.max(0, newPoints),
+                type: 'refund',
+                ref_type: 'sale_delete',
+                ref_id: id.toString(),
+                ref_no: sale.sale_no,
+                note: `刪除銷售單 ${sale.sale_no}，退還積分`,
+              })
+          }
+        }
+
+        // 刪除原積分日誌
+        await (supabaseServer
+          .from('customer_points_logs') as any)
+          .delete()
+          .eq('ref_type', 'sale')
+          .eq('ref_id', id.toString())
+          .eq('customer_code', sale.customer_code)
+      }
+    }
+
     // 1.5. Restore customer store_credit if used (check balance logs)
     if (sale.customer_code) {
       // 查找该销售单使用的购物金记录

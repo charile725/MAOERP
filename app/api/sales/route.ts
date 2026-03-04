@@ -41,6 +41,9 @@ export async function GET(request: NextRequest) {
           cost,
           store_credit_qty,
           store_credit_amount,
+          is_points_redemption,
+          points_earned,
+          points_used,
           products (
             item_code,
             unit
@@ -143,7 +146,7 @@ export async function GET(request: NextRequest) {
     let filteredData = data
     if (keyword) {
       const kw = keyword.toLowerCase()
-      filteredData = data?.filter((sale: any) => {
+      filteredData = (data || []).filter((sale: any) => {
         // 匹配銷售單號
         if (sale.sale_no?.toLowerCase().includes(kw)) return true
         // 匹配客戶
@@ -388,15 +391,78 @@ export async function POST(request: NextRequest) {
     const productIds = draft.items.filter(i => !i.ichiban_kuji_prize_id).map(i => i.product_id)
     const prizeIds = draft.items.filter(i => i.ichiban_kuji_prize_id).map(i => i.ichiban_kuji_prize_id).filter((id): id is string => !!id)
 
-    // 批次查詢商品
-    let productMap = new Map<string, { stock: number; allow_negative: boolean; name: string }>()
+    // 批次查詢商品（含積分欄位）
+    let productMap = new Map<string, { stock: number; allow_negative: boolean; name: string; is_points_base: boolean; points_cost: number | null }>()
     if (productIds.length > 0) {
       const { data: products } = await (supabaseServer
         .from('products') as any)
-        .select('id, stock, allow_negative, name')
+        .select('id, stock, allow_negative, name, is_points_base, points_cost')
         .in('id', productIds)
       if (products) {
         productMap = new Map(products.map((p: any) => [p.id, p]))
+      }
+    }
+
+    // 積分安全檢查：積分底數商品必須有客戶
+    const hasPointsBaseItems = draft.items.some(item => {
+      if (!item.product_id || item.ichiban_kuji_prize_id) return false
+      return productMap.get(item.product_id)?.is_points_base === true
+    })
+    if (hasPointsBaseItems && !draft.customer_code) {
+      await (supabaseServer.from('sales') as any).delete().eq('id', sale.id)
+      return NextResponse.json(
+        { ok: false, error: '銷售積分底數時必須選擇客戶' },
+        { status: 400 }
+      )
+    }
+
+    // 積分兌換安全檢查：必須有客戶且積分足夠
+    const hasRedemptionItems = draft.items.some(item => item.is_points_redemption)
+    if (hasRedemptionItems) {
+      if (!draft.customer_code) {
+        await (supabaseServer.from('sales') as any).delete().eq('id', sale.id)
+        return NextResponse.json(
+          { ok: false, error: '積分兌換時必須選擇客戶' },
+          { status: 400 }
+        )
+      }
+      // 計算需要的積分（從 productMap 取 points_cost）
+      let totalPointsNeeded = 0
+      for (const item of draft.items) {
+        if (item.is_points_redemption && item.product_id) {
+          const product = productMap.get(item.product_id)
+          if (!product?.points_cost) {
+            await (supabaseServer.from('sales') as any).delete().eq('id', sale.id)
+            return NextResponse.json(
+              { ok: false, error: `商品不支援積分兌換：${item.product_id}` },
+              { status: 400 }
+            )
+          }
+          totalPointsNeeded += product.points_cost * item.quantity
+        }
+      }
+      // 計算本次同時獲得的積分（積分底數）
+      let totalPointsEarned = 0
+      for (const item of draft.items) {
+        if (item.product_id && !item.ichiban_kuji_prize_id) {
+          const product = productMap.get(item.product_id)
+          if (product?.is_points_base) {
+            totalPointsEarned += item.quantity
+          }
+        }
+      }
+      const { data: customerForPoints } = await (supabaseServer
+        .from('customers') as any)
+        .select('loyalty_points')
+        .eq('customer_code', draft.customer_code)
+        .single()
+      const currentPoints = customerForPoints?.loyalty_points || 0
+      if (currentPoints + totalPointsEarned < totalPointsNeeded) {
+        await (supabaseServer.from('sales') as any).delete().eq('id', sale.id)
+        return NextResponse.json(
+          { ok: false, error: `積分不足！需要 ${totalPointsNeeded} 積分，目前 ${currentPoints + totalPointsEarned} 積分` },
+          { status: 400 }
+        )
       }
     }
 
@@ -539,11 +605,16 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        const productFromMap = item.product_id ? productMap.get(item.product_id) : null
         const { data: product } = await (supabaseServer
           .from('products') as any)
           .select('name, cost, avg_cost')
           .eq('id', item.product_id)
           .single()
+
+        const isPointsBase = productFromMap?.is_points_base === true
+        const isPointsRedemption = item.is_points_redemption === true
+        const pointsCostPerUnit = productFromMap?.points_cost || 0
 
         return {
           sale_id: sale.id,
@@ -554,6 +625,9 @@ export async function POST(request: NextRequest) {
           snapshot_name: product?.name || null,
           ichiban_kuji_prize_id: item.ichiban_kuji_prize_id || null,
           ichiban_kuji_id: item.ichiban_kuji_id || null,
+          is_points_redemption: isPointsRedemption,
+          points_earned: isPointsBase ? item.quantity : 0,
+          points_used: isPointsRedemption ? (pointsCostPerUnit * item.quantity) : 0,
         }
       })
     )
@@ -570,6 +644,67 @@ export async function POST(request: NextRequest) {
         { ok: false, error: itemsError.message },
         { status: 500 }
       )
+    }
+
+    // 3.5. 處理積分（獲得 + 使用）
+    if (draft.customer_code) {
+      const totalPointsEarned = saleItems.reduce((sum, si) => sum + (si.points_earned || 0), 0)
+      const totalPointsUsed = saleItems.reduce((sum, si) => sum + (si.points_used || 0), 0)
+
+      if (totalPointsEarned > 0 || totalPointsUsed > 0) {
+        const { data: customerForPoints } = await (supabaseServer
+          .from('customers') as any)
+          .select('loyalty_points')
+          .eq('customer_code', draft.customer_code)
+          .single()
+
+        const currentPoints = customerForPoints?.loyalty_points || 0
+        const newPoints = currentPoints + totalPointsEarned - totalPointsUsed
+
+        // 更新客戶積分
+        await (supabaseServer
+          .from('customers') as any)
+          .update({ loyalty_points: newPoints })
+          .eq('customer_code', draft.customer_code)
+
+        // 記錄積分日誌
+        const pointsLogs: any[] = []
+        if (totalPointsEarned > 0) {
+          pointsLogs.push({
+            customer_code: draft.customer_code,
+            amount: totalPointsEarned,
+            balance_before: currentPoints,
+            balance_after: currentPoints + totalPointsEarned,
+            type: 'earn',
+            ref_type: 'sale',
+            ref_id: sale.id,
+            ref_no: saleNo,
+            note: `銷售單 ${saleNo} 獲得積分`,
+          })
+        }
+        if (totalPointsUsed > 0) {
+          const balanceBeforeRedeem = currentPoints + totalPointsEarned
+          pointsLogs.push({
+            customer_code: draft.customer_code,
+            amount: -totalPointsUsed,
+            balance_before: balanceBeforeRedeem,
+            balance_after: balanceBeforeRedeem - totalPointsUsed,
+            type: 'redeem',
+            ref_type: 'sale',
+            ref_id: sale.id,
+            ref_no: saleNo,
+            note: `銷售單 ${saleNo} 積分兌換`,
+          })
+        }
+        if (pointsLogs.length > 0) {
+          const { error: pointsLogError } = await (supabaseServer
+            .from('customer_points_logs') as any)
+            .insert(pointsLogs)
+          if (pointsLogError) {
+            console.error('[Sales API] 積分日誌寫入失敗:', pointsLogError)
+          }
+        }
+      }
     }
 
     // 4. Calculate total with discount

@@ -16,6 +16,8 @@ export type Product = {
   pending_delivery?: number
   created_at?: string
   updated_at?: string
+  is_points_base?: boolean       // 積分底數：賣出一個 = 客戶獲得 1 積分
+  points_cost?: number | null    // 積分兌換所需積分數（null = 不可兌換）
 }
 
 export type Customer = {
@@ -31,6 +33,7 @@ export type Customer = {
   is_active: boolean
   store_credit: number  // 购物金余额（可为负）
   credit_limit: number  // 信用额度（最大欠款）
+  loyalty_points: number  // 積分餘額
 }
 
 export type Vendor = {

@@ -37,6 +37,7 @@ type Customer = {
   is_active: boolean
   store_credit: number  // 购物金余额
   credit_limit: number  // 信用额度
+  loyalty_points: number
 }
 
 type PaymentAccount = {
@@ -160,6 +161,9 @@ export default function POSPage() {
   const [newCustomerPhone, setNewCustomerPhone] = useState('')
   const [addingCustomer, setAddingCustomer] = useState(false)
   const phoneInputRef = useRef<HTMLInputElement>(null)
+
+  // 購物金折抵開關（預設自動折抵）
+  const [useStoreCredit, setUseStoreCredit] = useState(true)
 
   // Customer search
   const [customerSearchQuery, setCustomerSearchQuery] = useState('')
@@ -799,7 +803,7 @@ export default function POSPage() {
   const total = Math.max(0, subtotal - discountAmount)
 
   // 计算购物金抵扣（预览）
-  const storeCreditUsed = selectedCustomer && selectedCustomer.store_credit > 0
+  const storeCreditUsed = useStoreCredit && selectedCustomer && selectedCustomer.store_credit > 0
     ? Math.min(selectedCustomer.store_credit, total)
     : 0
   const finalTotal = total - storeCreditUsed
@@ -923,6 +927,7 @@ export default function POSPage() {
         setDiscountType('none')
         setDiscountValue(0)
         setReceivedAmount('')
+        setUseStoreCredit(true)
         // 重置多元付款
         setIsMultiPayment(false)
         setMultiPayments([{ method: 'cash', amount: '' }])
@@ -1000,6 +1005,7 @@ export default function POSPage() {
         setNote('')
         setDiscountType('none')
         setDiscountValue(0)
+        setUseStoreCredit(true)
         mutateDrafts()
         alert('訂單已暫存')
       } else {
@@ -1125,6 +1131,7 @@ export default function POSPage() {
           is_active: true,
           store_credit: 0,
           credit_limit: 0,
+          loyalty_points: 0,
         }
 
         // Select the newly created customer
@@ -1289,6 +1296,8 @@ export default function POSPage() {
         finalTotal={finalTotal}
         discountAmount={discountAmount}
         storeCreditUsed={storeCreditUsed}
+        useStoreCredit={useStoreCredit}
+        setUseStoreCredit={setUseStoreCredit}
         handleCheckout={handleCheckout}
         addToCart={addToCart}
         removeFromCart={removeFromCart}
@@ -2018,6 +2027,18 @@ export default function POSPage() {
                         ${selectedCustomer.store_credit?.toFixed(2) || '0.00'}
                       </span>
                     </div>
+                    {selectedCustomer.store_credit > 0 && (
+                      <button
+                        onClick={() => setUseStoreCredit(!useStoreCredit)}
+                        className={`mt-1.5 w-full py-1.5 rounded text-xs font-medium transition-colors ${
+                          useStoreCredit
+                            ? 'bg-green-600 text-white hover:bg-green-700'
+                            : 'bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-400 dark:hover:bg-gray-500'
+                        }`}
+                      >
+                        {useStoreCredit ? '自動折抵購物金' : '不使用購物金'}
+                      </button>
+                    )}
                     {selectedCustomer.credit_limit > 0 && (
                       <div className="flex items-center justify-between mt-1">
                         <span className="text-xs text-gray-600 dark:text-gray-400">信用額度</span>
