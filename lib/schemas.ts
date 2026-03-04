@@ -77,6 +77,7 @@ export const saleDraftSchema = z.object({
       selection_option_id: z.string().uuid().optional(), // 複選獎：選中的選項ID
       isNotDelivered: z.boolean().optional(), // 是否未出貨（支援部分出貨）
       is_points_redemption: z.boolean().optional(), // 是否為積分兌換
+      points_used_manual: z.number().int().min(0).optional(), // 手動輸入的積分數
     })
   ).min(1, 'At least one item is required'),
 })

@@ -28,6 +28,7 @@ type CartItem = SaleItem & {
   isFreeGift?: boolean
   isNotDelivered?: boolean
   isPointsRedemption?: boolean  // 積分兌換
+  pointsUsed?: number           // 本次對此商品使用的積分數（手動輸入）
 }
 
 type Customer = {
@@ -640,6 +641,24 @@ export default function POSPage() {
     )
   }
 
+  const setItemPointsUsed = (index: number, points: number) => {
+    setCart((prev) =>
+      prev.map((item, i) => {
+        if (i === index) {
+          const using = Math.max(0, points)
+          return {
+            ...item,
+            pointsUsed: using || undefined,
+            isPointsRedemption: using > 0,
+            isFreeGift: using > 0 ? false : item.isFreeGift,
+            price: using > 0 ? 0 : item.product.price,
+          }
+        }
+        return item
+      })
+    )
+  }
+
   const toggleNotDelivered = (index: number) => {
     setCart((prev) =>
       prev.map((item, i) => {
@@ -807,10 +826,7 @@ export default function POSPage() {
     if (item.product.is_points_base && !item.isFreeGift) return sum + item.quantity
     return sum
   }, 0)
-  const totalPointsUsed = cart.reduce((sum, item) => {
-    if (item.isPointsRedemption && item.product.points_cost) return sum + item.product.points_cost * item.quantity
-    return sum
-  }, 0)
+  const totalPointsUsed = cart.reduce((sum, item) => sum + (item.pointsUsed || 0), 0)
 
   let discountAmount = 0
   if (discountType === 'percent') {
@@ -932,7 +948,8 @@ export default function POSPage() {
             ichiban_kuji_id: item.ichiban_kuji_id,
             selection_option_id: item.selectionOptionId,
             isNotDelivered: item.isNotDelivered || false,
-            is_points_redemption: item.isPointsRedemption || false,
+            is_points_redemption: (item.pointsUsed || 0) > 0,
+            points_used_manual: item.pointsUsed || 0,
           })),
         }),
       })
@@ -1734,7 +1751,7 @@ export default function POSPage() {
                             {formatCurrency(item.price)}
                             {isGrouped && <span className="ml-2">× {item.quantity} 抽</span>}
                           </div>
-                          <div className="flex items-center gap-3 mt-1">
+                          <div className="flex items-center gap-3 mt-1 flex-wrap">
                             {!item.ichiban_kuji_id && (
                               <label className="flex items-center gap-1 cursor-pointer">
                                 <input
@@ -1755,6 +1772,23 @@ export default function POSPage() {
                               />
                               <span className="text-xs text-gray-600 dark:text-gray-400">未出貨</span>
                             </label>
+                            {selectedCustomer && !item.ichiban_kuji_id && (
+                              <div className="flex items-center gap-1">
+                                <span className="text-xs text-yellow-400">🎫</span>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={cart[item.indices![0]]?.pointsUsed || ''}
+                                  onChange={(e) => setItemPointsUsed(item.indices![0], parseInt(e.target.value) || 0)}
+                                  placeholder="積分"
+                                  className="w-16 rounded border border-yellow-500 bg-slate-700 px-1.5 py-0.5 text-xs text-yellow-300 placeholder:text-gray-500 focus:outline-none focus:border-yellow-300"
+                                />
+                                <span className="text-xs text-yellow-400">點</span>
+                                {(cart[item.indices![0]]?.pointsUsed || 0) > 0 && (
+                                  <button onClick={() => setItemPointsUsed(item.indices![0], 0)} className="text-xs text-gray-500 hover:text-gray-300">×</button>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
                         <button

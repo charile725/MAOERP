@@ -417,29 +417,14 @@ export async function POST(request: NextRequest) {
     }
 
     // 積分兌換安全檢查：必須有客戶且積分足夠
-    const hasRedemptionItems = draft.items.some(item => item.is_points_redemption)
-    if (hasRedemptionItems) {
+    const totalManualPointsNeeded = draft.items.reduce((sum, item) => sum + (item.points_used_manual || 0), 0)
+    if (totalManualPointsNeeded > 0) {
       if (!draft.customer_code) {
         await (supabaseServer.from('sales') as any).delete().eq('id', sale.id)
         return NextResponse.json(
           { ok: false, error: '積分兌換時必須選擇客戶' },
           { status: 400 }
         )
-      }
-      // 計算需要的積分（從 productMap 取 points_cost）
-      let totalPointsNeeded = 0
-      for (const item of draft.items) {
-        if (item.is_points_redemption && item.product_id) {
-          const product = productMap.get(item.product_id)
-          if (!product?.points_cost) {
-            await (supabaseServer.from('sales') as any).delete().eq('id', sale.id)
-            return NextResponse.json(
-              { ok: false, error: `商品不支援積分兌換：${item.product_id}` },
-              { status: 400 }
-            )
-          }
-          totalPointsNeeded += product.points_cost * item.quantity
-        }
       }
       // 計算本次同時獲得的積分（積分底數）
       let totalPointsEarned = 0
@@ -457,10 +442,10 @@ export async function POST(request: NextRequest) {
         .eq('customer_code', draft.customer_code)
         .single()
       const currentPoints = customerForPoints?.loyalty_points || 0
-      if (currentPoints + totalPointsEarned < totalPointsNeeded) {
+      if (currentPoints + totalPointsEarned < totalManualPointsNeeded) {
         await (supabaseServer.from('sales') as any).delete().eq('id', sale.id)
         return NextResponse.json(
-          { ok: false, error: `積分不足！需要 ${totalPointsNeeded} 積分，目前 ${currentPoints + totalPointsEarned} 積分` },
+          { ok: false, error: `積分不足！需要 ${totalManualPointsNeeded} 積分，目前 ${currentPoints + totalPointsEarned} 積分` },
           { status: 400 }
         )
       }
@@ -613,8 +598,8 @@ export async function POST(request: NextRequest) {
           .single()
 
         const isPointsBase = productFromMap?.is_points_base === true
-        const isPointsRedemption = item.is_points_redemption === true
-        const pointsCostPerUnit = productFromMap?.points_cost || 0
+        const manualPointsUsed = item.points_used_manual || 0
+        const isPointsRedemption = manualPointsUsed > 0
 
         return {
           sale_id: sale.id,
@@ -626,8 +611,8 @@ export async function POST(request: NextRequest) {
           ichiban_kuji_prize_id: item.ichiban_kuji_prize_id || null,
           ichiban_kuji_id: item.ichiban_kuji_id || null,
           is_points_redemption: isPointsRedemption,
-          points_earned: isPointsBase ? item.quantity : 0,
-          points_used: isPointsRedemption ? (pointsCostPerUnit * item.quantity) : 0,
+          points_earned: isPointsBase && !isPointsRedemption ? item.quantity : 0,
+          points_used: manualPointsUsed,
         }
       })
     )
