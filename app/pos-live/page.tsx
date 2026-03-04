@@ -1347,6 +1347,7 @@ export default function POSPage() {
         }}
         fetchCustomers={mutateCustomers}
         fetchProducts={mutateProducts}
+        setItemPointsUsed={setItemPointsUsed}
       />
     )
   }

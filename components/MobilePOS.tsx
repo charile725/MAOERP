@@ -19,6 +19,7 @@ type CartItem = {
     ichiban_kuji_id?: string
     isFreeGift?: boolean
     isNotDelivered?: boolean
+    pointsUsed?: number
 }
 
 type Customer = {
@@ -121,6 +122,8 @@ type MobilePOSProps = {
     fetchCustomers: () => void
     // 刷新商品
     fetchProducts: () => void
+    // 積分
+    setItemPointsUsed: (index: number, points: number) => void
 }
 
 export default function MobilePOS({
@@ -165,6 +168,7 @@ export default function MobilePOS({
     setBusinessDate,
     fetchCustomers,
     fetchProducts,
+    setItemPointsUsed,
 }: MobilePOSProps) {
     const [showCameraScanner, setShowCameraScanner] = useState(false)
     const [showCustomerPicker, setShowCustomerPicker] = useState(false)
@@ -569,6 +573,26 @@ export default function MobilePOS({
                                     />
                                     <span className="text-xs text-slate-400">未出貨</span>
                                 </label>
+                                {selectedCustomer && !item.ichiban_kuji_prize_id && (
+                                    <div className="flex items-center gap-1 ml-auto">
+                                        <span className="text-xs text-yellow-400">🎫</span>
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            value={item.pointsUsed || ''}
+                                            onChange={(e) => setItemPointsUsed(index, parseInt(e.target.value) || 0)}
+                                            placeholder="積分"
+                                            className="w-16 rounded border border-yellow-500 bg-slate-700 px-1.5 py-0.5 text-xs text-yellow-300 placeholder:text-yellow-700"
+                                        />
+                                        <span className="text-xs text-yellow-400">點</span>
+                                        {(item.pointsUsed || 0) > 0 && (
+                                            <button
+                                                onClick={() => setItemPointsUsed(index, 0)}
+                                                className="text-xs text-slate-500 hover:text-slate-300"
+                                            >×</button>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     ))
@@ -630,6 +654,17 @@ export default function MobilePOS({
                         )}
                     </div>
                 )}
+
+                {/* 積分摘要 */}
+                {selectedCustomer && cart.some(item => (item.pointsUsed || 0) > 0) && (() => {
+                    const totalPointsUsed = cart.reduce((sum, item) => sum + (item.pointsUsed || 0), 0)
+                    return (
+                        <div className="text-xs text-yellow-400 flex justify-between">
+                            <span>🎫 本次使用積分</span>
+                            <span>-{totalPointsUsed} 點（剩 {(selectedCustomer.loyalty_points || 0) - totalPointsUsed} 點）</span>
+                        </div>
+                    )
+                })()}
 
                 {/* 購物金開關 */}
                 {selectedCustomer && selectedCustomer.store_credit > 0 && (
