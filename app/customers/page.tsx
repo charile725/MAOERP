@@ -417,6 +417,7 @@ export default function CustomersPage() {
                     {!showProfit && <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400">門市地址</th>}
                     {!showProfit && <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400">宅配地址</th>}
                     <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600 dark:text-gray-400">購物金</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600 dark:text-gray-400">積分</th>
                     {showProfit && (
                       <th
                         className="px-4 py-2 text-right text-xs font-semibold text-gray-600 dark:text-gray-400 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 select-none"
@@ -474,6 +475,11 @@ export default function CustomersPage() {
                             : 'text-red-600 dark:text-red-400'
                             }`}>
                             ${customer.store_credit?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-right">
+                          <span className="font-bold text-purple-600 dark:text-purple-400">
+                            {(customer.loyalty_points ?? 0).toLocaleString()}
                           </span>
                         </td>
                         {showProfit && (
