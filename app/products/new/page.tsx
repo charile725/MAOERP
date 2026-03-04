@@ -9,7 +9,7 @@ export default function NewProductPage() {
 
   useEffect(() => {
     fetch('/api/auth/me').then(r => r.json()).then(data => {
-      if (data?.role !== 'admin') router.replace('/products')
+      if (data?.data?.role !== 'admin') router.replace('/products')
     })
   }, [])
   const [error, setError] = useState('')
