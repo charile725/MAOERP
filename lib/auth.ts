@@ -12,7 +12,7 @@ export type User = {
   is_active: boolean
 }
 
-const SESSION_COOKIE_NAME = 'session'
+const SESSION_COOKIE_NAME = 'session_v2'
 const SESSION_DURATION = 7 * 24 * 60 * 60 * 1000 // 7 days
 
 export async function hashPassword(password: string): Promise<string> {
