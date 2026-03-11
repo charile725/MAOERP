@@ -836,14 +836,14 @@ export default function ARPageV2() {
                                       {account.sale_item ? (
                                         <div className="min-h-[44px] flex flex-col justify-center">
                                           <div className="font-medium">{account.sale_item.snapshot_name}</div>
-                                          <div className="text-xs text-gray-500 dark:text-gray-400">{account.sale_item.products.item_code}</div>
+                                          <div className="text-xs text-gray-500 dark:text-gray-400">{account.sale_item.products?.item_code}</div>
                                         </div>
                                       ) : account.sale_items && account.sale_items.length > 0 ? (
                                         <div>
                                           {account.sale_items.map((item, idx) => (
                                             <div key={item.id} className={`min-h-[44px] flex flex-col justify-center ${idx > 0 ? 'border-t border-gray-200 dark:border-gray-700' : ''}`}>
                                               <div className="font-medium">{item.snapshot_name}</div>
-                                              <div className="text-xs text-gray-500 dark:text-gray-400">{item.products.item_code}</div>
+                                              <div className="text-xs text-gray-500 dark:text-gray-400">{item.products?.item_code}</div>
                                             </div>
                                           ))}
                                         </div>
@@ -853,12 +853,12 @@ export default function ARPageV2() {
                                     </td>
                                     <td className="py-3 text-right text-sm align-top text-gray-900 dark:text-gray-100 pr-4">
                                       {account.sale_item ? (
-                                        <div className="min-h-[44px] flex items-center justify-end">{account.sale_item.quantity} {account.sale_item.products.unit}</div>
+                                        <div className="min-h-[44px] flex items-center justify-end">{account.sale_item.quantity} {account.sale_item.products?.unit}</div>
                                       ) : account.sale_items && account.sale_items.length > 0 ? (
                                         <div>
                                           {account.sale_items.map((item, idx) => (
                                             <div key={item.id} className={`min-h-[44px] flex items-center justify-end ${idx > 0 ? 'border-t border-gray-200 dark:border-gray-700' : ''}`}>
-                                              {item.quantity} {item.products.unit}
+                                              {item.quantity} {item.products?.unit}
                                             </div>
                                           ))}
                                         </div>
