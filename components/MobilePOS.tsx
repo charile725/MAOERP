@@ -123,7 +123,7 @@ type MobilePOSProps = {
     // 刷新商品
     fetchProducts: () => void
     // 積分
-    setItemPointsUsed: (index: number, points: number) => void
+    setItemPointsUsed?: (index: number, points: number) => void
 }
 
 export default function MobilePOS({
@@ -580,7 +580,7 @@ export default function MobilePOS({
                                             type="number"
                                             min={0}
                                             value={item.pointsUsed || ''}
-                                            onChange={(e) => setItemPointsUsed(index, parseInt(e.target.value) || 0)}
+                                            onChange={(e) => setItemPointsUsed?.(index, parseInt(e.target.value) || 0)}
                                             placeholder="積分"
                                             className="w-16 rounded border border-yellow-500 bg-slate-700 px-1.5 py-0.5 text-xs text-yellow-300 placeholder:text-yellow-700"
                                         />
