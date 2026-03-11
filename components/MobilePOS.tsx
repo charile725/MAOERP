@@ -587,7 +587,7 @@ export default function MobilePOS({
                                         <span className="text-xs text-yellow-400">點</span>
                                         {(item.pointsUsed || 0) > 0 && (
                                             <button
-                                                onClick={() => setItemPointsUsed(index, 0)}
+                                                onClick={() => setItemPointsUsed?.(index, 0)}
                                                 className="text-xs text-slate-500 hover:text-slate-300"
                                             >×</button>
                                         )}
