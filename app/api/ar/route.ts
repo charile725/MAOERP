@@ -152,8 +152,15 @@ export async function GET(request: NextRequest) {
     const itemIds = (accounts as any[]).filter(a => a.sale_item_id).map(a => a.sale_item_id)
     const saleIds = [...new Set((accounts as any[]).filter(a => a.ref_type === 'sale' || a.ref_type === 'sale_correction').map(a => a.ref_id))]
 
+    // 將 saleIds 切分成每批 50 個，避免 URL 過長導致查詢失敗
+    const chunkArray = <T>(arr: T[], size: number): T[][] =>
+      Array.from({ length: Math.ceil(arr.length / size) }, (_, i) =>
+        arr.slice(i * size, (i + 1) * size)
+      )
+    const saleIdChunks = chunkArray(saleIds, 50)
+
     // 並行查詢所有相關資料
-    const [customersResult, itemsResult, salesResult, saleItemsResult] = await Promise.all([
+    const [customersResult, itemsResult, ...batchResults] = await Promise.all([
       // 查詢客戶（包含購物金餘額）
       supabaseServer
         .from('customers')
@@ -166,21 +173,26 @@ export async function GET(request: NextRequest) {
           .select('id, quantity, price, subtotal, product_id, sale_id, snapshot_name, products:product_id(item_code, unit)')
           .in('id', itemIds)
         : Promise.resolve({ data: [] }),
-      // 查詢 sales
-      saleIds.length > 0
-        ? supabaseServer
+      // 分批查詢 sales
+      ...saleIdChunks.map(chunk =>
+        supabaseServer
           .from('sales')
           .select('id, sale_no, sale_date, payment_method')
-          .in('id', saleIds)
-        : Promise.resolve({ data: [] }),
-      // 查詢完整 sale_items
-      saleIds.length > 0
-        ? supabaseServer
+          .in('id', chunk)
+      ),
+      // 分批查詢完整 sale_items
+      ...saleIdChunks.map(chunk =>
+        supabaseServer
           .from('sale_items')
           .select('id, quantity, price, subtotal, product_id, sale_id, snapshot_name, products:product_id(item_code, unit)')
-          .in('sale_id', saleIds)
-        : Promise.resolve({ data: [] })
+          .in('sale_id', chunk)
+      ),
     ])
+
+    // 合併分批結果
+    const half = saleIdChunks.length
+    const salesData = batchResults.slice(0, half).flatMap((r: any) => r.data || [])
+    const saleItemsData = batchResults.slice(half).flatMap((r: any) => r.data || [])
 
     // 建立 Map
     const customersMap = new Map(
@@ -190,10 +202,10 @@ export async function GET(request: NextRequest) {
       (itemsResult.data as any[])?.map(item => [item.id, item]) || []
     )
     const salesMap = new Map(
-      (salesResult.data as any[])?.map(s => [s.id, s]) || []
+      salesData.map((s: any) => [s.id, s])
     )
     const saleItemsBySaleId = new Map<string, any[]>()
-    saleItemsResult.data?.forEach((item: any) => {
+    saleItemsData.forEach((item: any) => {
       if (!saleItemsBySaleId.has(item.sale_id)) {
         saleItemsBySaleId.set(item.sale_id, [])
       }
