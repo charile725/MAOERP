@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
 
     let query = supabaseServer
       .from('products')
-      .select('*', { count: 'exact' })
+      .select('*, product_barcodes(barcode)', { count: 'exact' })
 
     // Filter by active status
     if (active !== null) {

@@ -11,6 +11,7 @@ type Product = {
   barcode?: string | null
   cost: number
   unit: string
+  product_barcodes?: { barcode: string }[]
 }
 
 type Prize = {
@@ -222,9 +223,10 @@ export default function EditIchibanKujiPage() {
 
     const results = products.filter(p =>
       p.barcode?.toLowerCase().includes(keyword.toLowerCase()) ||
+      p.product_barcodes?.some(b => b.barcode.toLowerCase().includes(keyword.toLowerCase())) ||
       p.name.toLowerCase().includes(keyword.toLowerCase()) ||
       p.item_code.toLowerCase().includes(keyword.toLowerCase())
-    ).slice(0, 8)
+    ).slice(0, 20)
 
     setSearchResults({ ...searchResults, [index]: results })
   }
@@ -284,10 +286,11 @@ export default function EditIchibanKujiPage() {
     const results = products.filter(p =>
       !alreadySelected.has(p.id) && (
         p.barcode?.toLowerCase().includes(keyword.toLowerCase()) ||
+        p.product_barcodes?.some(b => b.barcode.toLowerCase().includes(keyword.toLowerCase())) ||
         p.name.toLowerCase().includes(keyword.toLowerCase()) ||
         p.item_code.toLowerCase().includes(keyword.toLowerCase())
       )
-    ).slice(0, 8)
+    ).slice(0, 20)
     setSelectionSearchResults({ ...selectionSearchResults, [index]: results })
   }
 
@@ -332,9 +335,10 @@ export default function EditIchibanKujiPage() {
 
     const results = products.filter(p =>
       p.barcode?.toLowerCase().includes(keyword.toLowerCase()) ||
+      p.product_barcodes?.some(b => b.barcode.toLowerCase().includes(keyword.toLowerCase())) ||
       p.name.toLowerCase().includes(keyword.toLowerCase()) ||
       p.item_code.toLowerCase().includes(keyword.toLowerCase())
-    ).slice(0, 8)
+    ).slice(0, 20)
 
     setLastPrizeSearchResults(results)
   }
