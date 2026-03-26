@@ -939,6 +939,7 @@ export default function POSPage() {
           note: note || undefined,
           discount_type: discountType,
           discount_value: discountValue,
+          use_store_credit: useStoreCredit,
           // 傳送每個品項的出貨狀態（官方套獎品 realProductId 為 null）
           items: checkoutCart.map((item) => ({
             product_id: item.ichiban_kuji_prize_id ? (item.realProductId ?? null) : item.product_id,

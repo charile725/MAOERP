@@ -708,7 +708,7 @@ export async function POST(request: NextRequest) {
     let storeCreditUsed = 0
     let finalTotal = total
 
-    if (draft.customer_code) {
+    if (draft.customer_code && draft.use_store_credit !== false) {
       // 获取客户购物金余额
       const { data: customer, error: customerError } = await (supabaseServer
         .from('customers') as any)

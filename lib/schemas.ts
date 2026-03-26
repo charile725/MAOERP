@@ -67,6 +67,7 @@ export const saleDraftSchema = z.object({
       amount: z.number().positive('Amount must be positive'),
     })
   ).optional(),
+  use_store_credit: z.boolean().optional().default(true),
   items: z.array(
     z.object({
       product_id: z.string().uuid().optional().nullable(), // nullable for official ichiban kuji prizes
