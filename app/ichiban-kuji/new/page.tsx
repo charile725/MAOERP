@@ -55,6 +55,7 @@ export default function NewIchibanKujiPage() {
   const [vendors, setVendors] = useState<Vendor[]>([])
   const [vendorCode, setVendorCode] = useState('')
   const [products, setProducts] = useState<Product[]>([])
+  const [productsLoaded, setProductsLoaded] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [searchInputs, setSearchInputs] = useState<{ [key: number]: string }>({})
@@ -84,6 +85,8 @@ export default function NewIchibanKujiPage() {
       }
     } catch (err) {
       console.error('Failed to fetch products:', err)
+    } finally {
+      setProductsLoaded(true)
     }
   }
 
@@ -946,8 +949,9 @@ export default function NewIchibanKujiPage() {
                             value={selectionSearchInputs[index] || ''}
                             onChange={(e) => searchSelectionProduct(index, e.target.value)}
                             onBlur={() => clearSelectionSearch(index)}
-                            className="w-full rounded border border-violet-300 bg-white px-2 py-1 text-sm text-gray-900 dark:border-violet-600 dark:bg-gray-700 dark:text-gray-100"
-                            placeholder="搜尋商品加入選項..."
+                            disabled={!productsLoaded}
+                            className="w-full rounded border border-violet-300 bg-white px-2 py-1 text-sm text-gray-900 disabled:bg-gray-100 disabled:text-gray-400 dark:border-violet-600 dark:bg-gray-700 dark:text-gray-100 dark:disabled:bg-gray-600"
+                            placeholder={productsLoaded ? "搜尋商品加入選項..." : "商品載入中..."}
                             autoComplete="off"
                           />
                           {selectionSearchResults[index] && selectionSearchResults[index].length > 0 && (
@@ -967,6 +971,11 @@ export default function NewIchibanKujiPage() {
                                   </div>
                                 </div>
                               ))}
+                            </div>
+                          )}
+                          {selectionSearchResults[index] && selectionSearchResults[index].length === 0 && (
+                            <div className="absolute z-[9999] mt-1 w-full min-w-[300px] rounded-md border border-gray-300 bg-white shadow-xl dark:border-gray-600 dark:bg-gray-700">
+                              <div className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">找不到商品</div>
                             </div>
                           )}
                         </div>
