@@ -375,14 +375,15 @@ export default function BarcodePrintPage() {
           }
 
           .meta-row .name {
-            display: block !important;
+            display: -webkit-box !important;
+            -webkit-box-orient: vertical !important;
+            -webkit-line-clamp: 2 !important;
+            overflow: hidden !important;
             font-size: ${formatConfig.nameFontSize}pt !important;
             font-weight: 600 !important;
             line-height: 1.2 !important;
             text-align: center !important;
-            white-space: nowrap !important;
-            overflow: hidden !important;
-            text-overflow: ellipsis !important;
+            word-break: break-word !important;
             width: 100% !important;
             max-width: 100% !important;
           }
