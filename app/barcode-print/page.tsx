@@ -43,8 +43,8 @@ const FORMATS = {
     labelWidth: 58,
     labelHeight: 18,
     barcodeHeight: 7,
-    nameFontSize: 6,
-    codeFontSize: 5.5,
+    nameFontSize: 5,
+    codeFontSize: 5,
     perPage: 1,
   },
   'label-50x30': {
@@ -55,8 +55,8 @@ const FORMATS = {
     labelWidth: 48,
     labelHeight: 28,
     barcodeHeight: 10,
-    nameFontSize: 7,
-    codeFontSize: 6,
+    nameFontSize: 5.5,
+    codeFontSize: 5,
     perPage: 1,
   },
   'label-4x10-a4': {
@@ -67,8 +67,8 @@ const FORMATS = {
     labelWidth: 48,
     labelHeight: 25,
     barcodeHeight: 8,
-    nameFontSize: 6,
-    codeFontSize: 5.5,
+    nameFontSize: 5,
+    codeFontSize: 4.5,
     perPage: 40,
   },
 }
@@ -209,7 +209,7 @@ export default function BarcodePrintPage() {
     const estWidthMm = name.length * maxPt * 0.352778 * 0.65
     if (estWidthMm <= availMm) return maxPt
     const scaled = maxPt * (availMm / estWidthMm)
-    return Math.max(scaled, 3.5) // 最小 3.5pt
+    return Math.max(scaled, 2) // 最小 2pt
   }
 
   const handlePrint = () => {
@@ -347,7 +347,8 @@ export default function BarcodePrintPage() {
             display: flex !important;
             flex-direction: column !important;
             align-items: center !important;
-            justify-content: space-between !important;
+            justify-content: center !important;
+            gap: 0.8mm !important;
             background: #fff !important;
             color: #000 !important;
             box-sizing: border-box !important;
@@ -371,8 +372,6 @@ export default function BarcodePrintPage() {
             display: flex !important;
             justify-content: center !important;
             align-items: center !important;
-            flex: 1 !important;
-            min-height: 0 !important;
             width: 100% !important;
             overflow: hidden !important;
           }
