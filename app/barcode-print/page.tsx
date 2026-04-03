@@ -170,17 +170,6 @@ export default function BarcodePrintPage() {
     }
   }
 
-  // 根據文字長度動態縮小字體，保持單行不換行
-  const calcNameFontSize = (name: string): number => {
-    const maxPt = FORMAT.nameFontSize
-    const availMm = FORMAT.labelWidth - 3 // 扣掉左右 padding
-    // CJK 字元約 1em 寬，Latin 約 0.6em；混合取 0.65
-    const estWidthMm = name.length * maxPt * 0.352778 * 0.65
-    if (estWidthMm <= availMm) return maxPt
-    const scaled = maxPt * (availMm / estWidthMm)
-    return Math.max(scaled, 2) // 最小 2pt
-  }
-
   const handlePrint = () => {
     window.print()
   }
@@ -347,39 +336,40 @@ export default function BarcodePrintPage() {
             max-height: 100% !important;
           }
 
+          .meta-row {
+            height: 2mm !important;
+            width: 100% !important;
+            min-width: 0 !important;
+            overflow: hidden !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            flex-shrink: 0 !important;
+          }
+
           .meta-row .name {
             display: block !important;
             overflow: hidden !important;
             white-space: nowrap !important;
             text-overflow: ellipsis !important;
-            font-size: ${FORMAT.nameFontSize}pt;
+            font-size: 4pt !important;
             font-weight: 400 !important;
-            line-height: 1.2 !important;
-            text-align: center !important;
+            line-height: 1 !important;
             width: 100% !important;
-            max-width: 100% !important;
+            text-align: center !important;
           }
 
           .meta-row .code,
           .meta-row .price {
             display: inline !important;
-            font-size: ${FORMAT.codeFontSize}pt !important;
+            font-size: 4pt !important;
             font-weight: 400 !important;
-            line-height: 1.2 !important;
-            text-align: center !important;
+            line-height: 1 !important;
           }
 
           .meta-row .price {
-            margin-left: 1.5mm !important;
-            font-weight: 700 !important;
-          }
-
-          .meta-row {
-            text-align: center !important;
-            width: 100% !important;
-            min-width: 0 !important;
-            flex-shrink: 0 !important;
-            overflow: hidden !important;
+            margin-left: 1mm !important;
+            font-weight: 600 !important;
           }
         }
       `}</style>
@@ -594,7 +584,7 @@ export default function BarcodePrintPage() {
             Array.from({ length: item.copies }).map((_, idx) => (
               <div key={`${item.id}-${item.source}-${idx}`} className="label">
                 <div className="meta-row">
-                  <span className="name" style={{ fontSize: `${calcNameFontSize(item.name).toFixed(1)}pt` }}>{item.name}</span>
+                  <span className="name">{item.name}</span>
                 </div>
                 <div className="barcode-wrap">
                   <img
