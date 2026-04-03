@@ -32,15 +32,19 @@ type IchibanKuji = {
   }[]
 }
 
-// 固定格式：60×20mm 標籤貼紙
-const FORMAT = {
-  pageWidth: 60,
-  pageHeight: 20,
-  labelWidth: 58,
-  labelHeight: 18,
-  barcodeHeight: 10,
-  nameFontSize: 4.5,
-  codeFontSize: 4.5,
+const FORMATS = {
+  'label-60x20': {
+    name: '貼紙 6×2cm',
+    description: '60×20mm 標籤貼紙（熱感/標籤機）',
+    pageWidth: 60,
+    pageHeight: 20,
+    labelWidth: 58,
+    labelHeight: 18,
+    barcodeHeight: 7,
+    nameFontSize: 4,
+    codeFontSize: 4,
+    perPage: 1,
+  },
 }
 
 export default function BarcodePrintPage() {
@@ -61,6 +65,7 @@ export default function BarcodePrintPage() {
     copies: number
     source: 'product' | 'prize' | 'kuji'
   }[]>([])
+  const format = 'label-60x20' as const
   const [productSearchKeyword, setProductSearchKeyword] = useState('')
   const [kujiSearchKeyword, setKujiSearchKeyword] = useState('')
 
@@ -249,14 +254,16 @@ export default function BarcodePrintPage() {
   })
 
   const totalLabels = selectedItems.reduce((sum, item) => sum + item.copies, 0)
+  const formatConfig = FORMATS[format]
+  const isA4 = format === 'label-4x10-a4'
 
   return (
     <>
       <style jsx global>{`
         @media print {
           @page {
-            size: ${FORMAT.pageWidth}mm ${FORMAT.pageHeight}mm landscape;
-            margin: 0;
+            size: ${isA4 ? 'A4 portrait' : `${formatConfig.pageWidth}mm ${formatConfig.pageHeight}mm landscape`};
+            margin: ${isA4 ? '5mm 3mm' : '0'};
           }
 
           html, body {
@@ -289,7 +296,10 @@ export default function BarcodePrintPage() {
           }
 
           .print-area {
-            display: block !important;
+            display: ${isA4 ? 'flex' : 'block'} !important;
+            ${isA4 ? 'flex-wrap: wrap !important;' : ''}
+            ${isA4 ? 'justify-content: center !important;' : ''}
+            ${isA4 ? 'gap: 0 !important;' : ''}
             background: #fff !important;
             width: 100% !important;
             margin: 0 !important;
@@ -300,19 +310,20 @@ export default function BarcodePrintPage() {
             display: flex !important;
             flex-direction: column !important;
             align-items: center !important;
-            justify-content: center !important;
-            gap: 0.5mm !important;
+            justify-content: space-between !important;
             background: #fff !important;
             color: #000 !important;
             box-sizing: border-box !important;
             text-align: center !important;
             overflow: hidden !important;
-            width: ${FORMAT.labelWidth}mm !important;
-            height: ${FORMAT.labelHeight}mm !important;
+            width: ${formatConfig.labelWidth}mm !important;
+            height: ${formatConfig.labelHeight}mm !important;
             padding: 1mm 1.5mm !important;
-            border: none !important;
-            page-break-after: always !important;
-            margin: 0 auto !important;
+            ${isA4 ? 'border: 0.5px solid #eee !important;' : 'border: none !important;'}
+            ${!isA4 ? `
+              page-break-after: always !important;
+              margin: 0 auto !important;
+            ` : ''}
           }
 
           .label:last-child {
@@ -323,49 +334,53 @@ export default function BarcodePrintPage() {
             display: flex !important;
             justify-content: center !important;
             align-items: center !important;
+            flex: 1 !important;
+            min-height: 0 !important;
             width: 100% !important;
-            height: ${FORMAT.barcodeHeight}mm !important;
-            flex-shrink: 0 !important;
             overflow: hidden !important;
           }
 
           .barcode-wrap img {
             display: block !important;
-            height: 100% !important;
+            height: ${formatConfig.barcodeHeight}mm !important;
             width: auto !important;
             max-width: 100% !important;
-          }
-
-          .meta-row {
-            width: 100% !important;
-            min-width: 0 !important;
-            overflow: hidden !important;
-            text-align: center !important;
-            flex-shrink: 0 !important;
+            max-height: 100% !important;
           }
 
           .meta-row .name {
             display: block !important;
-            overflow: hidden !important;
+            font-size: ${formatConfig.nameFontSize}pt !important;
+            font-weight: 600 !important;
+            line-height: 1.2 !important;
+            text-align: center !important;
             white-space: nowrap !important;
+            overflow: hidden !important;
             text-overflow: ellipsis !important;
-            font-size: 4pt !important;
-            font-weight: 400 !important;
-            line-height: 1.3 !important;
             width: 100% !important;
+            max-width: 100% !important;
           }
 
           .meta-row .code,
           .meta-row .price {
             display: inline !important;
-            font-size: 4pt !important;
+            font-size: ${formatConfig.codeFontSize}pt !important;
             font-weight: 400 !important;
-            line-height: 1.3 !important;
+            line-height: 1.2 !important;
+            text-align: center !important;
           }
 
           .meta-row .price {
-            margin-left: 1mm !important;
-            font-weight: 600 !important;
+            margin-left: 1.5mm !important;
+            font-weight: 700 !important;
+          }
+
+          .meta-row {
+            text-align: center !important;
+            width: 100% !important;
+            min-width: 0 !important;
+            flex-shrink: 0 !important;
+            overflow: hidden !important;
           }
         }
       `}</style>
@@ -584,7 +599,7 @@ export default function BarcodePrintPage() {
                 </div>
                 <div className="barcode-wrap">
                   <img
-                    src={`/api/barcode?text=${encodeURIComponent(item.barcode)}&type=code128&scale=0.4&height=${FORMAT.barcodeHeight}`}
+                    src={`/api/barcode?text=${encodeURIComponent(item.barcode)}&type=code128&scale=${isA4 ? '0.5' : '0.4'}&height=${formatConfig.barcodeHeight}`}
                     alt={item.barcode}
                   />
                 </div>
