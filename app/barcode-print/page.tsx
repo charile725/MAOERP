@@ -256,13 +256,6 @@ export default function BarcodePrintPage() {
   const totalLabels = selectedItems.reduce((sum, item) => sum + item.copies, 0)
   const formatConfig = FORMATS[format]
 
-  const calcNameFontSize = (name: string): string => {
-    const maxPt = formatConfig.nameFontSize
-    const availMm = formatConfig.labelWidth - 3
-    const estWidthMm = name.length * maxPt * 0.352778 * 0.65
-    if (estWidthMm <= availMm) return `${maxPt}pt`
-    return `${(maxPt * availMm / estWidthMm).toFixed(1)}pt`
-  }
   const isA4 = false
 
   return (
@@ -603,7 +596,13 @@ export default function BarcodePrintPage() {
             Array.from({ length: item.copies }).map((_, idx) => (
               <div key={`${item.id}-${item.source}-${idx}`} className="label">
                 <div className="meta-row">
-                  <span className="name" style={{ fontSize: calcNameFontSize(item.name) }}>{item.name}</span>
+                  <svg viewBox="0 0 550 14" width={`${formatConfig.labelWidth - 3}mm`} height="1.8mm" style={{ display: 'block' }}>
+                    <text x="275" y="11" textAnchor="middle" fontSize="11" fontWeight="400" fill="black"
+                      textLength={item.name.length > 38 ? '550' : undefined}
+                      lengthAdjust="spacingAndGlyphs">
+                      {item.name}
+                    </text>
+                  </svg>
                 </div>
                 <div className="barcode-wrap">
                   <img
