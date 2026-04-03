@@ -336,7 +336,7 @@ export default function BarcodePrintPage() {
             display: flex !important;
             flex-direction: column !important;
             align-items: center !important;
-            justify-content: center !important;
+            justify-content: space-between !important;
             background: #fff !important;
             color: #000 !important;
             box-sizing: border-box !important;
@@ -344,7 +344,7 @@ export default function BarcodePrintPage() {
             overflow: hidden !important;
             width: ${formatConfig.labelWidth}mm !important;
             height: ${formatConfig.labelHeight}mm !important;
-            padding: ${isA4 ? '0.5mm 1mm' : '0.5mm 1mm'} !important;
+            padding: 1mm 1.5mm !important;
             ${isA4 ? 'border: 0.5px solid #eee !important;' : 'border: none !important;'}
             ${!isA4 ? `
               page-break-after: always !important;
@@ -360,10 +360,10 @@ export default function BarcodePrintPage() {
             display: flex !important;
             justify-content: center !important;
             align-items: center !important;
-            height: ${formatConfig.barcodeHeight}mm !important;
+            flex: 1 !important;
+            min-height: 0 !important;
             width: 100% !important;
-            margin: 0 !important;
-            line-height: 0 !important;
+            overflow: hidden !important;
           }
 
           .barcode-wrap img {
@@ -371,20 +371,20 @@ export default function BarcodePrintPage() {
             height: ${formatConfig.barcodeHeight}mm !important;
             width: auto !important;
             max-width: 100% !important;
-            margin: 0 auto !important;
+            max-height: 100% !important;
           }
 
           .meta-row .name {
             display: block !important;
             font-size: ${formatConfig.nameFontSize}pt !important;
             font-weight: 600 !important;
-            line-height: 1.1 !important;
+            line-height: 1.2 !important;
             text-align: center !important;
             white-space: nowrap !important;
             overflow: hidden !important;
             text-overflow: ellipsis !important;
+            width: 100% !important;
             max-width: 100% !important;
-            margin-bottom: 0.3mm !important;
           }
 
           .meta-row .code,
@@ -392,7 +392,7 @@ export default function BarcodePrintPage() {
             display: inline !important;
             font-size: ${formatConfig.codeFontSize}pt !important;
             font-weight: 400 !important;
-            line-height: 1.1 !important;
+            line-height: 1.2 !important;
             text-align: center !important;
           }
 
@@ -404,7 +404,9 @@ export default function BarcodePrintPage() {
           .meta-row {
             text-align: center !important;
             width: 100% !important;
-            margin-top: 0.3mm !important;
+            min-width: 0 !important;
+            flex-shrink: 0 !important;
+            overflow: hidden !important;
           }
         }
       `}</style>
