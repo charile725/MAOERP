@@ -255,7 +255,7 @@ export default function BarcodePrintPage() {
 
   const totalLabels = selectedItems.reduce((sum, item) => sum + item.copies, 0)
   const formatConfig = FORMATS[format]
-  const isA4 = format === 'label-4x10-a4'
+  const isA4 = false
 
   return (
     <>
