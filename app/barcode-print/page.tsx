@@ -300,7 +300,8 @@ export default function BarcodePrintPage() {
             display: flex !important;
             flex-direction: column !important;
             align-items: center !important;
-            justify-content: space-between !important;
+            justify-content: center !important;
+            gap: 0.5mm !important;
             background: #fff !important;
             color: #000 !important;
             box-sizing: border-box !important;
@@ -322,27 +323,24 @@ export default function BarcodePrintPage() {
             display: flex !important;
             justify-content: center !important;
             align-items: center !important;
-            flex: 1 !important;
-            min-height: 0 !important;
             width: 100% !important;
+            height: ${FORMAT.barcodeHeight}mm !important;
+            flex-shrink: 0 !important;
             overflow: hidden !important;
           }
 
           .barcode-wrap img {
             display: block !important;
-            height: ${FORMAT.barcodeHeight}mm !important;
+            height: 100% !important;
             width: auto !important;
             max-width: 100% !important;
-            max-height: 100% !important;
           }
 
           .meta-row {
-            height: 2mm !important;
             width: 100% !important;
             min-width: 0 !important;
             overflow: hidden !important;
             text-align: center !important;
-            line-height: 2mm !important;
             flex-shrink: 0 !important;
           }
 
@@ -353,6 +351,7 @@ export default function BarcodePrintPage() {
             text-overflow: ellipsis !important;
             font-size: 4pt !important;
             font-weight: 400 !important;
+            line-height: 1.3 !important;
             width: 100% !important;
           }
 
@@ -361,6 +360,7 @@ export default function BarcodePrintPage() {
             display: inline !important;
             font-size: 4pt !important;
             font-weight: 400 !important;
+            line-height: 1.3 !important;
           }
 
           .meta-row .price {
