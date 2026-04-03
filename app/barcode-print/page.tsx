@@ -288,7 +288,7 @@ export default function BarcodePrintPage() {
       <style jsx global>{`
         @media print {
           @page {
-            size: ${isA4 ? 'A4' : `${formatConfig.pageWidth}mm ${formatConfig.pageHeight}mm`};
+            size: ${isA4 ? 'A4 portrait' : `${formatConfig.pageWidth}mm ${formatConfig.pageHeight}mm landscape`};
             margin: ${isA4 ? '5mm 3mm' : '0'};
           }
 
