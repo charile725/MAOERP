@@ -42,9 +42,9 @@ const FORMATS = {
     pageHeight: 20,
     labelWidth: 58,
     labelHeight: 18,
-    barcodeHeight: 7,
-    nameFontSize: 5,
-    codeFontSize: 5,
+    barcodeHeight: 10,
+    nameFontSize: 4.5,
+    codeFontSize: 4.5,
     perPage: 1,
   },
   'label-50x30': {
@@ -54,8 +54,8 @@ const FORMATS = {
     pageHeight: 30,
     labelWidth: 48,
     labelHeight: 28,
-    barcodeHeight: 10,
-    nameFontSize: 5.5,
+    barcodeHeight: 18,
+    nameFontSize: 5,
     codeFontSize: 5,
     perPage: 1,
   },
@@ -66,8 +66,8 @@ const FORMATS = {
     pageHeight: 297,
     labelWidth: 48,
     labelHeight: 25,
-    barcodeHeight: 8,
-    nameFontSize: 5,
+    barcodeHeight: 14,
+    nameFontSize: 4.5,
     codeFontSize: 4.5,
     perPage: 40,
   },
@@ -389,7 +389,8 @@ export default function BarcodePrintPage() {
             overflow: hidden !important;
             white-space: nowrap !important;
             text-overflow: ellipsis !important;
-            font-weight: 600 !important;
+            font-size: ${formatConfig.nameFontSize}pt !important;
+            font-weight: 400 !important;
             line-height: 1.2 !important;
             text-align: center !important;
             width: 100% !important;
