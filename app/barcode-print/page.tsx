@@ -42,7 +42,7 @@ const FORMATS = {
     labelHeight: 18,
     barcodeHeight: 7,
     nameFontSize: 4,
-    codeFontSize: 4,
+    codeFontSize: 3,
     perPage: 1,
   },
 }
