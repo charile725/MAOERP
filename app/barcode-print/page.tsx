@@ -201,6 +201,17 @@ export default function BarcodePrintPage() {
     }
   }
 
+  // 根據文字長度動態縮小字體，保持單行不換行
+  const calcNameFontSize = (name: string): number => {
+    const maxPt = formatConfig.nameFontSize
+    const availMm = formatConfig.labelWidth - 3 // 扣掉左右 padding
+    // CJK 字元約 1em 寬，Latin 約 0.6em；混合取 0.65
+    const estWidthMm = name.length * maxPt * 0.352778 * 0.65
+    if (estWidthMm <= availMm) return maxPt
+    const scaled = maxPt * (availMm / estWidthMm)
+    return Math.max(scaled, 3.5) // 最小 3.5pt
+  }
+
   const handlePrint = () => {
     window.print()
   }
@@ -375,15 +386,13 @@ export default function BarcodePrintPage() {
           }
 
           .meta-row .name {
-            display: -webkit-box !important;
-            -webkit-box-orient: vertical !important;
-            -webkit-line-clamp: 2 !important;
+            display: block !important;
             overflow: hidden !important;
-            font-size: ${formatConfig.nameFontSize}pt !important;
+            white-space: nowrap !important;
+            text-overflow: ellipsis !important;
             font-weight: 600 !important;
             line-height: 1.2 !important;
             text-align: center !important;
-            word-break: break-word !important;
             width: 100% !important;
             max-width: 100% !important;
           }
@@ -654,7 +663,7 @@ export default function BarcodePrintPage() {
             Array.from({ length: item.copies }).map((_, idx) => (
               <div key={`${item.id}-${item.source}-${idx}`} className="label">
                 <div className="meta-row">
-                  <span className="name">{item.name}</span>
+                  <span className="name" style={{ fontSize: `${calcNameFontSize(item.name).toFixed(1)}pt` }}>{item.name}</span>
                 </div>
                 <div className="barcode-wrap">
                   <img
