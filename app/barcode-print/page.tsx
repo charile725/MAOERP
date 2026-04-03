@@ -341,9 +341,8 @@ export default function BarcodePrintPage() {
             width: 100% !important;
             min-width: 0 !important;
             overflow: hidden !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
+            text-align: center !important;
+            line-height: 2mm !important;
             flex-shrink: 0 !important;
           }
 
@@ -354,9 +353,7 @@ export default function BarcodePrintPage() {
             text-overflow: ellipsis !important;
             font-size: 4pt !important;
             font-weight: 400 !important;
-            line-height: 1 !important;
             width: 100% !important;
-            text-align: center !important;
           }
 
           .meta-row .code,
@@ -364,7 +361,6 @@ export default function BarcodePrintPage() {
             display: inline !important;
             font-size: 4pt !important;
             font-weight: 400 !important;
-            line-height: 1 !important;
           }
 
           .meta-row .price {
