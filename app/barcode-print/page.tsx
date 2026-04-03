@@ -42,7 +42,7 @@ const FORMATS = {
     labelHeight: 18,
     barcodeHeight: 7,
     nameFontSize: 4,
-    codeFontSize: 3,
+    codeFontSize: 2.5,
     perPage: 1,
   },
 }
@@ -311,7 +311,8 @@ export default function BarcodePrintPage() {
             display: flex !important;
             flex-direction: column !important;
             align-items: center !important;
-            justify-content: space-between !important;
+            justify-content: center !important;
+            gap: 0.5mm !important;
             background: #fff !important;
             color: #000 !important;
             box-sizing: border-box !important;
@@ -335,7 +336,7 @@ export default function BarcodePrintPage() {
             display: flex !important;
             justify-content: center !important;
             align-items: center !important;
-            flex: 1 !important;
+            height: ${formatConfig.barcodeHeight}mm !important;
             min-height: 0 !important;
             width: 100% !important;
             overflow: hidden !important;
