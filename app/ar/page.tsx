@@ -104,7 +104,7 @@ export default function ARPageV2() {
 
   // 分頁狀態
   const [currentPage, setCurrentPage] = useState(1)
-  const [pageSize, setPageSize] = useState(20)
+  const [pageSize, setPageSize] = useState(100)
 
   // 付款帳戶 SWR
   const { data: paymentAccountsRaw = [] } = useSWR<PaymentAccount[]>('/api/accounts?active_only=true')
@@ -924,8 +924,9 @@ export default function ARPageV2() {
                   }}
                   className="rounded border border-gray-300 dark:border-gray-600 px-2 py-2 text-sm text-gray-900 dark:text-gray-100 dark:bg-gray-700 min-h-[44px]"
                 >
-                  <option value={20}>20</option>
                   <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={200}>200</option>
                 </select>
                 <span className="text-sm text-gray-600 dark:text-gray-400">筆</span>
               </div>

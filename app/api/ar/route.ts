@@ -37,44 +37,47 @@ export async function GET(request: NextRequest) {
       matchingCustomerCodes = (customersResult.data as any[])?.map(c => c.customer_code) || []
     }
 
-    // 首先獲取所有符合條件的 partner_code 和 balance（不分頁），以確保完整分組和計算全域總額
-    let allQuery = supabaseServer
-      .from('partner_accounts')
-      .select('partner_code, balance, status')
-      .eq('partner_type', 'customer')
-      .eq('direction', 'AR')
-
-    if (customerCode) {
-      allQuery = allQuery.eq('partner_code', customerCode)
-    }
-
-    if (status) {
-      allQuery = allQuery.eq('status', status)
-    }
-
-    if (dueBefore) {
-      allQuery = allQuery.lte('due_date', dueBefore)
-    }
-
+    // 建立 OR conditions（用於 keyword 搜尋）
+    let orConditions: string[] = []
     if (keyword) {
-      // 清理 keyword，移除 PostgREST filter 特殊字元避免 injection
       const safeKeyword = keyword.replace(/[(),.*\\]/g, '')
-      const conditions: string[] = []
       if (safeKeyword) {
-        conditions.push(`partner_code.ilike.%${safeKeyword}%`)
+        orConditions.push(`partner_code.ilike.*${safeKeyword}*`)
       }
       if (matchingCustomerCodes.length > 0) {
-        conditions.push(`partner_code.in.(${matchingCustomerCodes.join(',')})`)
+        orConditions.push(`partner_code.in.(${matchingCustomerCodes.join(',')})`)
       }
       if (saleRefIds.length > 0) {
-        conditions.push(`ref_id.in.(${saleRefIds.join(',')})`)
-      }
-      if (conditions.length > 0) {
-        allQuery = allQuery.or(conditions.join(','))
+        orConditions.push(`ref_id.in.(${saleRefIds.join(',')})`)
       }
     }
 
-    const { data: allAccounts } = await allQuery
+    // 建立 base query helper（繞過 Supabase max_rows=1000 限制，用批次抓取）
+    const buildSummaryQuery = (from: number) => {
+      let q = supabaseServer
+        .from('partner_accounts')
+        .select('partner_code, balance, status')
+        .eq('partner_type', 'customer')
+        .eq('direction', 'AR')
+      if (customerCode) q = q.eq('partner_code', customerCode)
+      if (status) q = q.eq('status', status)
+      if (dueBefore) q = q.lte('due_date', dueBefore)
+      if (orConditions.length > 0) q = q.or(orConditions.join(','))
+      return q.range(from, from + 999)
+    }
+
+    // 批次抓取所有 partner_accounts（每批 1000 筆，直到抓完）
+    const allAccounts: any[] = []
+    let batchFrom = 0
+    while (true) {
+      const { data: batch } = await buildSummaryQuery(batchFrom)
+      if (!batch || batch.length === 0) break
+      allAccounts.push(...batch)
+      if (batch.length < 1000) break
+      batchFrom += 1000
+    }
+
+    console.log('[AR DEBUG] allAccounts count:', allAccounts.length)
 
     // 計算全域未收總額（跨所有頁面）
     const globalTotalUnpaid = (allAccounts || [])
@@ -97,6 +100,8 @@ export async function GET(request: NextRequest) {
       .map(([code]) => code)
     const totalCustomers = uniquePartnerCodes.length
     const totalPages = Math.ceil(totalCustomers / pageSize)
+
+    console.log('[AR DEBUG] uniquePartnerCodes count:', totalCustomers, '| pageSize:', pageSize, '| totalPages:', totalPages)
 
     // 對客戶代碼進行分頁
     const from = (page - 1) * pageSize
@@ -129,7 +134,7 @@ export async function GET(request: NextRequest) {
       query = query.lte('due_date', dueBefore)
     }
 
-    const { data: accounts, error } = await query
+    const { data: accounts, error } = await query.limit(10000)
 
     if (error) {
       return NextResponse.json(
