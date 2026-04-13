@@ -28,40 +28,40 @@ export async function GET(request: NextRequest) {
       matchingVendorCodes = (vendors as any[])?.map(v => v.vendor_code) || []
     }
 
-    // 首先獲取所有符合條件的 partner_code 和 balance（不分頁），以確保完整分組和計算全域總額
-    let allQuery = supabaseServer
-      .from('partner_accounts')
-      .select('partner_code, balance, status')
-      .eq('partner_type', 'vendor')
-      .eq('direction', 'AP')
+    // 批次載入所有符合條件的帳款（避免 Supabase 1000 筆上限）
+    const buildAllQuery = (rangeFrom: number, rangeTo: number) => {
+      let q = supabaseServer
+        .from('partner_accounts')
+        .select('partner_code, balance, status')
+        .eq('partner_type', 'vendor')
+        .eq('direction', 'AP')
 
-    if (vendorCode) {
-      allQuery = allQuery.eq('partner_code', vendorCode)
-    }
+      if (vendorCode) q = q.eq('partner_code', vendorCode)
+      if (status) q = q.eq('status', status)
+      if (dueBefore) q = q.lte('due_date', dueBefore)
 
-    if (status) {
-      allQuery = allQuery.eq('status', status)
-    }
-
-    if (dueBefore) {
-      allQuery = allQuery.lte('due_date', dueBefore)
-    }
-
-    if (keyword) {
-      const safeKeyword = keyword.replace(/[(),.*\\]/g, '')
-      const conditions: string[] = []
-      if (safeKeyword) {
-        conditions.push(`partner_code.ilike.%${safeKeyword}%`)
+      if (keyword) {
+        const safeKeyword = keyword.replace(/[(),.*\\]/g, '')
+        const conditions: string[] = []
+        if (safeKeyword) conditions.push(`partner_code.ilike.%${safeKeyword}%`)
+        if (matchingVendorCodes.length > 0) conditions.push(`partner_code.in.(${matchingVendorCodes.join(',')})`)
+        if (conditions.length > 0) q = q.or(conditions.join(','))
       }
-      if (matchingVendorCodes.length > 0) {
-        conditions.push(`partner_code.in.(${matchingVendorCodes.join(',')})`)
-      }
-      if (conditions.length > 0) {
-        allQuery = allQuery.or(conditions.join(','))
-      }
+
+      return q.range(rangeFrom, rangeTo)
     }
 
-    const { data: allAccounts } = await allQuery
+    const AP_BATCH = 1000
+    let apFrom = 0
+    const allAccounts: any[] = []
+
+    while (true) {
+      const { data: batch } = await buildAllQuery(apFrom, apFrom + AP_BATCH - 1)
+      if (!batch || batch.length === 0) break
+      allAccounts.push(...batch)
+      if (batch.length < AP_BATCH) break
+      apFrom += AP_BATCH
+    }
 
     // 計算全域未付總額（跨所有頁面）
     const globalTotalUnpaid = (allAccounts || [])

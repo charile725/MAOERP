@@ -8,33 +8,43 @@ export async function GET(request: NextRequest) {
     const dateFrom = searchParams.get('date_from')
     const dateTo = searchParams.get('date_to')
 
-    // 直接查询
-    let query = (supabaseServer
-      .from('sales') as any)
-      .select(`
-        customer_code,
-        total,
-        subtotal,
-        sale_date,
-        sale_items (
-          quantity,
-          price,
-          cost,
-          store_credit_qty,
-          store_credit_amount
-        )
-      `)
-      .not('customer_code', 'is', null)
-
-    // 添加日期筛选
-    if (dateFrom) {
-      query = query.gte('sale_date', dateFrom)
-    }
-    if (dateTo) {
-      query = query.lte('sale_date', dateTo)
+    // 批次載入全部銷售資料（避免 Supabase 1000 筆上限）
+    const buildQuery = () => {
+      let q = (supabaseServer
+        .from('sales') as any)
+        .select(`
+          customer_code,
+          total,
+          subtotal,
+          sale_date,
+          sale_items (
+            quantity,
+            price,
+            cost,
+            store_credit_qty,
+            store_credit_amount
+          )
+        `)
+        .not('customer_code', 'is', null)
+        .order('created_at', { ascending: false })
+      if (dateFrom) q = q.gte('sale_date', dateFrom)
+      if (dateTo) q = q.lte('sale_date', dateTo)
+      return q
     }
 
-    const { data: salesData, error: salesError } = await query
+    const BATCH = 1000
+    let from = 0
+    const salesData: any[] = []
+    let salesError: any = null
+
+    while (true) {
+      const { data: batch, error: batchError } = await buildQuery().range(from, from + BATCH - 1)
+      if (batchError) { salesError = batchError; break }
+      if (!batch || batch.length === 0) break
+      salesData.push(...batch)
+      if (batch.length < BATCH) break
+      from += BATCH
+    }
 
     if (salesError) {
       console.error('[Customers Profit API] Error:', salesError)

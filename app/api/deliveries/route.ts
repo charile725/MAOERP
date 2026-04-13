@@ -44,16 +44,29 @@ export async function GET(request: NextRequest) {
       query = query.eq('sale_id', saleId)
     }
 
-    const { data, error } = await query
+    // 批次載入全部出貨單（避免 Supabase 1000 筆上限）
+    const BATCH = 1000
+    let batchFrom = 0
+    const allData: any[] = []
+    let fetchError: any = null
 
-    if (error) {
+    while (true) {
+      const { data: batch, error: batchError } = await query.range(batchFrom, batchFrom + BATCH - 1)
+      if (batchError) { fetchError = batchError; break }
+      if (!batch || batch.length === 0) break
+      allData.push(...batch)
+      if (batch.length < BATCH) break
+      batchFrom += BATCH
+    }
+
+    if (fetchError) {
       return NextResponse.json(
-        { ok: false, error: error.message },
+        { ok: false, error: fetchError.message },
         { status: 500 }
       )
     }
 
-    return NextResponse.json({ ok: true, data })
+    return NextResponse.json({ ok: true, data: allData })
   } catch (error) {
     return NextResponse.json(
       { ok: false, error: '系統錯誤' },

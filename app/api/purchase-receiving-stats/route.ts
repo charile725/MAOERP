@@ -4,31 +4,45 @@ import { supabaseServer } from '@/lib/supabase/server'
 // GET /api/purchase-receiving-stats - 獲取未收貨統計
 export async function GET(request: NextRequest) {
   try {
-    // 1. 查詢所有已確認的進貨單及品項
-    const { data: purchases, error: purchasesError } = await (supabaseServer
-      .from('purchases') as any)
-      .select(`
-        *,
-        vendors (
-          vendor_name
-        ),
-        purchase_items (
-          id,
-          quantity,
-          cost,
-          subtotal,
-          received_quantity,
-          is_received,
-          product_id,
-          products (
-            item_code,
-            name,
-            unit,
-            stock
+    // 1. 批次載入所有已確認的進貨單及品項（避免 Supabase 1000 筆上限）
+    const BATCH = 1000
+    let from = 0
+    const purchases: any[] = []
+    let purchasesError: any = null
+
+    while (true) {
+      const { data: batch, error: batchError } = await (supabaseServer
+        .from('purchases') as any)
+        .select(`
+          *,
+          vendors (
+            vendor_name
+          ),
+          purchase_items (
+            id,
+            quantity,
+            cost,
+            subtotal,
+            received_quantity,
+            is_received,
+            product_id,
+            products (
+              item_code,
+              name,
+              unit,
+              stock
+            )
           )
-        )
-      `)
-      .in('status', ['approved', 'confirmed'])
+        `)
+        .in('status', ['approved', 'confirmed'])
+        .order('created_at', { ascending: false })
+        .range(from, from + BATCH - 1)
+      if (batchError) { purchasesError = batchError; break }
+      if (!batch || batch.length === 0) break
+      purchases.push(...batch)
+      if (batch.length < BATCH) break
+      from += BATCH
+    }
 
     if (purchasesError) {
       console.error('[Purchase Receiving Stats API] Query error:', purchasesError)
