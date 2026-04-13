@@ -111,10 +111,19 @@ export default function NewIchibanKujiPage() {
 
   const removePrize = (index: number) => {
     setPrizes(prizes.filter((_, i) => i !== index))
-    const newSearchInputs = { ...searchInputs }
-    const newSearchResults = { ...searchResults }
-    delete newSearchInputs[index]
-    delete newSearchResults[index]
+    // 重新對齊 index：刪除後後面的項目 key 全部 -1
+    const newSearchInputs: { [key: number]: string } = {}
+    const newSearchResults: { [key: number]: Product[] } = {}
+    Object.entries(searchInputs).forEach(([k, v]) => {
+      const i = Number(k)
+      if (i < index) newSearchInputs[i] = v
+      else if (i > index) newSearchInputs[i - 1] = v
+    })
+    Object.entries(searchResults).forEach(([k, v]) => {
+      const i = Number(k)
+      if (i < index) newSearchResults[i] = v
+      else if (i > index) newSearchResults[i - 1] = v
+    })
     setSearchInputs(newSearchInputs)
     setSearchResults(newSearchResults)
   }
@@ -885,8 +894,9 @@ export default function NewIchibanKujiPage() {
                           value={searchInputs[index] || ''}
                           onChange={(e) => searchProduct(index, e.target.value)}
                           onBlur={() => clearSearch(index)}
-                          className="w-full rounded border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
-                          placeholder="掃碼或搜尋商品名稱/品號"
+                          disabled={!productsLoaded}
+                          className="w-full rounded border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                          placeholder={productsLoaded ? "掃碼或搜尋商品名稱/品號" : "商品載入中..."}
                           autoComplete="off"
                         />
                         {searchResults[index] && searchResults[index].length > 0 && (
