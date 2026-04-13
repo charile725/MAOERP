@@ -71,6 +71,7 @@ export default function IchibanKujiPage() {
   const [deleting, setDeleting] = useState<string | null>(null)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [typeFilter, setTypeFilter] = useState<'all' | 'custom' | 'official'>('all')
+  const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'inactive'>('all')
   // 廢套結算
   const [closeSetDialog, setCloseSetDialog] = useState<{
     kujiId: string
@@ -94,6 +95,7 @@ export default function IchibanKujiPage() {
   // SWR: kuji list with pagination
   const kujiParams: Record<string, string> = { page: String(page) }
   if (typeFilter !== 'all') kujiParams.set_type = typeFilter
+  if (activeFilter !== 'all') kujiParams.active = activeFilter === 'active' ? 'true' : 'false'
 
   const { data: kujiResult, isLoading: loading, mutate } = useSWR<{ data: IchibanKuji[]; pagination: any }>(
     ichibanKujiKey(kujiParams),
@@ -102,7 +104,7 @@ export default function IchibanKujiPage() {
   const kujis = kujiResult?.data ?? []
   const pagination = kujiResult?.pagination ?? { page: 1, pageSize: 20, total: 0, totalPages: 0 }
 
-  useEffect(() => { setPage(1) }, [typeFilter])
+  useEffect(() => { setPage(1) }, [typeFilter, activeFilter])
 
   const handlePageChange = (newPage: number) => {
     setPage(newPage)
@@ -120,10 +122,22 @@ export default function IchibanKujiPage() {
   }
 
   const getProfitColor = (profit: number) => {
-    if (profit >= 200) return 'text-green-700 dark:text-green-400'
-    if (profit >= 50) return 'text-green-600 dark:text-green-300'
-    if (profit >= 0) return 'text-yellow-600 dark:text-yellow-400'
+    if (profit > 0) return 'text-green-600 dark:text-green-400'
+    if (profit === 0) return 'text-yellow-600 dark:text-yellow-400'
     return 'text-red-600 dark:text-red-400'
+  }
+
+  const calcCurrentProfit = (kuji: IchibanKuji) => {
+    const prizes = kuji.ichiban_kuji_prizes || []
+    const drawsSold = kuji.total_draws - prizes.reduce((sum, p) => sum + (p.remaining ?? 0), 0)
+    const revenue = drawsSold * (kuji.price || 0)
+    // 已消耗成本 = 總成本 - 剩餘賞品成本
+    const remainingCost = prizes.reduce((sum, p) => {
+      const cost = p.products?.cost ?? 0
+      return sum + (p.remaining ?? 0) * cost
+    }, 0)
+    const costConsumed = (kuji.total_cost || 0) - remainingCost
+    return { profit: revenue - costConsumed, drawsSold }
   }
 
   const handleDelete = async (id: string, name: string) => {
@@ -293,24 +307,53 @@ export default function IchibanKujiPage() {
           </div>
         </div>
 
-        {/* 分類篩選 */}
-        <div className="mb-4 flex gap-2">
-          {([
-            { key: 'all', label: '全部' },
-            { key: 'custom', label: '自製' },
-            { key: 'official', label: '官方' },
-          ] as const).map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => { setTypeFilter(key); setPage(1) }}
-              className={`rounded px-4 py-1.5 text-sm font-medium ${typeFilter === key
-                ? key === 'official' ? 'bg-orange-600 text-white' : 'bg-blue-600 text-white'
-                : 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
+        {/* 篩選列 */}
+        <div className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">狀態</span>
+            <div className="flex gap-1">
+              {([
+                { key: 'all', label: '全部' },
+                { key: 'active', label: '啟用' },
+                { key: 'inactive', label: '停用' },
+              ] as const).map(({ key, label }) => (
+                <button
+                  key={key}
+                  onClick={() => { setActiveFilter(key); setPage(1) }}
+                  className={`rounded px-3 py-1 text-sm font-medium ${activeFilter === key
+                    ? key === 'active' ? 'bg-green-600 text-white'
+                      : key === 'inactive' ? 'bg-gray-500 text-white'
+                      : 'bg-blue-600 text-white'
+                    : 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">類型</span>
+            <div className="flex gap-1">
+              {([
+                { key: 'all', label: '全部' },
+                { key: 'custom', label: '自製' },
+                { key: 'official', label: '官方' },
+              ] as const).map(({ key, label }) => (
+                <button
+                  key={key}
+                  onClick={() => { setTypeFilter(key); setPage(1) }}
+                  className={`rounded px-3 py-1 text-sm font-medium ${typeFilter === key
+                    ? key === 'official' ? 'bg-orange-600 text-white' : 'bg-blue-600 text-white'
+                    : 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="rounded-lg bg-white dark:bg-gray-800 shadow">
@@ -339,7 +382,7 @@ export default function IchibanKujiPage() {
                     )}
                     <th className="px-6 py-3 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">售價/抽</th>
                     {userRole === 'admin' && (
-                      <th className="px-6 py-3 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">利潤/抽</th>
+                      <th className="px-6 py-3 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">目前利潤</th>
                     )}
                     <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900 dark:text-gray-100">狀態</th>
                     <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">建立時間</th>
@@ -384,13 +427,17 @@ export default function IchibanKujiPage() {
                         <td className="px-6 py-4 text-right text-sm font-semibold text-green-600">
                           {formatCurrency(kuji.price || 0)}
                         </td>
-                        {userRole === 'admin' && (
-                          <td className="px-6 py-4 text-right text-sm font-bold">
-                            <span className={getProfitColor((kuji.price || 0) - kuji.avg_cost)}>
-                              {formatCurrency((kuji.price || 0) - kuji.avg_cost)}
-                            </span>
-                          </td>
-                        )}
+                        {userRole === 'admin' && (() => {
+                          const { profit, drawsSold } = calcCurrentProfit(kuji)
+                          return (
+                            <td className="px-6 py-4 text-right text-sm font-bold">
+                              <span className={getProfitColor(profit)}>
+                                {formatCurrency(profit)}
+                              </span>
+                              <div className="text-xs text-gray-400 font-normal">{drawsSold}/{kuji.total_draws} 抽</div>
+                            </td>
+                          )
+                        })()}
                         <td className="px-6 py-4 text-center text-sm" onClick={(e) => e.stopPropagation()}>
                           <div className="flex flex-col items-center gap-1">
                             {/* 收貨狀態（僅官方套顯示） */}
