@@ -245,6 +245,7 @@ export default function SalesPage() {
   if (dateTo) salesParams.date_to = dateTo
   if (sourceFilter !== 'all') salesParams.source = sourceFilter
   if (groupByCustomer) salesParams.group_by_customer = 'true'
+  if (showUndeliveredOnly) salesParams.undelivered_only = 'true'
   salesParams.page = String(page)
   salesParams.limit = String(itemsPerPage)
 

@@ -94,6 +94,7 @@ export default function DashboardPage() {
   // 報表模式（按日期 vs 按營業日）
   const [reportMode, setReportMode] = useState<'by_date' | 'by_business_day'>('by_business_day')
   const [selectedClosingId, setSelectedClosingId] = useState<string>('today_pos')
+  const [costSort, setCostSort] = useState<{ key: 'product_name' | 'cost' | 'quantity' | 'total_cost'; dir: 'asc' | 'desc' }>({ key: 'total_cost', dir: 'desc' })
 
   // 營業日模式：用 SWR 獲取兩個通路的日結記錄
   const { data: posClosings = [] } = useSWR<BusinessDayClosing[]>(
@@ -117,10 +118,12 @@ export default function DashboardPage() {
     return [...todayPreviews as any[], ...allClosings.slice(0, 30)]
   }, [posClosings, liveClosings])
 
-  // 當切換到營業日模式時，重置通路篩選
+  // 切換模式時重置通路篩選
   useEffect(() => {
     if (reportMode === 'by_business_day') {
       setSourceFilter('pos')
+    } else {
+      setSourceFilter('all')
     }
   }, [reportMode])
 
@@ -522,74 +525,81 @@ export default function DashboardPage() {
 
 
 
-        {/* AP 已逾期 */}
-        {stats.apOverdueList && stats.apOverdueList.length > 0 && (
-          <div className="mb-6 rounded-lg bg-white dark:bg-gray-800 p-6 shadow border-l-4 border-red-500">
-            <h2 className="mb-4 text-xl font-semibold text-gray-900 dark:text-gray-100">應付帳款已逾期</h2>
-            <div className="space-y-2 max-h-48 overflow-y-auto">
-              {stats.apOverdueList.map((item, index) => (
-                <div key={index} className="flex justify-between items-center p-2 bg-red-50 dark:bg-red-900/20 rounded">
-                  <span className="text-sm text-gray-700 dark:text-gray-300">{item.partner_code}</span>
-                  <div className="text-right">
-                    <span className="font-semibold text-red-600">{formatCurrency(item.balance)}</span>
-                    <span className="ml-2 text-xs text-gray-500">(逾期 {item.days_overdue} 天)</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
 
 
         {/* Cost Breakdown - Collapsible */}
-        {stats.costBreakdown && stats.costBreakdown.length > 0 && (
-          <details className="mb-6 rounded-lg bg-white dark:bg-gray-800 shadow">
-            <summary className="p-6 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg">
-              <span className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                期間成本明細 ({stats.costBreakdown.length} 項, 合計 {formatCurrency(stats.totalCost)})
-              </span>
-            </summary>
-            <div className="px-6 pb-6 overflow-x-auto">
-              <table className="w-full">
-                <thead className="border-b bg-gray-50 dark:bg-gray-900">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">商品名稱</th>
-                    <th className="px-4 py-3 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">單位成本</th>
-                    <th className="px-4 py-3 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">銷售數量</th>
-                    <th className="px-4 py-3 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">總成本</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                  {stats.costBreakdown.map((item, index) => (
-                    <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                      <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{item.product_name}</td>
-                      <td className="px-4 py-3 text-right text-sm text-gray-900 dark:text-gray-100">
-                        {formatCurrency(item.cost)}
+        {stats.costBreakdown && stats.costBreakdown.length > 0 && (() => {
+          const sorted = [...stats.costBreakdown].sort((a, b) => {
+            const v = costSort.key === 'product_name'
+              ? a.product_name.localeCompare(b.product_name, 'zh-TW')
+              : (a[costSort.key] as number) - (b[costSort.key] as number)
+            return costSort.dir === 'asc' ? v : -v
+          })
+          const toggleSort = (key: typeof costSort.key) => {
+            setCostSort(prev => prev.key === key ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: key === 'product_name' ? 'asc' : 'desc' })
+          }
+          const SortIcon = ({ col }: { col: typeof costSort.key }) => (
+            <span className="ml-1 inline-block w-3 text-xs">
+              {costSort.key === col ? (costSort.dir === 'asc' ? '▲' : '▼') : <span className="opacity-30">▼</span>}
+            </span>
+          )
+          return (
+            <details className="mb-6 rounded-lg bg-white dark:bg-gray-800 shadow">
+              <summary className="p-6 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg">
+                <span className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                  期間成本明細 ({stats.costBreakdown.length} 項, 合計 {formatCurrency(stats.totalCost)})
+                </span>
+              </summary>
+              <div className="px-6 pb-6 overflow-x-auto">
+                <table className="w-full">
+                  <thead className="border-b bg-gray-50 dark:bg-gray-900">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900 dark:text-gray-100 cursor-pointer select-none hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => toggleSort('product_name')}>
+                        商品名稱<SortIcon col="product_name" />
+                      </th>
+                      <th className="px-4 py-3 text-right text-sm font-semibold text-gray-900 dark:text-gray-100 cursor-pointer select-none hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => toggleSort('cost')}>
+                        單位成本<SortIcon col="cost" />
+                      </th>
+                      <th className="px-4 py-3 text-right text-sm font-semibold text-gray-900 dark:text-gray-100 cursor-pointer select-none hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => toggleSort('quantity')}>
+                        銷售數量<SortIcon col="quantity" />
+                      </th>
+                      <th className="px-4 py-3 text-right text-sm font-semibold text-gray-900 dark:text-gray-100 cursor-pointer select-none hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => toggleSort('total_cost')}>
+                        總成本<SortIcon col="total_cost" />
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                    {sorted.map((item, index) => (
+                      <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{item.product_name}</td>
+                        <td className="px-4 py-3 text-right text-sm text-gray-900 dark:text-gray-100">
+                          {formatCurrency(item.cost)}
+                        </td>
+                        <td className="px-4 py-3 text-right text-sm text-gray-900 dark:text-gray-100">
+                          {item.quantity}
+                        </td>
+                        <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">
+                          {formatCurrency(item.total_cost)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="border-t bg-gray-50 dark:bg-gray-900">
+                    <tr>
+                      <td colSpan={3} className="px-4 py-3 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">
+                        總計:
                       </td>
-                      <td className="px-4 py-3 text-right text-sm text-gray-900 dark:text-gray-100">
-                        {item.quantity}
-                      </td>
-                      <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">
-                        {formatCurrency(item.total_cost)}
+                      <td className="px-4 py-3 text-right text-sm font-bold text-gray-900 dark:text-gray-100">
+                        {formatCurrency(stats.totalCost)}
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-                <tfoot className="border-t bg-gray-50 dark:bg-gray-900">
-                  <tr>
-                    <td colSpan={3} className="px-4 py-3 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">
-                      總計:
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm font-bold text-gray-900 dark:text-gray-100">
-                      {formatCurrency(stats.totalCost)}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          </details>
-        )}
+                  </tfoot>
+                </table>
+              </div>
+            </details>
+          )
+        })()}
 
 
       </div>

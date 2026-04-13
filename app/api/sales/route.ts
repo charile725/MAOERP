@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
     const source = searchParams.get('source')
     const keyword = searchParams.get('keyword')
     const groupByCustomer = searchParams.get('group_by_customer') === 'true' // 按客戶分組時不分頁
+    const undeliveredOnly = searchParams.get('undelivered_only') === 'true'
 
     // 分頁參數
     const page = parseInt(searchParams.get('page') || '1')
@@ -81,6 +82,10 @@ export async function GET(request: NextRequest) {
       query = query.eq('source', source)
     }
 
+    if (undeliveredOnly) {
+      query = query.neq('fulfillment_status', 'completed')
+    }
+
     // Search by keyword in sale_no, customer_name, product name or item_code
     // 有關鍵字時需要取得所有資料再做客戶端過濾（因為商品搜尋無法在 DB 層面完成）
     let matchingCustomerCodes: string[] = []
@@ -92,8 +97,8 @@ export async function GET(request: NextRequest) {
       matchingCustomerCodes = matchingCustomers?.map((c: any) => c.customer_code) || []
     }
 
-    // 有關鍵字、按客戶分組、查詢特定營業日、或日期範圍查詢時不使用服務器端分頁（報表需要完整資料）
-    const noPagination = keyword || groupByCustomer || businessDate || (dateFrom && dateTo)
+    // 有關鍵字、按客戶分組、查詢特定營業日、日期範圍查詢、或未出貨篩選時不使用服務器端分頁
+    const noPagination = keyword || groupByCustomer || businessDate || (dateFrom && dateTo) || undeliveredOnly
     if (!noPagination) {
       query = query.range(offset, offset + limit - 1)
     }
@@ -227,8 +232,8 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    // 當有 keyword、groupByCustomer 或 businessDate 時，使用過濾後的數據長度作為 total
-    const noServerPagination = keyword || groupByCustomer || businessDate || (dateFrom && dateTo)
+    // 當有 keyword、groupByCustomer、businessDate、或未出貨篩選時，使用過濾後的數據長度作為 total
+    const noServerPagination = keyword || groupByCustomer || businessDate || (dateFrom && dateTo) || undeliveredOnly
     const actualTotal = noServerPagination ? (salesWithSummary?.length || 0) : (count || salesWithSummary?.length || 0)
 
     return NextResponse.json({

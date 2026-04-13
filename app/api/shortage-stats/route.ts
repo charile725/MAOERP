@@ -4,18 +4,18 @@ import { supabaseServer } from '@/lib/supabase/server'
 // GET /api/shortage-stats - 獲取欠貨統計
 export async function GET(request: NextRequest) {
   try {
-    // 1. 跟 sales API 一樣的查詢方式
-    const { data: sales, error: salesError } = await (supabaseServer
+    // 1. 批次載入所有未完成的 confirmed sales（避免 Supabase 1000 筆上限）
+    const baseQuery = () => (supabaseServer
       .from('sales') as any)
       .select(`
-        *,
+        sale_no,
+        customer_code,
         customers:customer_code (
           customer_name
         ),
         sale_items (
           id,
           quantity,
-          price,
           snapshot_name,
           product_id,
           store_credit_qty,
@@ -28,6 +28,23 @@ export async function GET(request: NextRequest) {
         )
       `)
       .eq('status', 'confirmed')
+      .neq('fulfillment_status', 'completed')
+      .order('created_at', { ascending: false })
+
+    const BATCH = 1000
+    let from = 0
+    const allSales: any[] = []
+    let salesError: any = null
+
+    while (true) {
+      const { data: batch, error: batchError } = await baseQuery().range(from, from + BATCH - 1)
+      if (batchError) { salesError = batchError; break }
+      if (!batch || batch.length === 0) break
+      allSales.push(...batch)
+      if (batch.length < BATCH) break
+      from += BATCH
+    }
+    const sales = allSales
 
     if (salesError) {
       console.error('[Shortage Stats API] Sales query error:', salesError)
