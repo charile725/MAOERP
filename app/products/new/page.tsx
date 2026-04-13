@@ -14,6 +14,8 @@ export default function NewProductPage() {
   }, [])
   const [error, setError] = useState('')
   const [barcode, setBarcode] = useState('')
+  const [costValue, setCostValue] = useState(0)
+  const [costZeroConfirmed, setCostZeroConfirmed] = useState(false)
 
   const generateBarcode = () => {
     // 生成13位 EAN13 條碼格式
@@ -46,6 +48,12 @@ export default function NewProductPage() {
     setError('')
 
     const formData = new FormData(e.currentTarget)
+
+    if (costValue === 0 && !costZeroConfirmed) {
+      setError('成本為 0，請勾選確認此商品成本確實為 0')
+      setLoading(false)
+      return
+    }
 
     const data = {
       name: formData.get('name'),
@@ -155,15 +163,33 @@ export default function NewProductPage() {
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">成本</label>
+              <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">
+                成本 <span className="text-xs text-gray-500 dark:text-gray-400">（參考成本）</span>
+              </label>
               <input
                 type="number"
                 name="cost"
                 min="0"
                 step="0.01"
-                defaultValue="0"
+                value={costValue}
+                onChange={(e) => {
+                  const v = parseFloat(e.target.value) || 0
+                  setCostValue(v)
+                  if (v !== 0) setCostZeroConfirmed(false)
+                }}
                 className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
               />
+              {costValue === 0 && (
+                <label className="mt-2 flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={costZeroConfirmed}
+                    onChange={(e) => setCostZeroConfirmed(e.target.checked)}
+                    className="h-4 w-4"
+                  />
+                  <span className="text-sm text-amber-600 dark:text-amber-400">確認此商品成本確實為 0（免費商品）</span>
+                </label>
+              )}
             </div>
           </div>
 

@@ -111,18 +111,26 @@ export async function POST(
     if (product) {
       const currentStock = product.stock  // trigger 已經更新過的庫存
       const oldAvgCost = product.avg_cost
+      const oldStock = currentStock - quantity  // 收貨前的庫存（可能為負）
 
       // 使用加權平均計算新的平均成本
-      let newAvgCost = oldAvgCost
-      if (currentStock > 0) {
-        const oldStock = currentStock - quantity
+      // 若收貨前庫存 <= 0（負庫存或零庫存），舊庫存無法參與加權，直接以本次進貨成本為準
+      let newAvgCost: number
+      if (currentStock <= 0) {
+        // 收完還是沒庫存，成本維持本次進貨成本
+        newAvgCost = purchaseItem.cost
+      } else if (oldStock <= 0) {
+        // 收貨前為負庫存或零，不能加權，直接用本次進貨成本
+        newAvgCost = purchaseItem.cost
+      } else {
+        // 正常加權平均
         newAvgCost = ((oldStock * oldAvgCost) + (quantity * purchaseItem.cost)) / currentStock
       }
 
-      // 只更新平均成本
+      // 更新平均成本，同時同步 cost 作為備用 fallback
       const { error: updateCostError } = await (supabaseServer
         .from('products') as any)
-        .update({ avg_cost: newAvgCost })
+        .update({ avg_cost: newAvgCost, cost: newAvgCost })
         .eq('id', purchaseItem.product_id)
 
       if (updateCostError) {

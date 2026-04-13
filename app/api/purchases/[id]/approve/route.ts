@@ -134,9 +134,23 @@ export async function POST(
       .single()
     const purchaseNo = purchaseData?.purchase_no || id
 
-    // 5. 批准時不更新庫存！庫存只在收貨時更新，避免重複進貨
-    // 庫存更新在 /api/purchase-items/:id/receive 處理
-    console.log(`[Approve] Purchase ${purchaseNo} approved. Inventory will be updated upon receiving.`)
+    // 5. 批准時立刻更新商品參考成本（cost & avg_cost）
+    // 庫存不在此更新，只在收貨時更新
+    // 用 Map 確保同一商品以最後一筆 cost 為準
+    const productCostMap = new Map<string, number>()
+    items.forEach(item => {
+      if (item.cost > 0) productCostMap.set(item.product_id, item.cost)
+    })
+
+    await Promise.all(
+      Array.from(productCostMap.entries()).map(([productId, cost]) =>
+        (supabaseServer.from('products') as any)
+          .update({ cost, avg_cost: cost })
+          .eq('id', productId)
+      )
+    )
+
+    console.log(`[Approve] Purchase ${purchaseNo} approved. Updated cost for ${productCostMap.size} products.`)
 
     // 6. Update purchase to confirmed
     const { data: confirmedPurchase, error: confirmError } = await (supabaseServer
