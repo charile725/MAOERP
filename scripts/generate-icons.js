@@ -2,7 +2,7 @@ const sharp = require('sharp')
 const fs = require('fs')
 const path = require('path')
 
-const inputFile = path.join(__dirname, '../public/logo.jpg')
+const inputFile = path.join(__dirname, '../public/瘋玩logo.jpg')
 const outputDir = path.join(__dirname, '../public')
 
 async function generateIcons() {

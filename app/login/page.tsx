@@ -42,9 +42,11 @@ export default function LoginPage() {
       <div className="max-w-md w-full">
         {/* Logo/Title */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
-            玩具流 ERP
-          </h1>
+          <img
+            src="/瘋玩logo.jpg"
+            alt="瘋玩"
+            className="mx-auto w-24 h-24 rounded-2xl shadow-lg mb-4 object-cover"
+          />
           <p className="text-gray-600 dark:text-gray-400">請登入您的帳號</p>
         </div>
 
@@ -111,7 +113,7 @@ export default function LoginPage() {
 
         {/* Footer */}
         <p className="text-center text-sm text-gray-500 dark:text-gray-400 mt-6">
-          © 2025 玩具流 ERP. All rights reserved.
+          © 2025 瘋玩ERP. All rights reserved.
         </p>
       </div>
     </div>

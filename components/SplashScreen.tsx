@@ -55,8 +55,8 @@ export default function SplashScreen({ onFinish }: SplashScreenProps) {
             {/* Logo 圖片 - 第二層 - 白色/漸變背景 */}
             <div className="relative z-10 w-[320px] h-[320px] rounded-full bg-gradient-to-br from-white via-yellow-50 to-orange-50 p-6 shadow-2xl ring-2 ring-yellow-400/30 flex items-center justify-center">
               <img
-                src="/logo3.png"
-                alt="失控事務所"
+                src="/瘋玩logo.jpg"
+                alt="瘋玩"
                 width={308}
                 height={308}
                 className="rounded-full drop-shadow-lg object-cover"
@@ -131,7 +131,7 @@ export default function SplashScreen({ onFinish }: SplashScreenProps) {
           }`}
         >
           <h1 className="mb-2 bg-gradient-to-r from-yellow-200 via-white to-yellow-200 bg-clip-text text-5xl font-bold text-transparent drop-shadow-lg">
-            失控事務所
+            瘋玩ERP
           </h1>
           <p className="text-xl font-medium text-yellow-100 drop-shadow-md">GK · 盲盒 · 一番賞 · ERP 系統</p>
         </div>

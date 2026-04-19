@@ -162,8 +162,7 @@ export default function POSPage() {
   const [addingCustomer, setAddingCustomer] = useState(false)
   const phoneInputRef = useRef<HTMLInputElement>(null)
 
-  // 購物金折抵開關（預設自動折抵）
-  const [useStoreCredit, setUseStoreCredit] = useState(true)
+  const [useStoreCredit, setUseStoreCredit] = useState(false)
 
   // Customer search
   const [customerSearchQuery, setCustomerSearchQuery] = useState('')
@@ -2015,40 +2014,6 @@ export default function POSPage() {
                   + 新增客戶
                 </button>
 
-                {/* 显示选中客户的购物金余额 */}
-                {selectedCustomer && (
-                  <div className="mt-2 p-2.5 bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-300 dark:border-blue-700 rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">購物金餘額</span>
-                      <span className={`text-lg font-bold ${selectedCustomer.store_credit >= 0
-                        ? 'text-green-600 dark:text-green-400'
-                        : 'text-red-600 dark:text-red-400'
-                        }`}>
-                        ${selectedCustomer.store_credit?.toFixed(2) || '0.00'}
-                      </span>
-                    </div>
-                    {selectedCustomer.store_credit > 0 && (
-                      <button
-                        onClick={() => setUseStoreCredit(!useStoreCredit)}
-                        className={`mt-1.5 w-full py-1.5 rounded text-xs font-medium transition-colors ${
-                          useStoreCredit
-                            ? 'bg-green-600 text-white hover:bg-green-700'
-                            : 'bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-400 dark:hover:bg-gray-500'
-                        }`}
-                      >
-                        {useStoreCredit ? '自動折抵購物金' : '不使用購物金'}
-                      </button>
-                    )}
-                    {selectedCustomer.credit_limit > 0 && (
-                      <div className="flex items-center justify-between mt-1">
-                        <span className="text-xs text-gray-600 dark:text-gray-400">信用額度</span>
-                        <span className="text-xs text-gray-600 dark:text-gray-400">
-                          ${selectedCustomer.credit_limit.toFixed(2)}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
 
               {/* Payment Method - Button Grid */}
