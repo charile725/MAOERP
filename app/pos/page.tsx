@@ -946,6 +946,13 @@ export default function POSPage() {
         })
         // 3秒後自動消失
         setTimeout(() => setSuccessToast(null), 3000)
+
+        // 自動列印收據（fire-and-forget，不阻擋 UI）
+        fetch('/api/print/receipt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sale_id: data.data.id }),
+        }).catch(() => {/* 列印失敗不影響結帳流程 */})
       } else {
         setError(data.error || '結帳失敗')
       }

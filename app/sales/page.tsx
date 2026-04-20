@@ -1521,6 +1521,21 @@ export default function SalesPage() {
                                 <button
                                   onClick={() => {
                                     setOpenDropdownId(null)
+                                    fetch('/api/print/receipt', {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ sale_id: sale.id }),
+                                    }).then(r => r.json()).then(r => {
+                                      if (!r.ok) alert(`補印失敗：${r.error}`)
+                                    }).catch(() => alert('補印失敗：無法連線印表機'))
+                                  }}
+                                  className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+                                >
+                                  🖨️ 補印收據
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setOpenDropdownId(null)
                                     if (confirm(`確定要作廢銷售單 ${sale.sale_no} 嗎？\n\n此操作將會回補庫存，且無法復原。`)) {
                                       handleDelete(sale.id, sale.sale_no)
                                     }
