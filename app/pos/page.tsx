@@ -106,6 +106,7 @@ export default function POSPage() {
   const [showQuickAdd, setShowQuickAdd] = useState(false)
   const [discountType, setDiscountType] = useState<'none' | 'percent' | 'amount'>('none')
   const [discountValue, setDiscountValue] = useState(0)
+  const [receivedAmount, setReceivedAmount] = useState('')
   const barcodeInputRef = useRef<HTMLInputElement>(null)
 
   // 支付方式選擇步驟
@@ -216,9 +217,6 @@ export default function POSPage() {
   const [showClosingModal, setShowClosingModal] = useState(false)
   const [closingNote, setClosingNote] = useState('')
   const [businessDateLoaded, setBusinessDateLoaded] = useState(false)
-
-  // 收款與找零
-  const [receivedAmount, setReceivedAmount] = useState<string>('')
 
   // 多元付款
   type MultiPayment = { method: PaymentMethod; amount: string }
@@ -1674,13 +1672,13 @@ export default function POSPage() {
                   </div>
                 </div>
 
-                {/* 付款方式網格 (3x3) */}
-                <div className="grid grid-cols-3 gap-2 mb-3">
+                {/* 付款方式網格 - 大區塊 */}
+                <div className="grid grid-cols-2 gap-2 mb-3">
                   {paymentAccounts.map((account) => (
                     <button
                       key={account.id}
                       onClick={() => setPaymentMethod(account.payment_method_code as PaymentMethod)}
-                      className={`py-3 px-2 rounded-lg font-semibold text-xs transition-all ${
+                      className={`py-4 px-3 rounded-lg font-semibold text-sm transition-all ${
                         paymentMethod === account.payment_method_code
                           ? 'bg-indigo-600 text-white shadow-lg'
                           : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
@@ -1689,6 +1687,36 @@ export default function POSPage() {
                       {(account.display_name || account.account_name).replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '')}
                     </button>
                   ))}
+                </div>
+
+                {/* 收款計算區 */}
+                <div className="bg-slate-700/50 rounded-lg p-3 mb-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-medium text-slate-400">應收</label>
+                    <span className="text-sm font-bold text-white">{formatCurrency(finalTotal)}</span>
+                  </div>
+                  <input
+                    type="number"
+                    value={receivedAmount}
+                    onChange={(e) => setReceivedAmount(e.target.value)}
+                    placeholder="收多少"
+                    className="w-full border-2 border-slate-600 rounded-lg px-3 py-2 text-base text-white bg-slate-600 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none text-right font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                  {receivedAmount && parseFloat(receivedAmount) > 0 && (
+                    <div className="border-t border-slate-600 pt-2">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs text-slate-400">應找</span>
+                        <span className={`text-sm font-bold ${parseFloat(receivedAmount) >= finalTotal ? 'text-green-400' : 'text-red-400'}`}>
+                          {formatCurrency(Math.max(0, parseFloat(receivedAmount) - finalTotal))}
+                        </span>
+                      </div>
+                      {parseFloat(receivedAmount) < finalTotal && (
+                        <div className="text-xs text-red-400 text-right">
+                          還差 {formatCurrency(finalTotal - parseFloat(receivedAmount))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* 多元付款按鈕 */}
@@ -2027,69 +2055,6 @@ export default function POSPage() {
                         <span className="text-white">{formatCurrency(finalTotal)}</span>
                       </div>
                     </div>
-                  </div>
-
-                  {/* Discount - Button Selection */}
-                  <div>
-                    <div className="grid grid-cols-3 gap-2">
-                      <button
-                        onClick={() => {
-                          setDiscountType('percent')
-                          setShowNoteInput(false)
-                        }}
-                        className={`py-2 rounded-lg font-bold text-xs border-2 transition-all ${discountType === 'percent'
-                          ? 'bg-indigo-600 border-indigo-600 text-white shadow-md'
-                          : 'bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600'
-                          }`}
-                      >
-                        % 折扣
-                      </button>
-                      <button
-                        onClick={() => {
-                          setDiscountType('amount')
-                          setShowNoteInput(false)
-                        }}
-                        className={`py-2 rounded-lg font-bold text-xs border-2 transition-all ${discountType === 'amount'
-                          ? 'bg-indigo-600 border-indigo-600 text-white shadow-md'
-                          : 'bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600'
-                          }`}
-                      >
-                        $ 折扣
-                      </button>
-                      <button
-                        onClick={() => {
-                          setShowNoteInput(!showNoteInput)
-                          setDiscountType('none')
-                        }}
-                        className={`py-2 rounded-lg font-bold text-xs border-2 transition-all ${showNoteInput
-                          ? 'bg-indigo-600 border-indigo-600 text-white shadow-md'
-                          : 'bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600'
-                          }`}
-                      >
-                        備註
-                      </button>
-                    </div>
-                    {(discountType === 'percent' || discountType === 'amount') && (
-                      <input
-                        type="number"
-                        value={discountValue}
-                        onChange={(e) => setDiscountValue(parseFloat(e.target.value) || 0)}
-                        min="0"
-                        max={discountType === 'percent' ? 100 : subtotal}
-                        step={discountType === 'percent' ? 1 : 1}
-                        className="w-full mt-2 border-2 border-slate-500 rounded-lg px-3 py-2 text-sm text-white bg-slate-600 focus:border-indigo-500 focus:outline-none"
-                        placeholder={discountType === 'percent' ? '折扣 %' : '折扣金額'}
-                      />
-                    )}
-                    {showNoteInput && (
-                      <input
-                        type="text"
-                        value={note}
-                        onChange={(e) => setNote(e.target.value)}
-                        placeholder="輸入訂單備註..."
-                        className="w-full mt-2 border-2 border-slate-600 rounded-lg px-3 py-2 text-sm text-white bg-slate-700 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none"
-                      />
-                    )}
                   </div>
 
                   {/* 折扣 + 備註 */}
