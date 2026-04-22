@@ -173,6 +173,9 @@ export default function MobilePOS({
     const [showCameraScanner, setShowCameraScanner] = useState(false)
     const [showCustomerPicker, setShowCustomerPicker] = useState(false)
     const [showPaymentPicker, setShowPaymentPicker] = useState(false)
+    const [showPaymentSelection, setShowPaymentSelection] = useState(false)
+    const [showCheckoutStep, setShowCheckoutStep] = useState(false)
+    const [tempPaymentMethod, setTempPaymentMethod] = useState<PaymentMethod>(paymentMethod)
     const [showDraftsPicker, setShowDraftsPicker] = useState(false)
     const [showClosingModal, setShowClosingModal] = useState(false)
     const [closingInProgress, setClosingInProgress] = useState(false)
@@ -481,15 +484,16 @@ export default function MobilePOS({
                 </div>
             </div>
 
-            {/* 購物車列表 */}
-            <div className="flex-1 overflow-y-auto p-3 space-y-2">
-                {cart.length === 0 ? (
-                    <div className="text-center text-slate-500 mt-20">
-                        <div className="text-6xl mb-4">🛒</div>
-                        <div className="text-slate-400 text-lg">掃描或搜尋商品加入購物車</div>
-                    </div>
-                ) : (
-                    cart.map((item, index) => (
+            {/* 購物車列表 - 當未進入結帳步驟時顯示 */}
+            {!showCheckoutStep && (
+                <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                    {cart.length === 0 ? (
+                        <div className="text-center text-slate-500 mt-20">
+                            <div className="text-6xl mb-4">🛒</div>
+                            <div className="text-slate-400 text-lg">掃描或搜尋商品加入購物車</div>
+                        </div>
+                    ) : (
+                        cart.map((item, index) => (
                         <div
                             key={`${item.product_id}-${index}`}
                             className={`bg-slate-800 rounded-lg p-3 ${item.isFreeGift ? 'border-2 border-emerald-500' : ''}`}
@@ -577,10 +581,12 @@ export default function MobilePOS({
                         </div>
                     ))
                 )}
-            </div>
+                </div>
+            )}
 
-            {/* 底部結帳區 */}
-            <div className="bg-slate-800 border-t border-slate-700 p-3 space-y-3 safe-area-bottom">
+            {/* 底部結帳區 - 當未進入結帳步驟時顯示 */}
+            {!showCheckoutStep && (
+                <div className="bg-slate-800 border-t border-slate-700 p-3 space-y-3 safe-area-bottom">
                 {/* 客戶 + 付款方式 */}
                 <div className="flex gap-2">
                     <button
@@ -591,7 +597,10 @@ export default function MobilePOS({
                         {selectedCustomer?.customer_name || '散客'}
                     </button>
                     <button
-                        onClick={() => setShowPaymentPicker(true)}
+                        onClick={() => {
+                            setTempPaymentMethod(paymentMethod)
+                            setShowPaymentSelection(true)
+                        }}
                         className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-2 px-3 rounded-lg text-sm text-left"
                     >
                         <span className="text-slate-400">付款:</span>{' '}
@@ -601,15 +610,6 @@ export default function MobilePOS({
 
                 {/* 狀態切換 */}
                 <div className="flex gap-2">
-                    <label className="flex-1 flex items-center gap-2 cursor-pointer bg-slate-700 rounded-lg px-3 py-2">
-                        <input
-                            type="checkbox"
-                            checked={isPaid}
-                            onChange={(e) => setIsPaid(e.target.checked)}
-                            className="w-4 h-4 accent-indigo-500"
-                        />
-                        <span className="text-sm text-white">已收款</span>
-                    </label>
                     {cart.some(item => item.isNotDelivered) && (
                         <div className="flex-1 flex items-center gap-2 bg-orange-600 rounded-lg px-3 py-2">
                             <span className="text-sm text-white">有未出貨商品</span>
@@ -684,7 +684,7 @@ export default function MobilePOS({
                         暫存
                     </button>
                     <button
-                        onClick={handleCheckout}
+                        onClick={() => setShowCheckoutStep(true)}
                         disabled={loading || cart.length === 0}
                         className="bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-600 text-white font-bold text-lg py-4 px-6 rounded-lg transition-all"
                     >
@@ -697,7 +697,8 @@ export default function MobilePOS({
                         {error}
                     </div>
                 )}
-            </div>
+                </div>
+            )}
 
             {/* 相機掃描 Modal */}
             <CameraScanner
@@ -901,7 +902,130 @@ export default function MobilePOS({
                 </div>
             )}
 
-            {/* 付款方式 Modal */}
+            {/* 付款方式選擇 - 第一步 Modal */}
+            {showPaymentSelection && (
+                <div className="fixed inset-0 bg-black/70 z-50 flex items-end">
+                    <div className="w-full bg-slate-800 rounded-t-2xl">
+                        <div className="p-4 border-b border-slate-700 flex items-center justify-between">
+                            <h3 className="text-lg font-bold text-white">選擇付款方式</h3>
+                            <button onClick={() => setShowPaymentSelection(false)} className="text-slate-400 text-2xl">×</button>
+                        </div>
+                        <div className="p-4 grid grid-cols-3 gap-3 max-h-[60vh] overflow-y-auto">
+                            {paymentMethods.map((method) => (
+                                <button
+                                    key={method.key}
+                                    onClick={() => setTempPaymentMethod(method.key as PaymentMethod)}
+                                    className={`py-6 px-4 rounded-lg font-semibold text-base transition-all ${
+                                        tempPaymentMethod === method.key
+                                            ? 'bg-indigo-600 text-white shadow-lg scale-105'
+                                            : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                                    }`}
+                                >
+                                    {method.label}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="p-4 flex gap-2 border-t border-slate-700">
+                            <button
+                                onClick={() => setShowPaymentSelection(false)}
+                                className="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-300 py-3 rounded-lg font-semibold"
+                            >
+                                取消
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setPaymentMethod(tempPaymentMethod)
+                                    setIsPaid(paymentMethods.find(m => m.key === tempPaymentMethod)?.paid || false)
+                                    setShowPaymentSelection(false)
+                                    setShowCheckoutStep(true)
+                                }}
+                                className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white py-3 rounded-lg font-semibold"
+                            >
+                                繼續 →
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* 結帳步驟 - 在右邊區域顯示（不用 modal） */}
+            {showCheckoutStep ? (
+                <div className="bg-slate-800 border-l border-slate-700 p-4 space-y-4 flex flex-col flex-1 overflow-hidden">
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-lg font-bold text-white">確認結帳</h3>
+                        <button
+                            onClick={() => setShowCheckoutStep(false)}
+                            className="text-slate-400 hover:text-slate-300 text-2xl"
+                        >
+                            ←
+                        </button>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto space-y-3">
+                        {/* 顯示已選擇的付款方式 */}
+                        <div className="bg-indigo-900/30 border border-indigo-600 rounded-lg p-3">
+                            <div className="text-indigo-400 text-sm">已選擇付款方式</div>
+                            <div className="text-white text-lg font-bold mt-1">{getPaymentLabel(paymentMethod)}</div>
+                        </div>
+
+                        {/* 訂單摘要 */}
+                        <div className="space-y-2">
+                            <div className="text-slate-400 text-sm font-semibold">訂單商品</div>
+                            {cart.map((item, index) => (
+                                <div key={`${item.product_id}-${index}`} className="flex justify-between text-white text-sm bg-slate-700/50 p-2 rounded">
+                                    <span>{item.product.name} × {item.quantity}</span>
+                                    <span className="text-emerald-400">{formatCurrency(item.price * item.quantity)}</span>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* 金額資訊 */}
+                        <div className="bg-slate-700/50 rounded-lg p-3 space-y-2 text-white">
+                            <div className="flex justify-between">
+                                <span className="text-slate-400">小計</span>
+                                <span>{formatCurrency(cart.reduce((sum, item) => sum + item.price * item.quantity, 0))}</span>
+                            </div>
+                            {discountAmount > 0 && (
+                                <div className="flex justify-between text-red-400">
+                                    <span>折扣</span>
+                                    <span>-{formatCurrency(discountAmount)}</span>
+                                </div>
+                            )}
+                            {storeCreditUsed > 0 && (
+                                <div className="flex justify-between text-emerald-400">
+                                    <span>購物金</span>
+                                    <span>-{formatCurrency(storeCreditUsed)}</span>
+                                </div>
+                            )}
+                            <div className="border-t border-slate-600 pt-2 flex justify-between text-lg font-bold">
+                                <span>應收金額</span>
+                                <span className="text-indigo-400">{formatCurrency(finalTotal)}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex gap-2 pt-4 border-t border-slate-700">
+                        <button
+                            onClick={() => setShowCheckoutStep(false)}
+                            className="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-300 py-3 rounded-lg font-semibold"
+                        >
+                            返回
+                        </button>
+                        <button
+                            onClick={() => {
+                                handleCheckout()
+                                setShowCheckoutStep(false)
+                            }}
+                            disabled={loading}
+                            className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-600 text-white py-3 rounded-lg font-semibold"
+                        >
+                            {loading ? '處理中...' : '確認結帳'}
+                        </button>
+                    </div>
+                </div>
+            ) : null}
+
+            {/* 付款方式 Modal - 舊版（保留備用） */}
             {showPaymentPicker && (
                 <div className="fixed inset-0 bg-black/70 z-50 flex items-end">
                     <div className="w-full bg-slate-800 rounded-t-2xl">

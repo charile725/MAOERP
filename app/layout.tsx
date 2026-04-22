@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import Navigation from "@/components/Navigation";
+import MainLayout from "@/components/MainLayout";
 import GlobalSplashScreen from "@/components/GlobalSplashScreen";
 import DisableNumberInputScroll from "@/components/DisableNumberInputScroll";
 import SWRProvider from "@/components/SWRProvider";
@@ -44,8 +44,9 @@ export default function RootLayout({
         <DisableNumberInputScroll />
         <SWRProvider>
           <GlobalSplashScreen showOnEveryVisit={true}>
-            <Navigation />
-            {children}
+            <MainLayout>
+              {children}
+            </MainLayout>
           </GlobalSplashScreen>
         </SWRProvider>
       </body>

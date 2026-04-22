@@ -108,6 +108,13 @@ export default function POSPage() {
   const [discountValue, setDiscountValue] = useState(0)
   const barcodeInputRef = useRef<HTMLInputElement>(null)
 
+  // 支付方式選擇步驟
+  const [showPaymentSelection, setShowPaymentSelection] = useState(false)
+  const [showCheckoutStep, setShowCheckoutStep] = useState(false)
+  const [tempPaymentMethod, setTempPaymentMethod] = useState<PaymentMethod>('cash')
+  const [receiptType, setReceiptType] = useState<'receipt' | 'none'>('receipt')
+  const [showNoteInput, setShowNoteInput] = useState(false)
+
   // Sales mode - 可切換店裡/直播模式
   const [salesMode, setSalesMode] = useState<'pos' | 'live'>('pos')
 
@@ -257,14 +264,7 @@ export default function POSPage() {
   const { data: rawPaymentAccounts = [] } = useSWR<PaymentAccount[]>('/api/accounts?active_only=true')
 
   const paymentAccounts = useMemo(() => {
-    const POS_ALLOWED_CODES = ['cash', 'pending']
-    const POS_ALLOWED_NAMES = ['國泰公司戶', 'LinePay', 'LINE Pay', 'Line Pay', 'linepay']
-    return rawPaymentAccounts.filter((acc) =>
-      acc.payment_method_code && (
-        POS_ALLOWED_CODES.includes(acc.payment_method_code) ||
-        POS_ALLOWED_NAMES.some(name => acc.account_name.toLowerCase().includes(name.toLowerCase()))
-      )
-    )
+    return rawPaymentAccounts.filter(acc => acc.payment_method_code)
   }, [rawPaymentAccounts])
 
   const { data: todaySales = [], mutate: mutateTodaySales } = useSWR<TodaySale[]>(
@@ -1387,31 +1387,36 @@ export default function POSPage() {
         </div>
 
         <div className="flex-1 flex overflow-hidden">
-          {/* Left - 商品區 (等分) */}
-          <div className="flex-1 flex flex-col bg-slate-800 p-3 overflow-hidden border-r border-slate-700">
-            {/* Mode Toggle */}
-            <div className="mb-3 flex gap-2">
-              <button
-                onClick={() => setInventoryMode('products')}
-                className={`flex-1 py-2 px-4 rounded-lg font-medium transition-all ${inventoryMode === 'products'
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                  }`}
-              >
-                商品庫
-              </button>
-              <button
-                onClick={() => setInventoryMode('ichiban')}
-                className={`flex-1 py-2 px-4 rounded-lg font-medium transition-all ${inventoryMode === 'ichiban'
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                  }`}
-              >
-                一番賞
-              </button>
-            </div>
+          {/* Left - 商品區 (2/3) */}
+          <div className="flex-[2] flex flex-col bg-slate-800 p-3 overflow-hidden border-r border-slate-700">
+            {/* 第一步：商品選擇 */}
+            {!showCheckoutStep && (
+              <>
+                {/* Mode Toggle */}
+                <div className="mb-3 flex gap-2">
+                  <button
+                    onClick={() => setInventoryMode('products')}
+                    className={`flex-1 py-2 px-4 rounded-lg font-medium transition-all ${inventoryMode === 'products'
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                      }`}
+                  >
+                    商品庫
+                  </button>
+                  <button
+                    onClick={() => setInventoryMode('ichiban')}
+                    className={`flex-1 py-2 px-4 rounded-lg font-medium transition-all ${inventoryMode === 'ichiban'
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                      }`}
+                  >
+                    一番賞
+                  </button>
+                </div>
+              </>
+            )}
 
-            {inventoryMode === 'products' && (
+            {!showCheckoutStep && inventoryMode === 'products' && (
               <>
                 <div className="mb-3 flex gap-2">
                   <input
@@ -1504,7 +1509,7 @@ export default function POSPage() {
               </>
             )}
 
-            {inventoryMode === 'ichiban' && (
+            {!showCheckoutStep && inventoryMode === 'ichiban' && (
               <>
                 <div className="mb-3">
                   <input
@@ -1645,428 +1650,63 @@ export default function POSPage() {
                 </div>
               </>
             )}
-          </div>
 
-          {/* Middle - 購物車 (等分) */}
-          <div className="flex-1 bg-slate-900 flex flex-col border-r border-slate-700">
-            <div className="bg-slate-800 px-4 py-3 border-b border-slate-700 flex items-center justify-between">
-              <h2 className="font-bold text-lg text-white">購物清單</h2>
-              {cart.length > 0 && (
-                <div className="flex gap-2">
-                  <button
-                    onClick={toggleAllFreeGift}
-                    className="bg-slate-600 hover:bg-slate-500 text-white px-3 py-1 rounded-lg text-sm transition-all"
-                    title={cart.every(item => item.isFreeGift || item.ichiban_kuji_prize_id) ? "取消全選贈品" : "全選贈品"}
-                  >
-                    {cart.every(item => item.isFreeGift || item.ichiban_kuji_prize_id) ? "取消贈品" : "全選贈品"}
-                  </button>
-                  <button
-                    onClick={() => setCart([])}
-                    className="bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded-lg text-sm transition-all"
-                  >
-                    清空
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2">
-              {cart.length === 0 ? (
-                <div className="text-center text-slate-500 mt-20">
-                  <div className="text-4xl mb-2"></div>
-                  <div className="text-slate-400">請點選商品</div>
-                </div>
-              ) : (
-                displayCart.map((item, displayIndex) => {
-                  const isGrouped = !!item.groupedCount && item.groupedCount > 1
-                  const hasComboDiscount = item.ichiban_kuji_id && isGrouped
-
-                  // Calculate average price for grouped items
-                  const avgOriginalPrice = isGrouped
-                    ? item.indices!.reduce((sum, idx) => sum + cart[idx].price, 0) / item.indices!.length
-                    : (cart[item.indices![0]]?.price || item.price)
-
-                  return (
-                    <div
-                      key={`display-${displayIndex}`}
-                      className="bg-slate-800 border border-slate-700 rounded-lg p-3">
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex-1">
-                          <div className="font-medium text-sm text-white">
-                            {item.product.name}
-                            {item.ichiban_kuji_id && (
-                              <span className="ml-2 text-xs bg-purple-600 text-white px-1.5 py-0.5 rounded">一番賞</span>
-                            )}
-                            {hasComboDiscount && (
-                              <span className="ml-2 text-xs bg-emerald-600 text-white px-1.5 py-0.5 rounded">組合</span>
-                            )}
-                            {cart[item.indices![0]]?.isFreeGift && (
-                              <span className="ml-2 text-xs bg-red-500 text-white px-2 py-0.5 rounded">贈品</span>
-                            )}
-                            {cart[item.indices![0]]?.isNotDelivered && (
-                              <span className="ml-2 text-xs bg-orange-500 text-white px-2 py-0.5 rounded">未出貨</span>
-                            )}
-                          </div>
-                          <div className="text-xs text-gray-600 dark:text-gray-400">
-                            {hasComboDiscount && (
-                              <span className="line-through mr-2">{formatCurrency(avgOriginalPrice)}</span>
-                            )}
-                            {formatCurrency(item.price)}
-                            {isGrouped && <span className="ml-2">× {item.quantity} 抽</span>}
-                          </div>
-                          <div className="flex items-center gap-3 mt-1">
-                            {!item.ichiban_kuji_id && (
-                              <label className="flex items-center gap-1 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={cart[item.indices![0]]?.isFreeGift || false}
-                                  onChange={() => toggleFreeGift(item.indices![0])}
-                                  className="w-3 h-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                />
-                                <span className="text-xs text-gray-600 dark:text-gray-400">贈品</span>
-                              </label>
-                            )}
-                            <label className="flex items-center gap-1 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={cart[item.indices![0]]?.isNotDelivered || false}
-                                onChange={() => toggleNotDelivered(item.indices![0])}
-                                className="w-3 h-3 rounded border-gray-300 text-orange-500 focus:ring-orange-500 accent-orange-500"
-                              />
-                              <span className="text-xs text-gray-600 dark:text-gray-400">未出貨</span>
-                            </label>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => {
-                            // Remove all items in this group
-                            if (item.indices && item.indices.length > 0) {
-                              // Remove in reverse order to maintain correct indices
-                              const sortedIndices = [...item.indices].sort((a, b) => b - a)
-                              sortedIndices.forEach(idx => {
-                                removeFromCart(cart[idx].product_id, idx)
-                              })
-                            }
-                          }}
-                          className="text-red-600 hover:text-red-800 font-bold text-lg ml-2"
-                        >
-                          ×
-                        </button>
-                      </div>
-
-                      {/* Show details for grouped items */}
-                      {isGrouped && item.indices && (
-                        <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600 space-y-1">
-                          {item.indices.map((idx) => {
-                            const cartItem = cart[idx]
-                            const priceItem = cartWithComboPrice[idx]
-                            return (
-                              <div key={idx} className="flex items-center justify-between text-xs">
-                                <div className="flex-1 flex items-center gap-2">
-                                  <span className="text-purple-600 dark:text-purple-400 font-bold">
-                                    {cartItem.product.name.match(/】(.+?) -/)?.[1] || '賞'}
-                                  </span>
-                                  <span className="text-gray-600 dark:text-gray-400">
-                                    {cartItem.product.name.split(' - ')[1] || cartItem.product.name}
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-gray-500 dark:text-gray-500">
-                                    {formatCurrency(priceItem.price)}
-                                  </span>
-                                  <button
-                                    onClick={() => removeFromCart(cartItem.product_id, idx)}
-                                    className="text-red-500 hover:text-red-700 font-bold"
-                                  >
-                                    ×
-                                  </button>
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )}
-
-                      <div className="flex items-center justify-between mt-2">
-                        {!item.ichiban_kuji_id ? (
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={() => updateQuantity(item.indices![0], item.quantity - 1)}
-                              className="w-7 h-7 bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500 rounded font-bold text-sm text-black dark:text-gray-100"
-                            >
-                              −
-                            </button>
-                            <input
-                              type="number"
-                              min="1"
-                              value={item.quantity}
-                              onChange={(e) => {
-                                const newQty = parseInt(e.target.value) || 1
-                                if (newQty > 0) {
-                                  updateQuantity(item.indices![0], newQty)
-                                }
-                              }}
-                              className="w-14 h-7 text-center font-bold text-sm text-black dark:text-gray-100 bg-gray-100 dark:bg-gray-700 border-2 border-gray-300 dark:border-gray-600 rounded focus:border-blue-500 dark:focus:border-blue-400 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                            />
-                            <button
-                              onClick={() => updateQuantity(item.indices![0], item.quantity + 1)}
-                              className="w-7 h-7 bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500 rounded font-bold text-sm text-black dark:text-gray-100"
-                            >
-                              +
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="text-xs text-purple-600 dark:text-purple-400 font-bold">
-                            {item.groupedCount} 個賞項
-                          </div>
-                        )}
-                        <div className="text-base font-bold text-black dark:text-gray-100">
-                          {formatCurrency(item.price * item.quantity)}
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })
-              )}
-            </div>
-
-            {/* Total Display - 金額區域 */}
-            <div className="bg-slate-800 border-t border-slate-700 p-4">
-              {/* Show combo price info */}
-              {cart.some(item => item.ichiban_kuji_id) && (() => {
-                const uniqueKujiIds = [...new Set(cart.filter(item => item.ichiban_kuji_id).map(item => item.ichiban_kuji_id!))]
-                return uniqueKujiIds.map(kuji_id => {
-                  const info = getIchibanComboInfo(kuji_id)
-                  if (info.applicableCombo) {
-                    return (
-                      <div key={kuji_id} className="mb-3 p-2 bg-emerald-900/30 border border-emerald-600 rounded-lg">
-                        <div className="text-sm font-medium text-emerald-400">
-                          {info.kuji?.name} 組合優惠
-                        </div>
-                        <div className="text-xs text-emerald-500">
-                          {info.applicableCombo.draws} 抽 {formatCurrency(info.applicableCombo.price)} (已購 {info.totalCount} 抽)
-                        </div>
-                      </div>
-                    )
-                  }
-                  return null
-                })
-              })()}
-
-              {/* 折扣/購物金資訊（有時才顯示） */}
-              {(discountAmount > 0 || storeCreditUsed > 0) && (
-                <div className="mb-3 text-sm space-y-1">
-                  {discountAmount > 0 && (
-                    <div className="flex justify-between text-red-400">
-                      <span>折扣</span>
-                      <span>-{formatCurrency(discountAmount)}</span>
-                    </div>
-                  )}
-                  {storeCreditUsed > 0 && (
-                    <div className="flex justify-between text-emerald-400">
-                      <span>購物金</span>
-                      <span>-{formatCurrency(storeCreditUsed)}</span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* 應收金額 */}
-              <div className="flex justify-between items-center">
-                <span className="text-base text-slate-400">應收</span>
-                <span className="text-3xl font-bold text-white">{formatCurrency(finalTotal)}</span>
-              </div>
-
-              {/* 現金收銀區 - 僅現金付款顯示 */}
-              {paymentMethod === 'cash' && cart.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-slate-700">
-                  {/* 實收金額 */}
+            {/* 第二步：付款方式選擇 */}
+            {showCheckoutStep && (
+              <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col">
+                {/* 付款方式標題 + 已收款 Toggle */}
+                <div className="flex items-center justify-between mb-3">
+                  <label className="block font-medium text-sm text-slate-300">付款方式</label>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-slate-400 whitespace-nowrap">實收</span>
-                    <input
-                      type="number"
-                      value={receivedAmount}
-                      onChange={(e) => setReceivedAmount(e.target.value)}
-                      onWheel={(e) => (e.target as HTMLInputElement).blur()}
-                      placeholder="0"
-                      className="flex-1 rounded px-3 py-1.5 text-right text-lg font-bold text-white bg-slate-700 border border-slate-600 focus:border-indigo-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    />
+                    <span className="text-xs text-slate-400">已收款</span>
                     <button
-                      onClick={() => setReceivedAmount(String(finalTotal))}
-                      className="px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-500 text-white rounded transition-colors font-medium whitespace-nowrap"
+                      onClick={() => setIsPaid(!isPaid)}
+                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                        isPaid ? 'bg-indigo-600' : 'bg-slate-600'
+                      }`}
                     >
-                      收剛好
-                    </button>
-                    <button
-                      onClick={() => setReceivedAmount('')}
-                      className="px-2 py-1.5 text-xs bg-slate-600 hover:bg-slate-500 text-slate-300 rounded transition-colors whitespace-nowrap"
-                    >
-                      清除
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          isPaid ? 'translate-x-4' : 'translate-x-0.5'
+                        }`}
+                      />
                     </button>
                   </div>
-
-                  {/* 找零顯示 */}
-                  {receivedAmount && parseFloat(receivedAmount) > 0 && (
-                    <div className={`mt-2 rounded px-3 py-2 flex items-center justify-between ${parseFloat(receivedAmount) >= finalTotal
-                      ? 'bg-emerald-900/40'
-                      : 'bg-red-900/40'
-                      }`}>
-                      <span className={`text-sm ${parseFloat(receivedAmount) >= finalTotal ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {parseFloat(receivedAmount) === finalTotal ? '剛好' : parseFloat(receivedAmount) > finalTotal ? '找零' : '尚差'}
-                      </span>
-                      {parseFloat(receivedAmount) !== finalTotal && (
-                        <span className={`text-xl font-bold ${parseFloat(receivedAmount) > finalTotal ? 'text-emerald-300' : 'text-red-300'}`}>
-                          {formatCurrency(Math.abs(parseFloat(receivedAmount) - finalTotal))}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Right - 結帳區 (等分) */}
-          <div className="flex-1 bg-slate-800 flex flex-col">
-            {error && (
-              <div className="bg-red-100 dark:bg-red-900 border-2 border-red-500 dark:border-red-600 text-red-700 dark:text-red-200 rounded-lg px-4 py-3 m-4 mb-0">
-                {error}
-              </div>
-            )}
-
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-3">
-              {/* Customer */}
-              <div className="relative">
-                <label className="block font-medium mb-1.5 text-sm text-slate-300">客戶</label>
-                <div className="relative">
-                  <input
-                    ref={customerInputRef}
-                    type="text"
-                    value={customerSearchQuery}
-                    onChange={(e) => {
-                      setCustomerSearchQuery(e.target.value)
-                      setShowCustomerDropdown(true)
-                    }}
-                    onFocus={() => setShowCustomerDropdown(true)}
-                    placeholder={selectedCustomer ? selectedCustomer.customer_name : '散客 (點擊搜尋)'}
-                    className="w-full rounded-lg px-3 py-2 text-sm text-white bg-slate-700 border border-slate-600 focus:border-indigo-500 focus:outline-none"
-                  />
-                  {selectedCustomer && (
-                    <button
-                      onClick={() => {
-                        setSelectedCustomer(null)
-                        setCustomerSearchQuery('')
-                      }}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-red-600 font-bold"
-                    >
-                      ×
-                    </button>
-                  )}
                 </div>
 
-                {/* Dropdown */}
-                {showCustomerDropdown && (
-                  <div className="customer-dropdown absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border-2 border-gray-400 dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto custom-scrollbar">
-                    {/* 散客選項 */}
+                {/* 付款方式網格 (3x3) */}
+                <div className="grid grid-cols-3 gap-2 mb-3">
+                  {paymentAccounts.map((account) => (
                     <button
-                      onClick={() => {
-                        setSelectedCustomer(null)
-                        setCustomerSearchQuery('')
-                        setShowCustomerDropdown(false)
-                      }}
-                      className="w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-black dark:text-gray-100 border-b border-gray-200 dark:border-gray-600"
-                    >
-                      <div className="font-bold">散客</div>
-                      <div className="text-xs text-gray-500">不選擇客戶</div>
-                    </button>
-
-                    {/* 過濾後的客戶列表 */}
-                    {filteredCustomers.map((customer) => (
-                      <button
-                        key={customer.id}
-                        onClick={() => {
-                          setSelectedCustomer(customer)
-                          setCustomerSearchQuery('')
-                          setShowCustomerDropdown(false)
-                        }}
-                        className="w-full text-left px-3 py-2 hover:bg-blue-50 dark:hover:bg-blue-900/20 text-black dark:text-gray-100 border-b border-gray-200 dark:border-gray-600 last:border-b-0"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="font-bold">{customer.customer_name}</div>
-                          <div className={`text-sm font-semibold ${customer.store_credit >= 0
-                            ? 'text-green-600 dark:text-green-400'
-                            : 'text-red-600 dark:text-red-400'
-                            }`}>
-                            ${customer.store_credit?.toFixed(2) || '0.00'}
-                          </div>
-                        </div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">
-                          {customer.customer_code} {customer.phone && `• ${customer.phone}`}
-                        </div>
-                      </button>
-                    ))}
-
-                    {filteredCustomers.length === 0 && customerSearchQuery && (
-                      <div className="px-3 py-4 text-center text-gray-500 dark:text-gray-400">
-                        找不到客戶
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <button
-                  onClick={() => setShowQuickAddCustomer(true)}
-                  className="w-full mt-2 bg-green-500 hover:bg-green-600 text-white font-bold px-3 py-2 rounded-lg text-sm transition-all"
-                >
-                  + 新增客戶
-                </button>
-
-              </div>
-
-              {/* Payment Method - Button Grid */}
-              <div>
-                <label className="block font-medium mb-1.5 text-sm text-slate-300">付款方式</label>
-
-                {/* 單一付款模式：從帳戶動態載入付款方式 */}
-                {!isMultiPayment && (
-                  <div className="grid grid-cols-2 gap-2">
-                    {paymentAccounts.map((account) => (
-                      <button
-                        key={account.id}
-                        onClick={() => {
-                          setPaymentMethod(account.payment_method_code as PaymentMethod)
-                          // 只有待定是未收款，其他都是已收款
-                          setIsPaid(account.payment_method_code !== 'pending')
-                        }}
-                        className={`py-2.5 px-3 rounded-lg text-sm transition-all ${paymentMethod === account.payment_method_code
-                          ? 'bg-indigo-600 text-white'
+                      key={account.id}
+                      onClick={() => setPaymentMethod(account.payment_method_code as PaymentMethod)}
+                      className={`py-3 px-2 rounded-lg font-semibold text-xs transition-all ${
+                        paymentMethod === account.payment_method_code
+                          ? 'bg-indigo-600 text-white shadow-lg'
                           : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                          }`}
-                      >
-                        {(account.display_name || account.account_name).replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '')}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {/* Multi-payment toggle */}
-                {isPaid && !isMultiPayment && (
-                  <div className="mt-2">
-                    <button
-                      onClick={() => {
-                        setIsMultiPayment(true)
-                        setMultiPayments([{ method: paymentMethod as PaymentMethod, amount: String(finalTotal) }])
-                      }}
-                      className="w-full py-2 rounded-lg text-sm font-medium transition-all bg-slate-700 text-slate-300 hover:bg-slate-600 border border-slate-600"
+                      }`}
                     >
-                      切換多元付款
+                      {(account.display_name || account.account_name).replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '')}
                     </button>
-                  </div>
+                  ))}
+                </div>
+
+                {/* 多元付款按鈕 */}
+                {!isMultiPayment && (
+                  <button
+                    onClick={() => {
+                      setIsMultiPayment(true)
+                      setMultiPayments([{ method: paymentMethod as PaymentMethod, amount: String(finalTotal) }])
+                    }}
+                    className="w-full py-2 text-xs text-slate-400 hover:text-white border border-dashed border-slate-500 rounded hover:border-slate-400 transition-colors mb-2"
+                  >
+                    + 切換多元付款
+                  </button>
                 )}
 
-                {/* Multi-payment inputs */}
-                {isMultiPayment && isPaid && (
-                  <div className="space-y-2 p-3 bg-slate-700/50 rounded-lg border border-orange-500">
+                {/* 多元付款列表 */}
+                {isMultiPayment && (
+                  <div className="space-y-2 p-3 bg-slate-700/50 rounded-lg border border-orange-500 mb-2">
                     <div className="flex items-center justify-between mb-2">
                       <div className="text-sm font-medium text-orange-400">多元付款模式</div>
                       <button
@@ -2076,7 +1716,7 @@ export default function POSPage() {
                         }}
                         className="text-xs text-slate-400 hover:text-white px-2 py-1 rounded bg-slate-600 hover:bg-slate-500 transition-colors"
                       >
-                        ← 返回單一付款
+                        返回
                       </button>
                     </div>
                     {multiPayments.map((payment, index) => (
@@ -2097,7 +1737,6 @@ export default function POSPage() {
                           <option value="transfer_esun">玉山</option>
                           <option value="transfer_union">聯邦</option>
                           <option value="transfer_linepay">LINE</option>
-                          <option value="cod">貨到</option>
                         </select>
                         <input
                           type="number"
@@ -2130,168 +1769,466 @@ export default function POSPage() {
                     >
                       ＋ 新增付款方式
                     </button>
+                  </div>
+                )}
 
-                    {/* 金額統計 */}
-                    <div className="pt-2 border-t border-slate-600 space-y-1">
-                      <div className="flex justify-between text-xs">
-                        <span className="text-slate-400">已分配</span>
-                        <span className={`font-bold ${multiPayments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0) === finalTotal
-                          ? 'text-emerald-400'
-                          : 'text-orange-400'
-                          }`}>
-                          {formatCurrency(multiPayments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0))}
-                        </span>
+                {/* 收據選擇 */}
+                <div className="flex gap-2 mt-auto">
+                  <button
+                    onClick={() => setReceiptType('receipt')}
+                    className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all ${
+                      receiptType === 'receipt'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                    }`}
+                  >
+                    列印
+                  </button>
+                  <button
+                    onClick={() => setReceiptType('none')}
+                    className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all ${
+                      receiptType === 'none'
+                        ? 'bg-slate-600 text-white'
+                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                    }`}
+                  >
+                    不列印
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Right - 結帳區 (1/3 - 側邊欄) */}
+          <div className="flex-1 bg-slate-800 flex flex-col">
+            {error && (
+              <div className="bg-red-100 dark:bg-red-900 border-2 border-red-500 dark:border-red-600 text-red-700 dark:text-red-200 rounded-lg px-4 py-3 m-4 mb-0">
+                {error}
+              </div>
+            )}
+
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-3">
+              {/* STEP 1: 購物清單 + 折扣 + 備註 (當 !showCheckoutStep 時) */}
+              {!showCheckoutStep && (
+                <>
+                  {/* Customer */}
+                  <div className="relative">
+                    <label className="block font-medium mb-1.5 text-sm text-slate-300">客戶</label>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <input
+                          ref={customerInputRef}
+                          type="text"
+                          value={customerSearchQuery}
+                          onChange={(e) => {
+                            setCustomerSearchQuery(e.target.value)
+                            setShowCustomerDropdown(true)
+                          }}
+                          onFocus={() => setShowCustomerDropdown(true)}
+                          placeholder={selectedCustomer ? selectedCustomer.customer_name : '散客 (點擊搜尋)'}
+                          className="w-full rounded-lg px-3 py-2 text-sm text-white bg-slate-700 border border-slate-600 focus:border-indigo-500 focus:outline-none"
+                        />
+                        {selectedCustomer && (
+                          <button
+                            onClick={() => {
+                              setSelectedCustomer(null)
+                              setCustomerSearchQuery('')
+                            }}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-red-600 font-bold"
+                          >
+                            ×
+                          </button>
+                        )}
+
+                        {/* Dropdown */}
+                        {showCustomerDropdown && (
+                          <div className="customer-dropdown absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border-2 border-gray-400 dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto custom-scrollbar">
+                            {/* 散客選項 */}
+                            <button
+                              onClick={() => {
+                                setSelectedCustomer(null)
+                                setCustomerSearchQuery('')
+                                setShowCustomerDropdown(false)
+                              }}
+                              className="w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-black dark:text-gray-100 border-b border-gray-200 dark:border-gray-600"
+                            >
+                              <div className="font-bold">散客</div>
+                              <div className="text-xs text-gray-500">不選擇客戶</div>
+                            </button>
+
+                            {/* 過濾後的客戶列表 */}
+                            {filteredCustomers.map((customer) => (
+                              <button
+                                key={customer.id}
+                                onClick={() => {
+                                  setSelectedCustomer(customer)
+                                  setCustomerSearchQuery('')
+                                  setShowCustomerDropdown(false)
+                                }}
+                                className="w-full text-left px-3 py-2 hover:bg-blue-50 dark:hover:bg-blue-900/20 text-black dark:text-gray-100 border-b border-gray-200 dark:border-gray-600 last:border-b-0"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div className="font-bold">{customer.customer_name}</div>
+                                  <div className={`text-sm font-semibold ${customer.store_credit >= 0
+                                    ? 'text-green-600 dark:text-green-400'
+                                    : 'text-red-600 dark:text-red-400'
+                                    }`}>
+                                    ${customer.store_credit?.toFixed(2) || '0.00'}
+                                  </div>
+                                </div>
+                                <div className="text-xs text-gray-500 dark:text-gray-400">
+                                  {customer.customer_code} {customer.phone && `• ${customer.phone}`}
+                                </div>
+                              </button>
+                            ))}
+
+                            {filteredCustomers.length === 0 && customerSearchQuery && (
+                              <div className="px-3 py-4 text-center text-gray-500 dark:text-gray-400">
+                                找不到客戶
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
-                      <div className="flex justify-between text-xs">
-                        <span className="text-slate-400">應收</span>
-                        <span className="text-white">{formatCurrency(finalTotal)}</span>
-                      </div>
-                      {multiPayments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0) !== finalTotal && (
-                        <div className="flex justify-between text-xs">
-                          <span className="text-orange-400">差額</span>
-                          <span className="text-orange-400 font-bold">
-                            {formatCurrency(Math.abs(finalTotal - multiPayments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0)))}
-                          </span>
-                        </div>
-                      )}
+                      <button
+                        onClick={() => setShowQuickAddCustomer(true)}
+                        className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 py-2 rounded-lg text-lg transition-all flex items-center justify-center"
+                      >
+                        +
+                      </button>
                     </div>
                   </div>
-                )}
-              </div>
 
-              {/* Discount - Button Selection */}
-              <div>
-                <label className="block font-bold mb-1.5 text-sm text-black dark:text-gray-100">折扣</label>
-                <div className="grid grid-cols-3 gap-2 mb-2">
-                  <button
-                    onClick={() => {
-                      setDiscountType('none')
-                      setDiscountValue(0)
-                    }}
-                    className={`py-2 rounded-lg font-bold text-sm border-2 transition-all ${discountType === 'none'
-                      ? 'bg-yellow-400 border-yellow-600 text-gray-900 shadow-md'
-                      : 'bg-white dark:bg-gray-700 border-gray-400 dark:border-gray-600 text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-600'
-                      }`}
-                  >
-                    無折扣
-                  </button>
-                  <button
-                    onClick={() => setDiscountType('percent')}
-                    className={`py-2 rounded-lg font-bold text-sm border-2 transition-all ${discountType === 'percent'
-                      ? 'bg-yellow-400 border-yellow-600 text-gray-900 shadow-md'
-                      : 'bg-white dark:bg-gray-700 border-gray-400 dark:border-gray-600 text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-600'
-                      }`}
-                  >
-                    百分比
-                  </button>
-                  <button
-                    onClick={() => setDiscountType('amount')}
-                    className={`py-2 rounded-lg font-bold text-sm border-2 transition-all ${discountType === 'amount'
-                      ? 'bg-yellow-400 border-yellow-600 text-gray-900 shadow-md'
-                      : 'bg-white dark:bg-gray-700 border-gray-400 dark:border-gray-600 text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-600'
-                      }`}
-                  >
-                    金額
-                  </button>
-                </div>
-                {discountType !== 'none' && (
-                  <input
-                    type="number"
-                    value={discountValue}
-                    onChange={(e) => setDiscountValue(parseFloat(e.target.value) || 0)}
-                    min="0"
-                    max={discountType === 'percent' ? 100 : subtotal}
-                    step={discountType === 'percent' ? 1 : 1}
-                    className="w-full border-2 border-gray-400 dark:border-gray-600 rounded-lg px-3 py-2 text-base text-black dark:text-gray-100 bg-white dark:bg-gray-700 focus:border-black dark:focus:border-blue-500 focus:outline-none"
-                    placeholder={discountType === 'percent' ? '折扣 %' : '折扣金額'}
-                  />
-                )}
-              </div>
+                  {/* 購物清單顯示 - 只在有商品時才顯示 */}
+                  {cart.length > 0 && (
+                    <div className="flex-1 overflow-hidden flex flex-col">
+                      <label className="block font-medium text-sm text-slate-300 mb-2">
+                        {cart.length} 項商品
+                      </label>
+                      <div className="flex-1 overflow-y-auto space-y-2">
+                        {displayCart.map((item) => (
+                          <div key={`display-${item.indices?.[0]}`} className="bg-slate-700 rounded p-3">
+                            {/* 商品名 + 價格 + 數量控制 + 總價 + 刪除 */}
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex-1 min-w-0">
+                                <div className="text-white font-medium text-xs line-clamp-1">
+                                  {item.product.name}
+                                </div>
+                              </div>
+                            </div>
 
-              {/* Payment Status */}
-              <div className="flex gap-2">
-                <label className="flex-1 flex items-center gap-2 cursor-pointer rounded-lg px-3 py-2.5 bg-slate-700 hover:bg-slate-600">
-                  <input
-                    type="checkbox"
-                    checked={isPaid}
-                    onChange={(e) => setIsPaid(e.target.checked)}
-                    className="w-4 h-4 accent-indigo-500"
-                  />
-                  <span className="text-sm text-white">已收款</span>
-                </label>
-                {cart.some(item => item.isNotDelivered) && (
-                  <div className="flex-1 flex items-center gap-2 rounded-lg px-3 py-2.5 bg-orange-600">
-                    <span className="text-sm text-white">有未出貨商品</span>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="text-slate-400 text-xs">${item.price}</span>
+                                
+                                {/* 數量控制按鈕 */}
+                                {!item.ichiban_kuji_id ? (
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      onClick={() => updateQuantity(item.indices![0], item.quantity - 1)}
+                                      className="w-6 h-6 bg-slate-600 hover:bg-slate-500 rounded text-xs font-bold text-white"
+                                    >
+                                      −
+                                    </button>
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      value={item.quantity}
+                                      onChange={(e) => {
+                                        const newQty = parseInt(e.target.value) || 1
+                                        if (newQty > 0) {
+                                          updateQuantity(item.indices![0], newQty)
+                                        }
+                                      }}
+                                      className="w-8 h-6 text-center text-xs bg-slate-600 text-white border border-slate-500 rounded focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                    />
+                                    <button
+                                      onClick={() => updateQuantity(item.indices![0], item.quantity + 1)}
+                                      className="w-6 h-6 bg-slate-600 hover:bg-slate-500 rounded text-xs font-bold text-white"
+                                    >
+                                      +
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-400 text-xs">{item.quantity} 抽</span>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <span className="text-emerald-400 font-bold text-sm">
+                                  ${item.price * item.quantity}
+                                </span>
+                                <button
+                                  onClick={() => {
+                                    if (item.indices && item.indices.length > 0) {
+                                      const sortedIndices = [...item.indices].sort((a, b) => b - a)
+                                      sortedIndices.forEach(idx => {
+                                        removeFromCart(cart[idx].product_id, idx)
+                                      })
+                                    }
+                                  }}
+                                  className="text-red-400 hover:text-red-300 font-bold text-lg"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* 贈品 + 未出貨複選框 */}
+                            {!item.ichiban_kuji_id && (
+                              <div className="flex items-center gap-3 mt-2">
+                                <label className="flex items-center gap-1 cursor-pointer text-xs">
+                                  <input
+                                    type="checkbox"
+                                    checked={cart[item.indices![0]]?.isFreeGift || false}
+                                    onChange={() => toggleFreeGift(item.indices![0])}
+                                    className="w-4 h-4"
+                                  />
+                                  <span className="text-slate-400">贈品</span>
+                                </label>
+                                <label className="flex items-center gap-1 cursor-pointer text-xs">
+                                  <input
+                                    type="checkbox"
+                                    checked={cart[item.indices![0]]?.isNotDelivered || false}
+                                    onChange={() => toggleNotDelivered(item.indices![0])}
+                                    className="w-4 h-4"
+                                  />
+                                  <span className="text-slate-400">未出貨</span>
+                                </label>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* STEP 2: 付款方式網格 (當 showCheckoutStep 時) */}
+              {showCheckoutStep && (
+                <>
+                  {/* 訂單摘要 */}
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-medium text-slate-300">訂單摘要</h3>
+                    <div className="bg-slate-700 rounded p-3 space-y-2">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-slate-400">小計</span>
+                        <span className="text-white">{formatCurrency(subtotal)}</span>
+                      </div>
+                      {discountAmount > 0 && (
+                        <div className="flex justify-between text-xs text-red-400">
+                          <span>折扣</span>
+                          <span>-{formatCurrency(discountAmount)}</span>
+                        </div>
+                      )}
+                      <div className="border-t border-slate-600 pt-2 flex justify-between text-sm font-bold">
+                        <span className="text-slate-300">應收</span>
+                        <span className="text-white">{formatCurrency(finalTotal)}</span>
+                      </div>
+                    </div>
                   </div>
-                )}
+
+                  {/* Discount - Button Selection */}
+                  <div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        onClick={() => {
+                          setDiscountType('percent')
+                          setShowNoteInput(false)
+                        }}
+                        className={`py-2 rounded-lg font-bold text-xs border-2 transition-all ${discountType === 'percent'
+                          ? 'bg-indigo-600 border-indigo-600 text-white shadow-md'
+                          : 'bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600'
+                          }`}
+                      >
+                        % 折扣
+                      </button>
+                      <button
+                        onClick={() => {
+                          setDiscountType('amount')
+                          setShowNoteInput(false)
+                        }}
+                        className={`py-2 rounded-lg font-bold text-xs border-2 transition-all ${discountType === 'amount'
+                          ? 'bg-indigo-600 border-indigo-600 text-white shadow-md'
+                          : 'bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600'
+                          }`}
+                      >
+                        $ 折扣
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowNoteInput(!showNoteInput)
+                          setDiscountType('none')
+                        }}
+                        className={`py-2 rounded-lg font-bold text-xs border-2 transition-all ${showNoteInput
+                          ? 'bg-indigo-600 border-indigo-600 text-white shadow-md'
+                          : 'bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600'
+                          }`}
+                      >
+                        備註
+                      </button>
+                    </div>
+                    {(discountType === 'percent' || discountType === 'amount') && (
+                      <input
+                        type="number"
+                        value={discountValue}
+                        onChange={(e) => setDiscountValue(parseFloat(e.target.value) || 0)}
+                        min="0"
+                        max={discountType === 'percent' ? 100 : subtotal}
+                        step={discountType === 'percent' ? 1 : 1}
+                        className="w-full mt-2 border-2 border-slate-500 rounded-lg px-3 py-2 text-sm text-white bg-slate-600 focus:border-indigo-500 focus:outline-none"
+                        placeholder={discountType === 'percent' ? '折扣 %' : '折扣金額'}
+                      />
+                    )}
+                    {showNoteInput && (
+                      <input
+                        type="text"
+                        value={note}
+                        onChange={(e) => setNote(e.target.value)}
+                        placeholder="輸入訂單備註..."
+                        className="w-full mt-2 border-2 border-slate-600 rounded-lg px-3 py-2 text-sm text-white bg-slate-700 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none"
+                      />
+                    )}
+                  </div>
+
+                  {/* 折扣 + 備註 */}
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        onClick={() => {
+                          setDiscountType('percent')
+                          setShowNoteInput(false)
+                        }}
+                        className={`py-2 rounded-lg font-bold text-xs border-2 transition-all ${
+                          discountType === 'percent'
+                            ? 'bg-indigo-600 border-indigo-600 text-white shadow-md'
+                            : 'bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600'
+                        }`}
+                      >
+                        % 折扣
+                      </button>
+                      <button
+                        onClick={() => {
+                          setDiscountType('amount')
+                          setShowNoteInput(false)
+                        }}
+                        className={`py-2 rounded-lg font-bold text-xs border-2 transition-all ${
+                          discountType === 'amount'
+                            ? 'bg-indigo-600 border-indigo-600 text-white shadow-md'
+                            : 'bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600'
+                        }`}
+                      >
+                        $ 折扣
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowNoteInput(!showNoteInput)
+                          setDiscountType('none')
+                        }}
+                        className={`py-2 rounded-lg font-bold text-xs border-2 transition-all ${
+                          showNoteInput
+                            ? 'bg-indigo-600 border-indigo-600 text-white shadow-md'
+                            : 'bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600'
+                        }`}
+                      >
+                        備註
+                      </button>
+                    </div>
+                    {(discountType === 'percent' || discountType === 'amount') && (
+                      <input
+                        type="number"
+                        value={discountValue}
+                        onChange={(e) => setDiscountValue(parseFloat(e.target.value) || 0)}
+                        min="0"
+                        max={discountType === 'percent' ? 100 : subtotal}
+                        step={discountType === 'percent' ? 1 : 1}
+                        className="w-full border-2 border-slate-500 rounded-lg px-3 py-2 text-sm text-white bg-slate-600 focus:border-indigo-500 focus:outline-none"
+                        placeholder={discountType === 'percent' ? '折扣 %' : '折扣金額'}
+                      />
+                    )}
+                    {showNoteInput && (
+                      <input
+                        type="text"
+                        value={note}
+                        onChange={(e) => setNote(e.target.value)}
+                        placeholder="輸入訂單備註..."
+                        className="w-full border-2 border-slate-600 rounded-lg px-3 py-2 text-sm text-white bg-slate-700 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none"
+                      />
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+
+
+
+            {/* 應收金額顯示 (第二步時) */}
+            {showCheckoutStep && (
+              <div className="px-3 py-2 border-t border-slate-700">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-slate-400">應收</span>
+                  <span className="text-lg font-bold text-white">{formatCurrency(finalTotal)}</span>
+                </div>
               </div>
-            </div>
+            )}
 
-
-
-            {/* 備註輸入框 */}
-            <div className="px-3 py-2">
-              <label className="block text-xs font-medium text-slate-400 mb-1">📝 備註</label>
-              <input
-                type="text"
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                placeholder="輸入訂單備註..."
-                className="w-full border-2 border-slate-600 rounded-lg px-3 py-2 text-sm text-white bg-slate-700 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none"
-              />
-            </div>
-
-            {/* Checkout Button - Fixed at bottom - 放大結帳按鈕 */}
+            {/* Checkout Button - Fixed at bottom */}
             <div className="p-3 border-t border-slate-700 bg-slate-800">
-              {/* 購物金部分折抵警告 */}
-              {storeCreditUsed > 0 && finalTotal > 0 && isPaid && cart.length > 0 && (
-                <div className="mb-2 p-2 rounded-lg bg-amber-900/50 border border-amber-600 text-center">
-                  <div className="text-amber-400 text-sm font-medium">
-                    購物金折抵 {formatCurrency(storeCreditUsed)} 後
+              {!showCheckoutStep && (
+                <>
+                  {/* 應收金額顯示 (第一步時) */}
+                  <div className="flex items-center justify-between mb-3 px-2 py-1">
+                    <span className="text-xs font-medium text-slate-400">應收</span>
+                    <span className="text-lg font-bold text-white">{formatCurrency(finalTotal)}</span>
                   </div>
-                  <div className="text-amber-300 text-sm">
-                    剩餘 {formatCurrency(finalTotal)} 將記為已收款
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setShowCheckoutStep(true)}
+                      disabled={cart.length === 0 || loading}
+                      className="flex-1 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-600 text-white font-bold text-lg py-3 rounded-lg transition-all active:scale-[0.98] disabled:cursor-not-allowed"
+                    >
+                      {loading ? '處理中...' : '繼續 →'}
+                    </button>
+                    {cart.length > 0 && (
+                      <button
+                        onClick={handleSaveDraft}
+                        disabled={loading}
+                        className="flex-1 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-600 text-slate-300 font-medium py-3 rounded-lg transition-all"
+                      >
+                        暫存
+                      </button>
+                    )}
                   </div>
-                </div>
+                </>
               )}
-              {/* 現金不足提示 */}
-              {!isMultiPayment && paymentMethod === 'cash' && cart.length > 0 && receivedAmount && parseFloat(receivedAmount) > 0 && parseFloat(receivedAmount) < finalTotal && (
-                <div className="mb-2 text-center text-red-400 text-sm">
-                  收款不足，尚差 {formatCurrency(finalTotal - parseFloat(receivedAmount))}
-                </div>
-              )}
-              {/* 多元付款金額不符提示 */}
-              {isMultiPayment && isPaid && cart.length > 0 && multiPayments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0) !== finalTotal && (
-                <div className="mb-2 text-center text-orange-400 text-sm">
-                  付款金額不符，請調整分配金額
-                </div>
-              )}
-              <button
-                onClick={handleCheckout}
-                disabled={
-                  loading ||
-                  cart.length === 0 ||
-                  // 現金付款且有輸入金額但不足時禁用
-                  (!isMultiPayment && paymentMethod === 'cash' && !!receivedAmount && parseFloat(receivedAmount) > 0 && parseFloat(receivedAmount) < finalTotal) ||
-                  // 多元付款金額不符時禁用
-                  (isMultiPayment && isPaid && multiPayments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0) !== finalTotal)
-                }
-                className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-600 text-white font-bold text-xl py-4 rounded-lg transition-all active:scale-[0.98] disabled:cursor-not-allowed"
-              >
-                {loading ? '處理中...' : '確認結帳'}
-              </button>
-              {cart.length > 0 && (
-                <button
-                  onClick={handleSaveDraft}
-                  disabled={loading}
-                  className="w-full mt-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-600 text-slate-300 font-medium py-2 rounded-lg transition-all text-sm"
-                >
-                  暫存訂單
-                </button>
+
+              {showCheckoutStep && (
+                <>
+                  <button
+                    onClick={() => handleCheckout()}
+                    disabled={loading || cart.length === 0}
+                    className="w-full bg-green-600 hover:bg-green-500 disabled:bg-slate-600 text-white font-bold text-lg py-3 rounded-lg transition-all active:scale-[0.98] disabled:cursor-not-allowed mb-2"
+                  >
+                    {loading ? '處理中...' : '確認結帳'}
+                  </button>
+                  <button
+                    onClick={() => setShowCheckoutStep(false)}
+                    className="w-full bg-slate-700 hover:bg-slate-600 text-slate-300 font-medium py-2 rounded-lg transition-all text-sm"
+                  >
+                    ← 返回編輯
+                  </button>
+                </>
               )}
             </div>
           </div>
         </div>
+
+        {/* 支付方式選擇 Modal - 已廢棄，現在在第二步中顯示 */}
+        {/* showPaymentSelection && showPaymentSelectionModal 已移除 */}
+
+        {/* 結帳確認 Modal - 已廢棄，現在在右邊側邊欄内直接切換 */}
+        {/* showCheckoutStep Modal 已移除 */}
 
         {/* Draft Orders Sidebar */}
         {showDrafts && (
