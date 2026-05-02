@@ -5,57 +5,56 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import ThemeToggle from './ThemeToggle'
+import {
+  BarChart2, ShoppingCart, Package, Gift, Sparkles,
+  Users, Building2, User, Receipt, Truck, CreditCard,
+  BookOpen, Building, ClipboardList, Landmark, Wallet,
+  TrendingUp, ChevronDown, LogOut, PanelLeftClose, PanelLeftOpen,
+} from 'lucide-react'
 
 type UserRole = 'admin' | 'staff'
+type LucideIcon = React.ComponentType<{ className?: string; strokeWidth?: number }>
 
 type NavItem = {
   href?: string
   label: string
-  icon: string
+  icon: LucideIcon
   roles: UserRole[]
   submenu?: NavItem[]
 }
 
 const navItems: NavItem[] = [
-  { href: '/dashboard', label: '營收報表', icon: '📊', roles: ['admin'] },
-  { href: '/pos', label: '店裡收銀', icon: '🏪', roles: ['admin', 'staff'] },
+  { href: '/dashboard', label: '營收報表', icon: BarChart2, roles: ['admin'] },
+  { href: '/pos', label: '店裡收銀', icon: ShoppingCart, roles: ['admin', 'staff'] },
   {
-    label: '庫存管理',
-    icon: '📦',
-    roles: ['admin', 'staff'],
+    label: '庫存管理', icon: Package, roles: ['admin', 'staff'],
     submenu: [
-      { href: '/products', label: '商品庫', icon: '🎁', roles: ['admin', 'staff'] },
-      { href: '/ichiban-kuji', label: '一番賞庫', icon: '🎰', roles: ['admin', 'staff'] },
+      { href: '/products', label: '商品庫', icon: Gift, roles: ['admin', 'staff'] },
+      { href: '/ichiban-kuji', label: '一番賞庫', icon: Sparkles, roles: ['admin', 'staff'] },
     ],
   },
   {
-    label: '往來對象',
-    icon: '👥',
-    roles: ['admin', 'staff'],
+    label: '往來對象', icon: Users, roles: ['admin', 'staff'],
     submenu: [
-      { href: '/vendors', label: '廠商管理', icon: '🏭', roles: ['admin'] },
-      { href: '/customers', label: '客戶管理', icon: '👤', roles: ['admin', 'staff'] },
+      { href: '/vendors', label: '廠商管理', icon: Building2, roles: ['admin'] },
+      { href: '/customers', label: '客戶管理', icon: User, roles: ['admin', 'staff'] },
     ],
   },
-  { href: '/sales', label: '銷售記錄', icon: '💰', roles: ['admin', 'staff'] },
-  { href: '/purchases', label: '進貨管理', icon: '🚚', roles: ['admin', 'staff'] },
+  { href: '/sales', label: '銷售記錄', icon: Receipt, roles: ['admin', 'staff'] },
+  { href: '/purchases', label: '進貨管理', icon: Truck, roles: ['admin', 'staff'] },
   {
-    label: '財務管理',
-    icon: '💳',
-    roles: ['admin', 'staff'],
+    label: '財務管理', icon: CreditCard, roles: ['admin', 'staff'],
     submenu: [
-      { href: '/expenses', label: '會計記帳', icon: '📝', roles: ['admin', 'staff'] },
-      { href: '/fixed-assets', label: '固定資產', icon: '🏢', roles: ['admin'] },
-      { href: '/ap', label: '應付帳款', icon: '📋', roles: ['admin'] },
+      { href: '/expenses', label: '會計記帳', icon: BookOpen, roles: ['admin', 'staff'] },
+      { href: '/fixed-assets', label: '固定資產', icon: Building, roles: ['admin'] },
+      { href: '/ap', label: '應付帳款', icon: ClipboardList, roles: ['admin'] },
     ],
   },
   {
-    label: '金流管理',
-    icon: '🏦',
-    roles: ['admin'],
+    label: '金流管理', icon: Landmark, roles: ['admin'],
     submenu: [
-      { href: '/accounts', label: '帳戶管理', icon: '💼', roles: ['admin'] },
-      { href: '/finance', label: '財務總覽', icon: '📈', roles: ['admin'] },
+      { href: '/accounts', label: '帳戶管理', icon: Wallet, roles: ['admin'] },
+      { href: '/finance', label: '財務總覽', icon: TrendingUp, roles: ['admin'] },
     ],
   },
 ]
@@ -103,52 +102,60 @@ export default function Navigation({ collapsed, onToggle }: Props) {
   const isInSubmenu = (item: NavItem) =>
     item.submenu?.some(sub => sub.href === pathname) ?? false
 
+  const avatarLetter = user?.username.charAt(0).toUpperCase() ?? '?'
+  const roleLabel = user?.role === 'admin' ? '管理員' : '員工'
+
   return (
     <>
       {/* ===== DESKTOP SIDEBAR (lg+) ===== */}
       <aside className={[
         'hidden lg:flex flex-col fixed left-0 top-0 h-full z-40',
-        'bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 shadow-lg',
+        'bg-white dark:bg-slate-900',
+        'border-r border-slate-200 dark:border-slate-800',
         'transition-all duration-300 ease-in-out',
         collapsed ? 'w-14' : 'w-56',
       ].join(' ')}>
 
         {/* Header */}
-        {collapsed ? (
-          <button
-            onClick={onToggle}
-            title="展開選單"
-            className="w-full h-14 flex items-center justify-center border-b border-gray-200 dark:border-gray-700 shrink-0 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-blue-500 transition-colors"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-            </svg>
-          </button>
-        ) : (
-          <div className="flex items-center h-14 px-3 border-b border-gray-200 dark:border-gray-700 shrink-0 justify-between">
-            <Link href="/" className="flex items-center gap-2 min-w-0">
-              <Image src="/瘋玩logo.jpg" alt="Logo" width={28} height={28} className="rounded-md shrink-0" />
-              <span className="text-sm font-bold bg-gradient-to-r from-blue-600 to-blue-500 dark:from-blue-400 dark:to-blue-300 bg-clip-text text-transparent truncate">
-                瘋玩 ERP
-              </span>
-            </Link>
+        <div className={[
+          'flex items-center h-14 shrink-0 border-b border-slate-200 dark:border-slate-800',
+          collapsed ? 'justify-center' : 'justify-between px-3',
+        ].join(' ')}>
+          {collapsed ? (
             <button
               onClick={onToggle}
-              title="收起選單"
-              className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-600 dark:hover:text-gray-200 transition-colors shrink-0"
+              title="展開選單"
+              aria-label="展開選單"
+              className="p-2 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-blue-500 dark:hover:text-blue-400 transition-colors cursor-pointer"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7M19 5l-7 7 7 7" />
-              </svg>
+              <PanelLeftOpen className="w-5 h-5" strokeWidth={1.75} />
             </button>
-          </div>
-        )}
+          ) : (
+            <>
+              <Link href="/" className="flex items-center gap-2.5 min-w-0">
+                <Image src="/瘋玩logo.jpg" alt="Logo" width={26} height={26} className="rounded-md shrink-0" />
+                <span className="text-sm font-bold bg-gradient-to-r from-blue-600 to-indigo-500 dark:from-blue-400 dark:to-indigo-400 bg-clip-text text-transparent truncate">
+                  瘋玩 ERP
+                </span>
+              </Link>
+              <button
+                onClick={onToggle}
+                title="收起選單"
+                aria-label="收起選單"
+                className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer shrink-0"
+              >
+                <PanelLeftClose className="w-4 h-4" strokeWidth={1.75} />
+              </button>
+            </>
+          )}
+        </div>
 
         {/* Nav Items */}
         <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
           {filteredNavItems.map(item =>
             item.submenu ? (
               <div key={item.label}>
+                {/* Group button */}
                 <button
                   onClick={() => {
                     if (collapsed) {
@@ -160,25 +167,28 @@ export default function Navigation({ collapsed, onToggle }: Props) {
                   }}
                   title={collapsed ? item.label : undefined}
                   className={[
-                    'w-full flex items-center rounded-lg px-2.5 py-2.5 text-sm font-semibold transition-all duration-200',
-                    collapsed ? 'justify-center' : 'justify-between',
+                    'w-full flex items-center rounded-lg text-sm transition-colors duration-150 cursor-pointer',
+                    collapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2.5',
                     isInSubmenu(item)
-                      ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400'
-                      : 'text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700',
+                      ? 'text-slate-900 dark:text-slate-100 font-medium'
+                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100',
                   ].join(' ')}
                 >
-                  <div className={`flex items-center ${collapsed ? '' : 'gap-2.5'}`}>
-                    <span className="text-base leading-none">{item.icon}</span>
-                    {!collapsed && <span>{item.label}</span>}
-                  </div>
+                  <item.icon className="w-[18px] h-[18px] shrink-0" strokeWidth={1.75} />
                   {!collapsed && (
-                    <svg className={`w-3.5 h-3.5 shrink-0 transition-transform ${openSubmenu === item.label ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
+                    <>
+                      <span className="flex-1 text-left">{item.label}</span>
+                      <ChevronDown
+                        className={`w-3.5 h-3.5 shrink-0 text-slate-400 transition-transform duration-200 ${openSubmenu === item.label ? 'rotate-180' : ''}`}
+                        strokeWidth={2}
+                      />
+                    </>
                   )}
                 </button>
+
+                {/* Submenu */}
                 {!collapsed && openSubmenu === item.label && (
-                  <div className="ml-3 mt-0.5 pb-1 space-y-0.5">
+                  <div className="mt-0.5 ml-[22px] pl-3 border-l border-slate-200 dark:border-slate-700 space-y-0.5 pb-1">
                     {item.submenu
                       .filter(sub => user && sub.roles.includes(user.role))
                       .map(sub => (
@@ -186,13 +196,13 @@ export default function Navigation({ collapsed, onToggle }: Props) {
                           key={sub.href}
                           href={sub.href!}
                           className={[
-                            'flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all',
+                            'flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm transition-colors duration-150 cursor-pointer',
                             pathname === sub.href
-                              ? 'bg-blue-500 text-white font-semibold shadow-sm'
-                              : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700',
+                              ? 'bg-blue-500/10 dark:bg-blue-400/10 text-blue-600 dark:text-blue-400 font-medium'
+                              : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100',
                           ].join(' ')}
                         >
-                          <span className="text-sm">{sub.icon}</span>
+                          <sub.icon className="w-4 h-4 shrink-0" strokeWidth={1.75} />
                           <span>{sub.label}</span>
                         </Link>
                       ))}
@@ -205,14 +215,14 @@ export default function Navigation({ collapsed, onToggle }: Props) {
                 href={item.href!}
                 title={collapsed ? item.label : undefined}
                 className={[
-                  'flex items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-sm font-semibold transition-all duration-200',
-                  collapsed ? 'justify-center' : '',
+                  'flex items-center rounded-lg text-sm transition-colors duration-150 cursor-pointer',
+                  collapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2.5',
                   pathname === item.href
-                    ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-sm'
-                    : 'text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700',
+                    ? 'bg-blue-500/10 dark:bg-blue-400/10 text-blue-600 dark:text-blue-400 font-medium'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100',
                 ].join(' ')}
               >
-                <span className="text-base leading-none">{item.icon}</span>
+                <item.icon className="w-[18px] h-[18px] shrink-0" strokeWidth={1.75} />
                 {!collapsed && <span>{item.label}</span>}
               </Link>
             )
@@ -220,42 +230,55 @@ export default function Navigation({ collapsed, onToggle }: Props) {
         </nav>
 
         {/* Footer */}
-        <div className="shrink-0 border-t border-gray-200 dark:border-gray-700 p-2 space-y-1.5">
-          {user && !collapsed && (
-            <div className="flex items-center gap-2 px-2.5 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
-              <span className="text-xs font-medium text-gray-700 dark:text-gray-200 truncate flex-1">
-                {user.username}
-              </span>
-              <span className="text-[10px] font-medium px-1.5 py-0.5 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 rounded shrink-0">
-                {user.role === 'admin' ? '管理員' : '員工'}
-              </span>
-            </div>
-          )}
-          {user && collapsed && (
-            <div title={`${user.username} (${user.role === 'admin' ? '管理員' : '員工'})`} className="flex justify-center py-0.5">
-              <div className="w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
-                {user.username.charAt(0).toUpperCase()}
+        <div className="shrink-0 border-t border-slate-200 dark:border-slate-800 p-2 space-y-1.5">
+          {/* User info */}
+          {user && (
+            collapsed ? (
+              <div
+                title={`${user.username} · ${roleLabel}`}
+                className="flex justify-center py-0.5"
+              >
+                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center text-white text-xs font-bold shrink-0 shadow-sm">
+                  {avatarLetter}
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="flex items-center gap-2 px-2.5 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg">
+                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+                  {avatarLetter}
+                </div>
+                <span className="text-xs font-medium text-slate-700 dark:text-slate-200 truncate flex-1">
+                  {user.username}
+                </span>
+                <span className={[
+                  'text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0',
+                  user.role === 'admin'
+                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300'
+                    : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300',
+                ].join(' ')}>
+                  {roleLabel}
+                </span>
+              </div>
+            )
           )}
+
+          {/* Logout + Theme */}
           <div className={`flex ${collapsed ? 'flex-col items-center' : 'items-center'} gap-1`}>
             {user && (
               <button
                 onClick={handleLogout}
                 disabled={loggingOut}
                 title={collapsed ? '登出' : undefined}
+                aria-label="登出"
                 className={[
-                  'flex items-center justify-center gap-1 rounded-lg text-red-600 dark:text-red-400',
-                  'hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors disabled:opacity-50',
-                  collapsed
-                    ? 'p-2'
-                    : 'flex-1 py-1.5 text-xs font-semibold border border-red-200 dark:border-red-800',
+                  'flex items-center justify-center gap-1.5 rounded-lg transition-colors duration-150 cursor-pointer',
+                  'text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400',
+                  'hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed',
+                  collapsed ? 'p-2' : 'flex-1 py-1.5 text-xs font-medium',
                 ].join(' ')}
               >
-                <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                </svg>
-                {!collapsed && (loggingOut ? '登出中' : '登出')}
+                <LogOut className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} />
+                {!collapsed && <span>{loggingOut ? '登出中…' : '登出'}</span>}
               </button>
             )}
             <ThemeToggle />
@@ -264,83 +287,97 @@ export default function Navigation({ collapsed, onToggle }: Props) {
       </aside>
 
       {/* ===== MOBILE TOP BAR (< lg) ===== */}
-      <nav className="lg:hidden sticky top-0 z-50 border-b bg-white shadow-md dark:border-gray-700 dark:bg-gray-800">
-        <div className="mx-auto max-w-full px-2 sm:px-4">
-          <div className="flex min-h-[4rem] items-center justify-between gap-2 py-2">
+      <nav className="lg:hidden sticky top-0 z-50 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className="mx-auto max-w-full px-3 sm:px-4">
+          <div className="flex h-14 items-center justify-between">
             <Link href="/" className="flex items-center gap-2 shrink-0">
               <Image
                 src="/瘋玩logo.jpg"
                 alt="瘋玩 ERP Logo"
-                width={40}
-                height={40}
-                className="rounded-lg shadow-sm"
+                width={32}
+                height={32}
+                className="rounded-md"
               />
-              <span className="hidden sm:inline text-xl font-bold bg-gradient-to-r from-blue-600 to-blue-500 dark:from-blue-400 dark:to-blue-300 bg-clip-text text-transparent">
+              <span className="hidden sm:inline text-base font-bold bg-gradient-to-r from-blue-600 to-indigo-500 dark:from-blue-400 dark:to-indigo-400 bg-clip-text text-transparent">
                 瘋玩 ERP
               </span>
             </Link>
 
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1.5 shrink-0">
               <ThemeToggle />
               <button
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
-                className="rounded-lg p-2 text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700 transition-all duration-200 border border-gray-200 dark:border-gray-600"
+                className="p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                 aria-label="切換選單"
               >
-                <svg className="h-5 w-5 sm:h-6 sm:w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  {isMenuOpen ? (
+                {isMenuOpen ? (
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  ) : (
+                  </svg>
+                ) : (
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                  )}
-                </svg>
+                  </svg>
+                )}
               </button>
             </div>
           </div>
 
           {/* Mobile Dropdown */}
           {isMenuOpen && (
-            <div className="border-t pb-4 pt-3 dark:border-gray-700">
+            <div className="border-t border-slate-200 dark:border-slate-800 pb-4 pt-3">
+              {/* Mobile user row */}
               {user && (
-                <div className="flex items-center justify-between px-4 py-3 mb-3 bg-gray-100 dark:bg-gray-700 rounded-xl mx-3 border border-gray-200 dark:border-gray-600">
+                <div className="flex items-center justify-between mx-3 mb-3 px-3 py-2.5 bg-slate-100 dark:bg-slate-800 rounded-xl">
                   <div className="flex items-center gap-2.5">
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-200">{user.username}</span>
-                    <span className="text-xs font-medium px-2.5 py-1 rounded bg-gray-200 text-gray-700 dark:bg-gray-600 dark:text-gray-200">
-                      {user.role === 'admin' ? '管理員' : '員工'}
+                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                      {avatarLetter}
+                    </div>
+                    <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{user.username}</span>
+                    <span className={[
+                      'text-[10px] font-semibold px-1.5 py-0.5 rounded',
+                      user.role === 'admin'
+                        ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300'
+                        : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300',
+                    ].join(' ')}>
+                      {roleLabel}
                     </span>
                   </div>
                   <button
                     onClick={handleLogout}
                     disabled={loggingOut}
-                    className="flex items-center gap-1 px-3 py-1.5 text-sm font-semibold text-red-600 dark:text-red-400 disabled:opacity-50 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-red-200 dark:border-red-800"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer disabled:opacity-50 text-red-600 dark:text-red-400 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:bg-red-50 dark:hover:bg-red-900/20"
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                    </svg>
-                    {loggingOut ? '登出中' : '登出'}
+                    <LogOut className="w-3.5 h-3.5" strokeWidth={1.75} />
+                    {loggingOut ? '登出中…' : '登出'}
                   </button>
                 </div>
               )}
-              <div className="flex flex-col gap-1.5 px-3">
+
+              {/* Mobile nav links */}
+              <div className="flex flex-col gap-1 px-3">
                 {filteredNavItems.map(item =>
                   item.submenu ? (
                     <div key={item.label}>
                       <button
                         onClick={() => setOpenSubmenu(openSubmenu === item.label ? null : item.label)}
                         className={[
-                          'w-full rounded-xl px-4 py-3 text-sm font-semibold transition-all duration-200 shadow-sm flex items-center justify-between',
+                          'w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium transition-colors duration-150 cursor-pointer',
                           isInSubmenu(item)
-                            ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md'
-                            : 'text-gray-700 bg-white hover:bg-gray-50 dark:text-gray-200 dark:bg-gray-700 dark:hover:bg-gray-650 border border-gray-200 dark:border-gray-600',
+                            ? 'bg-blue-500/10 dark:bg-blue-400/10 text-blue-600 dark:text-blue-400'
+                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100',
                         ].join(' ')}
                       >
-                        {item.label}
-                        <svg className={`w-4 h-4 transition-transform ${openSubmenu === item.label ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
+                        <item.icon className="w-[18px] h-[18px] shrink-0" strokeWidth={1.75} />
+                        <span className="flex-1 text-left">{item.label}</span>
+                        <ChevronDown
+                          className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${openSubmenu === item.label ? 'rotate-180' : ''}`}
+                          strokeWidth={2}
+                        />
                       </button>
+
                       {openSubmenu === item.label && (
-                        <div className="mt-1.5 ml-4 flex flex-col gap-1.5">
+                        <div className="mt-0.5 ml-[22px] pl-3 border-l border-slate-200 dark:border-slate-700 flex flex-col gap-0.5 pb-1">
                           {item.submenu
                             .filter(sub => user && sub.roles.includes(user.role))
                             .map(sub => (
@@ -349,13 +386,14 @@ export default function Navigation({ collapsed, onToggle }: Props) {
                                 href={sub.href!}
                                 onClick={() => setIsMenuOpen(false)}
                                 className={[
-                                  'rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-200',
+                                  'flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-colors duration-150 cursor-pointer',
                                   pathname === sub.href
-                                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300'
-                                    : 'text-gray-700 bg-gray-100 hover:bg-gray-200 dark:text-gray-100 dark:bg-gray-700 dark:hover:bg-gray-600',
+                                    ? 'bg-blue-500/10 dark:bg-blue-400/10 text-blue-600 dark:text-blue-400 font-medium'
+                                    : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100',
                                 ].join(' ')}
                               >
-                                {sub.label}
+                                <sub.icon className="w-4 h-4 shrink-0" strokeWidth={1.75} />
+                                <span>{sub.label}</span>
                               </Link>
                             ))}
                         </div>
@@ -367,13 +405,14 @@ export default function Navigation({ collapsed, onToggle }: Props) {
                       href={item.href!}
                       onClick={() => setIsMenuOpen(false)}
                       className={[
-                        'rounded-xl px-4 py-3 text-sm font-semibold transition-all duration-200 shadow-sm',
+                        'flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium transition-colors duration-150 cursor-pointer',
                         pathname === item.href
-                          ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md scale-[1.02]'
-                          : 'text-gray-700 bg-white hover:bg-gray-50 dark:text-gray-200 dark:bg-gray-700 dark:hover:bg-gray-650 border border-gray-200 dark:border-gray-600',
+                          ? 'bg-blue-500/10 dark:bg-blue-400/10 text-blue-600 dark:text-blue-400'
+                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100',
                       ].join(' ')}
                     >
-                      {item.label}
+                      <item.icon className="w-[18px] h-[18px] shrink-0" strokeWidth={1.75} />
+                      <span>{item.label}</span>
                     </Link>
                   )
                 )}

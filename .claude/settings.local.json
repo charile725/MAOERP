@@ -36,7 +36,14 @@
       "Bash(python scripts/search.py:*)",
       "Bash(git diff:*)",
       "Bash(python3:*)",
-      "Bash(do echo \"=== $endpoint ===\")"
+      "Bash(do echo \"=== $endpoint ===\")",
+      "Read(//c/Users/linei/.claude/plugins/cache/ui-ux-pro-max-skill/ui-ux-pro-max/2.0.1/**)",
+      "Bash(python skills/ui-ux-pro-max/scripts/search.py \"ERP dashboard sidebar navigation dark mode professional\" --design-system -p \"瘋玩ERP\")",
+      "Bash(python \"cli/assets/scripts/search.py\" \"ERP dashboard sidebar navigation dark mode professional\" --design-system -p \"瘋玩ERP\")",
+      "Bash(python \"cli/assets/scripts/search.py\" \"ERP dashboard sidebar navigation dark mode professional\" --design-system -p \"ERP\")",
+      "Bash(python -c \"import sys; sys.stdout.reconfigure\\(encoding='utf-8'\\)\")",
+      "Bash(PYTHONIOENCODING=utf-8 python \"cli/assets/scripts/search.py\" \"ERP dashboard sidebar navigation dark mode\" --design-system -p \"ERP\")",
+      "Bash(python \"cli/assets/scripts/search.py\" \"sidebar navigation ERP admin\" --domain ux -n 5)"
     ]
   }
 }
