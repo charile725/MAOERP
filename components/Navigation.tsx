@@ -62,9 +62,10 @@ const navItems: NavItem[] = [
 type Props = {
   collapsed: boolean
   onToggle: () => void
+  mounted: boolean
 }
 
-export default function Navigation({ collapsed, onToggle }: Props) {
+export default function Navigation({ collapsed, onToggle, mounted }: Props) {
   const pathname = usePathname()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null)
@@ -112,7 +113,7 @@ export default function Navigation({ collapsed, onToggle }: Props) {
         'hidden lg:flex flex-col fixed left-0 top-0 h-full z-40',
         'bg-white dark:bg-slate-900',
         'border-r border-slate-200 dark:border-slate-800',
-        'transition-all duration-300 ease-in-out',
+        mounted ? 'transition-[width] duration-300 ease-in-out' : '',
         collapsed ? 'w-14' : 'w-56',
       ].join(' ')}>
 
@@ -151,7 +152,7 @@ export default function Navigation({ collapsed, onToggle }: Props) {
         </div>
 
         {/* Nav Items */}
-        <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
+        <nav className="flex-1 overflow-y-auto sidebar-scroll py-3 px-2 space-y-0.5">
           {filteredNavItems.map(item =>
             item.submenu ? (
               <div key={item.label}>

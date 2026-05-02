@@ -151,6 +151,38 @@ body {
 }
 
 /* ============================================
+   側邊欄捲軸樣式
+   ============================================ */
+
+/* Firefox */
+.sidebar-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.sidebar-scroll:hover {
+  scrollbar-color: rgb(148 163 184 / 0.35) transparent;
+}
+
+/* Chrome / Safari / Edge */
+.sidebar-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 9999px;
+  transition: background-color 0.2s;
+}
+.sidebar-scroll:hover::-webkit-scrollbar-thumb {
+  background-color: rgb(148 163 184 / 0.35);
+}
+.dark .sidebar-scroll:hover::-webkit-scrollbar-thumb {
+  background-color: rgb(100 116 139 / 0.45);
+}
+
+/* ============================================
    展開動畫
    ============================================ */
 @keyframes fadeIn {
