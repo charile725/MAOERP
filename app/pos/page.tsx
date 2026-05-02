@@ -855,6 +855,15 @@ export default function POSPage() {
       }
     }
 
+    // 多元付款總額驗證
+    if (isMultiPayment && isPaid) {
+      const multiTotal = multiPayments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0)
+      if (Math.abs(multiTotal - finalTotal) > 0.01) {
+        setError(`多元付款總額 ${formatCurrency(multiTotal)} 與應收金額 ${formatCurrency(finalTotal)} 不符`)
+        return
+      }
+    }
+
     // 購物金部分折抵確認：防止購物金不足以支付全額卻誤按結帳
     if (storeCreditUsed > 0 && finalTotal > 0 && isPaid && !isMultiPayment) {
       const paymentLabel = paymentAccounts.find(a => a.payment_method_code === paymentMethod)?.account_name || paymentMethod
@@ -882,6 +891,7 @@ export default function POSPage() {
           source: salesMode,
           payment_method: paymentMethod,
           is_paid: isPaid,
+          use_store_credit: useStoreCredit,
           is_delivered: !hasNotDeliveredItems, // 保留向後兼容
           delivery_method: undefined,
           // 有未出貨商品時，預設 7 天後到期
