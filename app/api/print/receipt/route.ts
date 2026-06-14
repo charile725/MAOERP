@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     // Fetch items
     const { data: items, error: itemsError } = await (supabaseServer
       .from('sale_items') as any)
-      .select('snapshot_name, quantity, price, is_free_gift')
+      .select('snapshot_name, quantity, price')
       .eq('sale_id', sale_id)
 
     if (itemsError) {

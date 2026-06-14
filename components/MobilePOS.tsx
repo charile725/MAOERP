@@ -485,8 +485,8 @@ export default function MobilePOS({
                     >
                         日結
                     </button>
-                    {/* 印表機連接（只在有傳 printer props 時顯示）*/}
-                    {connectPrinter && (
+                    {/* 印表機連接（只在桌機 Chrome/Edge 支援 Web Serial 時顯示）*/}
+                    {connectPrinter && typeof navigator !== 'undefined' && 'serial' in navigator && (
                         <button
                             onClick={printerStatus === 'connected' ? disconnectPrinter : connectPrinter}
                             disabled={printerStatus === 'connecting'}

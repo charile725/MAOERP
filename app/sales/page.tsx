@@ -7,6 +7,7 @@ import useSWR, { useSWRConfig } from 'swr'
 import { SWR_KEYS, salesKey } from '@/lib/swr/keys'
 import { paginatedFetcher } from '@/lib/swr/fetcher'
 import { formatCurrency, formatDate, formatDateTime, formatPaymentMethod } from '@/lib/utils'
+import { useSerialPrinter } from '@/hooks/useSerialPrinter'
 
 // Portal Dropdown 組件
 function PortalDropdown({
@@ -235,6 +236,8 @@ export default function SalesPage() {
   const [convertingItemId, setConvertingItemId] = useState<string | null>(null)
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null)
   const [undoingItemId, setUndoingItemId] = useState<string | null>(null)
+
+  const { status: printerStatus, connect: connectPrinter, disconnect: disconnectPrinter, print: printSerial } = useSerialPrinter()
 
   const { mutate: globalMutate } = useSWRConfig()
 
@@ -933,6 +936,21 @@ export default function SalesPage() {
       <div className="mx-auto max-w-7xl">
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">銷售記錄</h1>
+          {typeof navigator !== 'undefined' && 'serial' in navigator && (
+            <button
+              onClick={printerStatus === 'connected' ? disconnectPrinter : connectPrinter}
+              disabled={printerStatus === 'connecting'}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                printerStatus === 'connected' ? 'bg-green-600 text-white hover:bg-green-700' :
+                printerStatus === 'connecting' ? 'bg-yellow-600 text-white cursor-wait' :
+                printerStatus === 'error' ? 'bg-red-600 text-white hover:bg-red-700' :
+                'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600'
+              }`}
+              title={printerStatus === 'connected' ? '點擊斷開印表機' : '連接藍牙印表機'}
+            >
+              🖨️ {printerStatus === 'connected' ? '印表機已連接' : printerStatus === 'connecting' ? '連接中...' : printerStatus === 'error' ? '印表機錯誤' : '連接印表機'}
+            </button>
+          )}
         </div>
 
         {/* Search & Filters */}
@@ -1519,15 +1537,31 @@ export default function SalesPage() {
                                   )
                                 })()}
                                 <button
-                                  onClick={() => {
+                                  onClick={async () => {
                                     setOpenDropdownId(null)
-                                    fetch('/api/print/receipt', {
+                                    if (printerStatus !== 'connected') {
+                                      alert('請先點右上角「連接印表機」按鈕連接藍牙印表機')
+                                      return
+                                    }
+                                    const items = (sale.sale_items || [])
+                                      .filter(i => !i.is_points_redemption)
+                                      .map(i => ({ name: i.snapshot_name, quantity: i.quantity, price: i.price }))
+                                    const res = await fetch('/api/print/receipt-bytes', {
                                       method: 'POST',
                                       headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify({ sale_id: sale.id }),
-                                    }).then(r => r.json()).then(r => {
-                                      if (!r.ok) alert(`補印失敗：${r.error}`)
-                                    }).catch(() => alert('補印失敗：無法連線印表機'))
+                                      body: JSON.stringify({
+                                        sale_no: sale.sale_no,
+                                        payment_label: formatPaymentMethod(sale.payment_method),
+                                        is_paid: sale.is_paid,
+                                        total: sale.total,
+                                        discount_amount: sale.discount_amount || 0,
+                                        items,
+                                      }),
+                                    })
+                                    if (!res.ok) { alert('補印失敗'); return }
+                                    const buf = await res.arrayBuffer()
+                                    const ok = await printSerial(new Uint8Array(buf))
+                                    if (!ok) alert('補印失敗，請重新連接印表機')
                                   }}
                                   className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
                                 >
