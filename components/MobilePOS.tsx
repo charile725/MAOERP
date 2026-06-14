@@ -125,11 +125,11 @@ type MobilePOSProps = {
     fetchProducts: () => void
     // 積分
     setItemPointsUsed?: (index: number, points: number) => void
-    // 印表機
-    printerStatus: PrinterStatus
-    connectPrinter: () => Promise<void>
-    disconnectPrinter: () => Promise<void>
-    printSerial: (data: Uint8Array) => Promise<boolean>
+    // 印表機（optional — pos-live 頁面不傳）
+    printerStatus?: PrinterStatus
+    connectPrinter?: () => Promise<void>
+    disconnectPrinter?: () => Promise<void>
+    printSerial?: (data: Uint8Array) => Promise<boolean>
 }
 
 export default function MobilePOS({
@@ -485,24 +485,26 @@ export default function MobilePOS({
                     >
                         日結
                     </button>
-                    {/* 印表機連接 */}
-                    <button
-                        onClick={printerStatus === 'connected' ? disconnectPrinter : connectPrinter}
-                        disabled={printerStatus === 'connecting'}
-                        className={`px-3 py-3 rounded-lg text-sm font-medium transition-all ${
-                            printerStatus === 'connected'
-                                ? 'bg-green-700 text-white'
-                                : printerStatus === 'connecting'
-                                ? 'bg-yellow-700 text-white cursor-wait'
-                                : printerStatus === 'error'
-                                ? 'bg-red-700 text-white'
-                                : 'bg-slate-600 text-slate-200'
-                        }`}
-                        title={printerStatus === 'connected' ? '點擊斷開' : '連接印表機'}
-                    >
-                        {printerStatus === 'connected' ? '印表機' : printerStatus === 'connecting' ? '連接中' : '連印表機'}
-                    </button>
-                    {printerStatus === 'connected' && (
+                    {/* 印表機連接（只在有傳 printer props 時顯示）*/}
+                    {connectPrinter && (
+                        <button
+                            onClick={printerStatus === 'connected' ? disconnectPrinter : connectPrinter}
+                            disabled={printerStatus === 'connecting'}
+                            className={`px-3 py-3 rounded-lg text-sm font-medium transition-all ${
+                                printerStatus === 'connected'
+                                    ? 'bg-green-700 text-white'
+                                    : printerStatus === 'connecting'
+                                    ? 'bg-yellow-700 text-white cursor-wait'
+                                    : printerStatus === 'error'
+                                    ? 'bg-red-700 text-white'
+                                    : 'bg-slate-600 text-slate-200'
+                            }`}
+                            title={printerStatus === 'connected' ? '點擊斷開' : '連接印表機'}
+                        >
+                            {printerStatus === 'connected' ? '印表機' : printerStatus === 'connecting' ? '連接中' : '連印表機'}
+                        </button>
+                    )}
+                    {printerStatus === 'connected' && printSerial && (
                         <button
                             onClick={async () => {
                                 const res = await fetch('/api/print/receipt-bytes', {
