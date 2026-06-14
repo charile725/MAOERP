@@ -6,6 +6,7 @@ import dynamic from 'next/dynamic'
 import { formatCurrency } from '@/lib/utils'
 import { SWR_KEYS } from '@/lib/swr/keys'
 import type { Product, SaleItem, PaymentMethod } from '@/types'
+import { useSerialPrinter } from '@/hooks/useSerialPrinter'
 
 // 動態載入相機掃描元件（避免 SSR 問題）
 const CameraScanner = dynamic(() => import('@/components/CameraScanner'), {
@@ -234,6 +235,9 @@ export default function POSPage() {
     change: number
   } | null>(null)
   const [closingInProgress, setClosingInProgress] = useState(false)
+
+  // 藍牙/串列印表機
+  const { status: printerStatus, connect: connectPrinter, disconnect: disconnectPrinter, print: printSerial } = useSerialPrinter()
 
   // 手機版檢測
   const [isMobile, setIsMobile] = useState(false)
@@ -957,11 +961,41 @@ export default function POSPage() {
 
         // 自動列印收據（fire-and-forget，不阻擋 UI）
         if (receiptType === 'receipt') {
-          fetch('/api/print/receipt', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sale_id: data.data.id }),
-          }).catch(() => {/* 列印失敗不影響結帳流程 */})
+          if (printerStatus === 'connected') {
+            // 從 server 取得 GB2312 bytes，再透過 Web Serial 送出
+            const paymentLabel = paymentAccounts.find(a => a.payment_method_code === paymentMethod)?.account_name || paymentMethod
+            const received = parseFloat(receivedAmount) || finalTotal
+            const change = paymentMethod === 'cash' ? Math.max(0, received - finalTotal) : 0
+            fetch('/api/print/receipt-bytes', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                sale_no: data.data.sale_no,
+                payment_label: paymentLabel,
+                is_paid: isPaid,
+                total: finalTotal,
+                discount_amount: discountAmount,
+                received: paymentMethod === 'cash' ? received : finalTotal,
+                change: paymentMethod === 'cash' ? change : 0,
+                items: checkoutCart.map(item => ({
+                  name: item.product.name,
+                  quantity: item.quantity,
+                  price: item.price,
+                  isFreeGift: item.isFreeGift || false,
+                })),
+              }),
+            })
+              .then(r => r.arrayBuffer())
+              .then(buf => printSerial(new Uint8Array(buf)))
+              .catch(() => {})
+          } else {
+            // Fallback：透過伺服器 TCP 列印
+            fetch('/api/print/receipt', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ sale_id: data.data.id }),
+            }).catch(() => {})
+          }
         }
       } else {
         setError(data.error || '結帳失敗')
@@ -1358,6 +1392,48 @@ export default function POSPage() {
             </h1>
           </div>
           <div className="flex items-center gap-2">
+            {/* 印表機連接按鈕 */}
+            <button
+              onClick={printerStatus === 'connected' ? disconnectPrinter : connectPrinter}
+              disabled={printerStatus === 'connecting'}
+              className={`font-medium px-3 py-2 rounded-lg transition-all text-sm ${
+                printerStatus === 'connected'
+                  ? 'bg-green-700 hover:bg-green-600 text-white'
+                  : printerStatus === 'connecting'
+                  ? 'bg-yellow-700 text-white cursor-wait'
+                  : printerStatus === 'error'
+                  ? 'bg-red-700 hover:bg-red-600 text-white'
+                  : 'bg-slate-700 hover:bg-slate-600 text-slate-200'
+              }`}
+              title={printerStatus === 'connected' ? '點擊斷開印表機' : '點擊選擇藍牙 COM port 連接印表機'}
+            >
+              {printerStatus === 'connected' ? '印表機已連接' : printerStatus === 'connecting' ? '連接中...' : printerStatus === 'error' ? '印表機錯誤' : '連接印表機'}
+            </button>
+            {printerStatus === 'connected' && (
+              <button
+                onClick={async () => {
+                  const res = await fetch('/api/print/receipt-bytes', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      sale_no: 'TEST-001',
+                      payment_label: '測試',
+                      is_paid: true,
+                      total: 100,
+                      discount_amount: 0,
+                      items: [{ name: '測試商品 中文列印測試', quantity: 1, price: 100 }],
+                    }),
+                  })
+                  if (!res.ok) { alert('取得列印資料失敗'); return }
+                  const buf = await res.arrayBuffer()
+                  const ok = await printSerial(new Uint8Array(buf))
+                  if (!ok) alert('測試列印失敗，請重新連接印表機')
+                }}
+                className="font-medium px-3 py-2 rounded-lg transition-all text-sm bg-green-800 hover:bg-green-700 text-green-200"
+              >
+                測試列印
+              </button>
+            )}
             <button
               onClick={() => setShowDrafts(!showDrafts)}
               className="font-medium px-3 py-2 rounded-lg transition-all relative bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm"
