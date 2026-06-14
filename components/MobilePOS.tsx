@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import { formatCurrency } from '@/lib/utils'
 import type { Product, PaymentMethod } from '@/types'
+import type { PrinterStatus } from '@/hooks/useSerialPrinter'
 
 const CameraScanner = dynamic(() => import('@/components/CameraScanner'), {
     ssr: false,
@@ -124,6 +125,11 @@ type MobilePOSProps = {
     fetchProducts: () => void
     // 積分
     setItemPointsUsed?: (index: number, points: number) => void
+    // 印表機
+    printerStatus: PrinterStatus
+    connectPrinter: () => Promise<void>
+    disconnectPrinter: () => Promise<void>
+    printSerial: (data: Uint8Array) => Promise<boolean>
 }
 
 export default function MobilePOS({
@@ -169,6 +175,10 @@ export default function MobilePOS({
     fetchCustomers,
     fetchProducts,
     setItemPointsUsed,
+    printerStatus,
+    connectPrinter,
+    disconnectPrinter,
+    printSerial,
 }: MobilePOSProps) {
     const [showCameraScanner, setShowCameraScanner] = useState(false)
     const [showCustomerPicker, setShowCustomerPicker] = useState(false)
@@ -475,6 +485,48 @@ export default function MobilePOS({
                     >
                         日結
                     </button>
+                    {/* 印表機連接 */}
+                    <button
+                        onClick={printerStatus === 'connected' ? disconnectPrinter : connectPrinter}
+                        disabled={printerStatus === 'connecting'}
+                        className={`px-3 py-3 rounded-lg text-sm font-medium transition-all ${
+                            printerStatus === 'connected'
+                                ? 'bg-green-700 text-white'
+                                : printerStatus === 'connecting'
+                                ? 'bg-yellow-700 text-white cursor-wait'
+                                : printerStatus === 'error'
+                                ? 'bg-red-700 text-white'
+                                : 'bg-slate-600 text-slate-200'
+                        }`}
+                        title={printerStatus === 'connected' ? '點擊斷開' : '連接印表機'}
+                    >
+                        {printerStatus === 'connected' ? '印表機' : printerStatus === 'connecting' ? '連接中' : '連印表機'}
+                    </button>
+                    {printerStatus === 'connected' && (
+                        <button
+                            onClick={async () => {
+                                const res = await fetch('/api/print/receipt-bytes', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        sale_no: 'TEST-001',
+                                        payment_label: '測試',
+                                        is_paid: true,
+                                        total: 100,
+                                        discount_amount: 0,
+                                        items: [{ name: '測試列印', quantity: 1, price: 100 }],
+                                    }),
+                                })
+                                if (!res.ok) { alert('取得列印資料失敗'); return }
+                                const buf = await res.arrayBuffer()
+                                const ok = await printSerial(new Uint8Array(buf))
+                                if (!ok) alert('列印失敗，請重新連接')
+                            }}
+                            className="px-3 py-3 bg-green-800 hover:bg-green-700 text-green-200 rounded-lg text-sm font-medium"
+                        >
+                            測試
+                        </button>
+                    )}
                 </div>
                 {/* 當前營業日提示 */}
                 <div className="mt-2 text-center">

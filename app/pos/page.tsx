@@ -1373,6 +1373,10 @@ export default function POSPage() {
         }}
         fetchCustomers={mutateCustomers}
         fetchProducts={mutateProducts}
+        printerStatus={printerStatus}
+        connectPrinter={connectPrinter}
+        disconnectPrinter={disconnectPrinter}
+        printSerial={printSerial}
       />
     )
   }
