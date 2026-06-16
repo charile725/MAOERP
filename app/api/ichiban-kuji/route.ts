@@ -94,12 +94,38 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 將 last_prize_product 附加到每筆資料
+    // 查詢已確認銷售的實際營收（已反映組合價/開套優惠後的實收價，而非原價推估）
+    const kujiIds = (data as any[])?.map((k: any) => k.id) || []
+    const actualRevenueMap = new Map<string, number>()
+    if (kujiIds.length > 0) {
+      const { data: kujiSaleItems } = await (supabaseServer
+        .from('sale_items') as any)
+        .select(`
+          ichiban_kuji_id,
+          price,
+          quantity,
+          sales!inner (
+            status
+          )
+        `)
+        .in('ichiban_kuji_id', kujiIds)
+        .eq('sales.status', 'confirmed')
+
+      if (kujiSaleItems) {
+        for (const item of kujiSaleItems as any[]) {
+          const prev = actualRevenueMap.get(item.ichiban_kuji_id) || 0
+          actualRevenueMap.set(item.ichiban_kuji_id, prev + (item.price || 0) * (item.quantity || 0))
+        }
+      }
+    }
+
+    // 將 last_prize_product 及實際營收附加到每筆資料
     const enrichedData = (data as any[])?.map((kuji: any) => ({
       ...kuji,
       last_prize_product: kuji.last_prize_product_id
         ? lastPrizeProductMap.get(kuji.last_prize_product_id) || null
         : null,
+      actual_revenue: actualRevenueMap.get(kuji.id) || 0,
     })) || []
 
     return NextResponse.json({

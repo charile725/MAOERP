@@ -53,6 +53,8 @@ type IchibanKuji = {
   combo_prices?: ComboPrice[]
   opening_combo_prices?: ComboPrice[]
   ichiban_kuji_prizes: Prize[]
+  // 已確認銷售的實際營收（已反映組合價/開套優惠），用於目前利潤估算
+  actual_revenue?: number
   // 最後賞
   last_prize_name?: string | null
   last_prize_product_id?: string | null
@@ -129,14 +131,38 @@ export default function IchibanKujiPage() {
 
   const calcCurrentProfit = (kuji: IchibanKuji) => {
     const prizes = kuji.ichiban_kuji_prizes || []
-    const drawsSold = kuji.total_draws - prizes.reduce((sum, p) => sum + (p.remaining ?? 0), 0)
-    const revenue = drawsSold * (kuji.price || 0)
-    // 已消耗成本 = 總成本 - 剩餘賞品成本
-    const remainingCost = prizes.reduce((sum, p) => {
-      const cost = p.products?.cost ?? 0
-      return sum + (p.remaining ?? 0) * cost
-    }, 0)
-    const costConsumed = (kuji.total_cost || 0) - remainingCost
+    let drawsSold = 0
+    let costConsumed = 0
+
+    if (kuji.set_type === 'official') {
+      // 官方套無法拆分各賞項成本，與銷售紀錄記成本方式一致：用平均成本/抽計算
+      drawsSold = kuji.total_draws - prizes.reduce((sum, p) => sum + (p.remaining ?? 0), 0)
+      costConsumed = (kuji.avg_cost || 0) * drawsSold
+    } else {
+      // 自製套：與廢套結算（close-set）邏輯一致，逐賞項計算已抽出的實際成本
+      for (const prize of prizes) {
+        const drawn = prize.quantity - (prize.remaining ?? 0)
+        drawsSold += drawn
+
+        const options = prize.ichiban_kuji_prize_options || []
+        if (options.length > 0) {
+          // 複選獎：成本取已實際消耗選項的商品成本加總（而非當作 0）
+          costConsumed += options
+            .filter((o) => o.is_consumed)
+            .reduce((sum, o) => sum + (o.products?.cost ?? 0), 0)
+        } else {
+          costConsumed += drawn * (prize.products?.cost ?? 0)
+        }
+      }
+
+      // 最後賞成本：套組全部抽完才視為已送出，未抽完前不計入（與廢套結算邏輯一致）
+      if (kuji.total_draws > 0 && drawsSold >= kuji.total_draws && kuji.last_prize_product) {
+        costConsumed += kuji.last_prize_product.cost ?? 0
+      }
+    }
+
+    // 實際營收：取已確認銷售的實收金額（已反映組合價/開套優惠），而非用原價推估
+    const revenue = kuji.actual_revenue ?? 0
     return { profit: revenue - costConsumed, drawsSold }
   }
 
