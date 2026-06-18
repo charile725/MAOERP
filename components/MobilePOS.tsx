@@ -71,10 +71,7 @@ type ClosingStats = {
     paid_count: number
     unpaid_sales: number
     unpaid_count: number
-    paid_cash: number
-    paid_card: number
-    paid_transfer: number
-    paid_cod: number
+    sales_by_account: Record<string, number>
 }
 
 type MobilePOSProps = {
@@ -1292,27 +1289,26 @@ export default function MobilePOS({
                                         </div>
                                     </div>
 
-                                    {/* 已收款明細 */}
+                                    {/* 已收款明細（按帳戶分類） */}
                                     <div className="border-t border-slate-700 pt-4">
                                         <div className="text-white font-semibold mb-3">已收款明細</div>
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <div className="bg-slate-700 rounded-lg px-3 py-2 flex justify-between items-center">
-                                                <span className="text-slate-300 text-sm">現金</span>
-                                                <span className="text-white font-semibold">{formatCurrency(closingStats.paid_cash || 0)}</span>
+                                        {closingStats.sales_by_account && Object.keys(closingStats.sales_by_account).length > 0 ? (
+                                            <div className="grid grid-cols-2 gap-2">
+                                                {Object.entries(closingStats.sales_by_account).map(([accountId, amount]) => {
+                                                    const isUntracked = accountId === '__untracked__'
+                                                    const account = isUntracked ? null : paymentAccounts.find(a => a.id === accountId)
+                                                    const label = isUntracked ? '其他／未入帳' : (account?.account_name || accountId)
+                                                    return (
+                                                        <div key={accountId} className="bg-slate-700 rounded-lg px-3 py-2 flex justify-between items-center">
+                                                            <span className="text-slate-300 text-sm">{label}</span>
+                                                            <span className="text-white font-semibold">{formatCurrency(amount as number)}</span>
+                                                        </div>
+                                                    )
+                                                })}
                                             </div>
-                                            <div className="bg-slate-700 rounded-lg px-3 py-2 flex justify-between items-center">
-                                                <span className="text-slate-300 text-sm">刷卡</span>
-                                                <span className="text-white font-semibold">{formatCurrency(closingStats.paid_card || 0)}</span>
-                                            </div>
-                                            <div className="bg-slate-700 rounded-lg px-3 py-2 flex justify-between items-center">
-                                                <span className="text-slate-300 text-sm">轉帳</span>
-                                                <span className="text-white font-semibold">{formatCurrency(closingStats.paid_transfer || 0)}</span>
-                                            </div>
-                                            <div className="bg-slate-700 rounded-lg px-3 py-2 flex justify-between items-center">
-                                                <span className="text-slate-300 text-sm">貨到付款</span>
-                                                <span className="text-white font-semibold">{formatCurrency(closingStats.paid_cod || 0)}</span>
-                                            </div>
-                                        </div>
+                                        ) : (
+                                            <p className="text-slate-400 text-sm">無已收款記錄</p>
+                                        )}
                                     </div>
                                 </div>
 

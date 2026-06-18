@@ -2735,35 +2735,28 @@ export default function POSPage() {
                       </div>
                     </div>
 
-                    {/* 已收款明細 */}
+                    {/* 已收款明細（按帳戶分類） */}
                     <div className="border-t dark:border-gray-700 pt-4">
                       <h3 className="font-semibold text-lg mb-3 text-gray-900 dark:text-gray-100">已收款明細</h3>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="flex justify-between items-center bg-emerald-50 dark:bg-emerald-900/20 rounded px-4 py-2 border border-emerald-200 dark:border-emerald-700">
-                          <span className="text-emerald-700 dark:text-emerald-300">現金</span>
-                          <span className="font-semibold text-emerald-900 dark:text-emerald-100">
-                            {formatCurrency(closingStats.paid_cash || 0)}
-                          </span>
+                      {closingStats.sales_by_account && Object.keys(closingStats.sales_by_account).length > 0 ? (
+                        <div className="grid grid-cols-2 gap-3">
+                          {Object.entries(closingStats.sales_by_account as Record<string, number>).map(([accountId, amount]) => {
+                            const isUntracked = accountId === '__untracked__'
+                            const account = isUntracked ? null : rawPaymentAccounts.find((a: any) => a.id === accountId)
+                            const label = isUntracked ? '其他／未入帳' : (account?.account_name || accountId)
+                            return (
+                              <div key={accountId} className={`flex justify-between items-center rounded px-4 py-2 border ${isUntracked ? 'bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600' : 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-700'}`}>
+                                <span className={isUntracked ? 'text-gray-500 dark:text-gray-400' : 'text-emerald-700 dark:text-emerald-300'}>{label}</span>
+                                <span className={`font-semibold ${isUntracked ? 'text-gray-700 dark:text-gray-300' : 'text-emerald-900 dark:text-emerald-100'}`}>
+                                  {formatCurrency(amount)}
+                                </span>
+                              </div>
+                            )
+                          })}
                         </div>
-                        <div className="flex justify-between items-center bg-emerald-50 dark:bg-emerald-900/20 rounded px-4 py-2 border border-emerald-200 dark:border-emerald-700">
-                          <span className="text-emerald-700 dark:text-emerald-300">刷卡</span>
-                          <span className="font-semibold text-emerald-900 dark:text-emerald-100">
-                            {formatCurrency(closingStats.paid_card || 0)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-center bg-emerald-50 dark:bg-emerald-900/20 rounded px-4 py-2 border border-emerald-200 dark:border-emerald-700">
-                          <span className="text-emerald-700 dark:text-emerald-300">轉帳</span>
-                          <span className="font-semibold text-emerald-900 dark:text-emerald-100">
-                            {formatCurrency(closingStats.paid_transfer || 0)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-center bg-emerald-50 dark:bg-emerald-900/20 rounded px-4 py-2 border border-emerald-200 dark:border-emerald-700">
-                          <span className="text-emerald-700 dark:text-emerald-300">貨到付款</span>
-                          <span className="font-semibold text-emerald-900 dark:text-emerald-100">
-                            {formatCurrency(closingStats.paid_cod || 0)}
-                          </span>
-                        </div>
-                      </div>
+                      ) : (
+                        <p className="text-gray-400 dark:text-gray-500 text-sm">無已收款記錄</p>
+                      )}
                     </div>
 
                     {/* 備註 */}
