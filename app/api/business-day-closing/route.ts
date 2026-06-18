@@ -148,11 +148,6 @@ export async function GET(request: NextRequest) {
         } else if (sale.payment_method.startsWith('transfer_')) {
           stats.paid_transfer += sale.total
         }
-
-        if (sale.account_id) {
-          stats.sales_by_account[sale.account_id] =
-            (stats.sales_by_account[sale.account_id] || 0) + sale.total
-        }
       } else {
         stats.unpaid_count += 1
         stats.unpaid_sales += sale.total
@@ -170,6 +165,76 @@ export async function GET(request: NextRequest) {
     })
 
     stats.fake_total_sales = stats.total_sales + storeCreditOriginalTotal
+
+    // 帳戶明細：從 account_transactions 取，fallback 到 sale.account_id
+    const saleIds = (sales || []).map((s: any) => s.id)
+    const coveredSaleIds = new Set<string>()
+
+    if (saleIds.length > 0) {
+      const { data: txns } = await (supabaseServer
+        .from('account_transactions') as any)
+        .select('account_id, amount, ref_id')
+        .in('ref_id', saleIds)
+        .eq('transaction_type', 'sale')
+        .eq('ref_type', 'sale')
+
+      txns?.forEach((t: any) => {
+        if (t.account_id && t.ref_id) {
+          stats.sales_by_account[t.account_id] = (stats.sales_by_account[t.account_id] || 0) + t.amount
+          coveredSaleIds.add(t.ref_id)
+        }
+      })
+
+      // 補充：AR 收款（customer_payment）金額
+      const { data: arAccounts } = await (supabaseServer
+        .from('partner_accounts') as any)
+        .select('id')
+        .in('ref_id', saleIds)
+        .eq('ref_type', 'sale')
+        .eq('direction', 'AR')
+
+      const paIds = (arAccounts || []).map((a: any) => a.id as string)
+      if (paIds.length > 0) {
+        const { data: allocations } = await (supabaseServer
+          .from('settlement_allocations') as any)
+          .select('settlement_id, amount')
+          .in('partner_account_id', paIds)
+
+        const allocSettlementIds = [...new Set((allocations || []).map((a: any) => a.settlement_id as string))]
+        if (allocSettlementIds.length > 0) {
+          const { data: receiptTxns } = await (supabaseServer
+            .from('account_transactions') as any)
+            .select('ref_id, account_id')
+            .in('ref_id', allocSettlementIds)
+            .eq('transaction_type', 'customer_payment')
+
+          const settlementAccountMap = new Map<string, string>(
+            (receiptTxns || []).map((t: any) => [t.ref_id as string, t.account_id as string])
+          )
+
+          ;(allocations || []).forEach((alloc: any) => {
+            const accountId = settlementAccountMap.get(alloc.settlement_id)
+            if (accountId && alloc.amount) {
+              stats.sales_by_account[accountId] = (stats.sales_by_account[accountId] || 0) + alloc.amount
+            }
+          })
+        }
+      }
+    }
+
+    // Fallback：有 account_id 但無 account_transactions 的已收款銷售
+    ;(sales || []).forEach((sale: any) => {
+      if (sale.is_paid && sale.account_id && !coveredSaleIds.has(sale.id)) {
+        stats.sales_by_account[sale.account_id] = (stats.sales_by_account[sale.account_id] || 0) + sale.total
+      }
+    })
+
+    // 補足差額：已收款但無法對應帳戶的部分
+    const trackedTotalGet = Object.values(stats.sales_by_account).reduce((s: number, v) => s + (v as number), 0)
+    const gapGet = Math.round((stats.paid_sales - trackedTotalGet) * 100) / 100
+    if (gapGet > 0.01) {
+      stats.sales_by_account['__untracked__'] = gapGet
+    }
 
     // 計算購物金轉出（查詢該營業日所有銷售的 sale_corrections，不限 status）
     const { data: allDaySales } = await (supabaseServer
@@ -306,11 +371,6 @@ export async function POST(request: NextRequest) {
         } else if (sale.payment_method.startsWith('transfer_')) {
           stats.paid_transfer += sale.total
         }
-
-        if (sale.account_id) {
-          stats.sales_by_account[sale.account_id] =
-            (stats.sales_by_account[sale.account_id] || 0) + sale.total
-        }
       } else {
         stats.unpaid_count += 1
         stats.unpaid_sales += sale.total
@@ -326,6 +386,76 @@ export async function POST(request: NextRequest) {
         }
       }
     })
+
+    // 帳戶明細：從 account_transactions 取，fallback 到 sale.account_id
+    const postSaleIds = (sales || []).map((s: any) => s.id)
+    const postCoveredSaleIds = new Set<string>()
+
+    if (postSaleIds.length > 0) {
+      const { data: txns } = await (supabaseServer
+        .from('account_transactions') as any)
+        .select('account_id, amount, ref_id')
+        .in('ref_id', postSaleIds)
+        .eq('transaction_type', 'sale')
+        .eq('ref_type', 'sale')
+
+      txns?.forEach((t: any) => {
+        if (t.account_id && t.ref_id) {
+          stats.sales_by_account[t.account_id] = (stats.sales_by_account[t.account_id] || 0) + t.amount
+          postCoveredSaleIds.add(t.ref_id)
+        }
+      })
+
+      // 補充：AR 收款（customer_payment）金額
+      const { data: arAccounts } = await (supabaseServer
+        .from('partner_accounts') as any)
+        .select('id')
+        .in('ref_id', postSaleIds)
+        .eq('ref_type', 'sale')
+        .eq('direction', 'AR')
+
+      const paIds = (arAccounts || []).map((a: any) => a.id as string)
+      if (paIds.length > 0) {
+        const { data: allocations } = await (supabaseServer
+          .from('settlement_allocations') as any)
+          .select('settlement_id, amount')
+          .in('partner_account_id', paIds)
+
+        const allocSettlementIds = [...new Set((allocations || []).map((a: any) => a.settlement_id as string))]
+        if (allocSettlementIds.length > 0) {
+          const { data: receiptTxns } = await (supabaseServer
+            .from('account_transactions') as any)
+            .select('ref_id, account_id')
+            .in('ref_id', allocSettlementIds)
+            .eq('transaction_type', 'customer_payment')
+
+          const settlementAccountMap = new Map<string, string>(
+            (receiptTxns || []).map((t: any) => [t.ref_id as string, t.account_id as string])
+          )
+
+          ;(allocations || []).forEach((alloc: any) => {
+            const accountId = settlementAccountMap.get(alloc.settlement_id)
+            if (accountId && alloc.amount) {
+              stats.sales_by_account[accountId] = (stats.sales_by_account[accountId] || 0) + alloc.amount
+            }
+          })
+        }
+      }
+    }
+
+    // Fallback：有 account_id 但無 account_transactions 的已收款銷售
+    ;(sales || []).forEach((sale: any) => {
+      if (sale.is_paid && sale.account_id && !postCoveredSaleIds.has(sale.id)) {
+        stats.sales_by_account[sale.account_id] = (stats.sales_by_account[sale.account_id] || 0) + sale.total
+      }
+    })
+
+    // 補足差額：已收款但無法對應帳戶的部分
+    const trackedTotalPost = Object.values(stats.sales_by_account).reduce((s: number, v) => s + (v as number), 0)
+    const gapPost = Math.round((stats.paid_sales - trackedTotalPost) * 100) / 100
+    if (gapPost > 0.01) {
+      stats.sales_by_account['__untracked__'] = gapPost
+    }
 
     // 4. 插入日結記錄
     const now = new Date()
