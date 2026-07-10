@@ -565,6 +565,9 @@ export async function POST(request: NextRequest) {
             snapshot_name: `${kuji?.name || ''} ${prize?.prize_tier || ''} - ${optProduct?.name || ''}`,
             ichiban_kuji_prize_id: item.ichiban_kuji_prize_id || null,
             ichiban_kuji_id: item.ichiban_kuji_id || null,
+            is_points_redemption: false,
+            points_earned: 0,
+            points_used: 0,
           }
         }
 
@@ -592,6 +595,9 @@ export async function POST(request: NextRequest) {
             snapshot_name: displayName ? `${kuji?.name || ''} ${displayName}` : null,
             ichiban_kuji_prize_id: item.ichiban_kuji_prize_id,
             ichiban_kuji_id: item.ichiban_kuji_id || prize?.kuji_id || null,
+            is_points_redemption: false,
+            points_earned: 0,
+            points_used: 0,
           }
         }
 
