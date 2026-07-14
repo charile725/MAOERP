@@ -256,8 +256,19 @@ export async function GET(request: NextRequest) {
 
 // POST /api/sales - Create sale
 export async function POST(request: NextRequest) {
+  // ⏱️ 暫時的結帳效能量測，找到瓶頸後移除
+  const t0 = performance.now()
+  let tLast = t0
+  const marks: string[] = []
+  const mark = (label: string) => {
+    const now = performance.now()
+    marks.push(`${label}: ${(now - tLast).toFixed(0)}ms`)
+    tLast = now
+  }
+
   try {
     const body = await request.json()
+    mark('parse body')
     const { is_delivered = true, delivery_method, expected_delivery_date, delivery_note, ...saleData } = body
 
     // Validate input
@@ -313,6 +324,8 @@ export async function POST(request: NextRequest) {
         .eq('source', draft.source)
         .single(),
     ])
+
+    mark('sale_no + account + businessDay (parallel)')
 
     let saleCount = 0
     if (latestSale && latestSale.length > 0) {
@@ -384,6 +397,8 @@ export async function POST(request: NextRequest) {
       break
     }
 
+    mark('insert sales (draft)')
+
     if (saleError || !sale) {
       return NextResponse.json(
         { ok: false, error: saleError?.message || '建立銷售單失敗' },
@@ -412,6 +427,8 @@ export async function POST(request: NextRequest) {
         productMap = new Map(products.map((p: any) => [p.id, p]))
       }
     }
+
+    mark('products batch')
 
     // 積分安全檢查：積分底數商品必須有客戶
     const hasPointsBaseItems = draft.items.some(item => {
@@ -541,6 +558,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    mark('points/prize/stock/store-credit checks')
+
     // Get product details and insert sale items (subtotal is auto-calculated by database)
     const saleItems = await Promise.all(
       draft.items.map(async (item) => {
@@ -628,10 +647,14 @@ export async function POST(request: NextRequest) {
       })
     )
 
+    mark('build saleItems (kuji/prize lookups)')
+
     const { data: insertedSaleItems, error: itemsError } = await (supabaseServer
       .from('sale_items') as any)
       .insert(saleItems)
       .select()
+
+    mark('insert sale_items')
 
     if (itemsError) {
       // Rollback: delete the sale
@@ -875,6 +898,8 @@ export async function POST(request: NextRequest) {
       .select()
       .single()
 
+    mark('update sales → confirmed')
+
     if (confirmError) {
       // Rollback: restore customer store credit if used
       if (storeCreditUsed > 0 && draft.customer_code) {
@@ -982,6 +1007,8 @@ export async function POST(request: NextRequest) {
         }
       }
     }
+
+    mark('updateAccountBalance (帳戶餘額)')
 
     // 7. 創建出貨單（支援部分出貨）
     // Helper: 取得目前最大的 delivery number（使用 RPC 避免 1000 筆限制）
@@ -1164,6 +1191,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    mark('deliveries + delivery_items + inventory_logs')
+
     // 9. 更新訂單履約狀態
     const hasDelivered = deliveredItems.length > 0
     const hasNotDelivered = notDeliveredItems.length > 0
@@ -1231,11 +1260,20 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    mark('fulfillment_status + AR')
+
+    console.log(
+      `\n⏱️  [結帳耗時] 總計 ${(performance.now() - t0).toFixed(0)}ms  (${draft.items.length} 個品項)\n` +
+      marks.map(m => `      ${m}`).join('\n') + '\n'
+    )
+
     return NextResponse.json(
       { ok: true, data: confirmedSale },
       { status: 201 }
     )
   } catch (error) {
+    console.error('[Sales API] 系統錯誤:', error)
+    console.log(`⏱️  [結帳耗時-失敗] ${(performance.now() - t0).toFixed(0)}ms\n` + marks.map(m => `      ${m}`).join('\n'))
     return NextResponse.json(
       { ok: false, error: '系統錯誤' },
       { status: 500 }
