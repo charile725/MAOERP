@@ -393,7 +393,11 @@ export async function POST(request: NextRequest) {
 
     // 2. Check stock availability for each item（批次查詢優化）
     // 分離一般商品和一番賞
-    const productIds = draft.items.filter(i => !i.ichiban_kuji_prize_id).map(i => i.product_id)
+    // 一番賞若有 realProductId 也要一起撈：組 sale_items 時需要它的 cost / name。
+    // 下面用到 productMap 的地方都各自有 ichiban_kuji_prize_id 的守衛，放寬不影響庫存檢查。
+    const productIds = draft.items
+      .map(i => i.product_id)
+      .filter((id): id is string => !!id)
     const prizeIds = draft.items.filter(i => i.ichiban_kuji_prize_id).map(i => i.ichiban_kuji_prize_id).filter((id): id is string => !!id)
 
     // 批次查詢商品（含積分欄位）
