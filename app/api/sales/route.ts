@@ -530,20 +530,28 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. 複選獎：驗證 selection_option_id 並取得 product 資訊
-    // 建立 optionMap 以便後續使用
+    // 建立 optionMap 以便後續使用（批次查詢：逐筆查的話每個複選獎都要多一次 round-trip）
     const optionMap = new Map<string, any>()
-    for (const item of draft.items) {
-      if (item.selection_option_id) {
-        const { data: option, error: optErr } = await (supabaseServer
-          .from('ichiban_kuji_prize_options') as any)
-          .select('id, prize_id, product_id, is_consumed, products(id, name, item_code, cost)')
-          .eq('id', item.selection_option_id)
-          .single()
+    const optionIds = draft.items
+      .map(i => i.selection_option_id)
+      .filter((id): id is string => !!id)
 
-        if (optErr || !option) {
+    if (optionIds.length > 0) {
+      const { data: options } = await (supabaseServer
+        .from('ichiban_kuji_prize_options') as any)
+        .select('id, prize_id, product_id, is_consumed, products(id, name, item_code, cost)')
+        .in('id', optionIds)
+
+      for (const option of options || []) {
+        optionMap.set(option.id, option)
+      }
+
+      for (const optionId of optionIds) {
+        const option = optionMap.get(optionId)
+        if (!option) {
           await (supabaseServer.from('sales') as any).delete().eq('id', sale.id)
           return NextResponse.json(
-            { ok: false, error: `找不到複選獎選項: ${item.selection_option_id}` },
+            { ok: false, error: `找不到複選獎選項: ${optionId}` },
             { status: 400 }
           )
         }
@@ -554,7 +562,6 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           )
         }
-        optionMap.set(item.selection_option_id, option)
       }
     }
 
