@@ -586,24 +586,15 @@ export async function POST(request: NextRequest) {
     mark('points/prize/stock/store-credit checks')
 
     // Get product details and insert sale items (subtotal is auto-calculated by database)
-    const saleItems = await Promise.all(
-      draft.items.map(async (item) => {
+    // 全部改吃上面批次查好的 map，不再逐筆打 DB
+    const saleItems = draft.items.map((item) => {
         // 複選獎：使用選項的 product
         if (item.selection_option_id) {
           const option = optionMap.get(item.selection_option_id)
           const optProduct = option?.products
 
-          const { data: kuji } = await (supabaseServer
-            .from('ichiban_kuji') as any)
-            .select('avg_cost, name')
-            .eq('id', item.ichiban_kuji_id)
-            .single()
-
-          const { data: prize } = await (supabaseServer
-            .from('ichiban_kuji_prizes') as any)
-            .select('prize_tier')
-            .eq('id', item.ichiban_kuji_prize_id)
-            .single()
+          const kuji = item.ichiban_kuji_id ? kujiMap.get(item.ichiban_kuji_id) : null
+          const prize = item.ichiban_kuji_prize_id ? prizeMap.get(item.ichiban_kuji_prize_id) : null
 
           return {
             sale_id: sale.id,
@@ -622,17 +613,9 @@ export async function POST(request: NextRequest) {
 
         // 官方套賞項沒有 product_id，需從 prize + kuji 取得資訊
         if (item.ichiban_kuji_prize_id && !item.product_id) {
-          const { data: prize } = await (supabaseServer
-            .from('ichiban_kuji_prizes') as any)
-            .select('prize_tier, prize_name, kuji_id')
-            .eq('id', item.ichiban_kuji_prize_id)
-            .single()
-
-          const { data: kuji } = await (supabaseServer
-            .from('ichiban_kuji') as any)
-            .select('avg_cost, name')
-            .eq('id', item.ichiban_kuji_id || prize?.kuji_id)
-            .single()
+          const prize = prizeMap.get(item.ichiban_kuji_prize_id)
+          const kujiId = item.ichiban_kuji_id || prize?.kuji_id
+          const kuji = kujiId ? kujiMap.get(kujiId) : null
 
           const displayName = prize?.prize_name || prize?.prize_tier || ''
           return {
@@ -669,8 +652,7 @@ export async function POST(request: NextRequest) {
           points_earned: isPointsBase && !isPointsRedemption ? item.quantity : 0,
           points_used: manualPointsUsed,
         }
-      })
-    )
+    })
 
     mark('build saleItems (kuji/prize lookups)')
 
