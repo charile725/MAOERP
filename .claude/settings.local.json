@@ -45,7 +45,11 @@
       "Bash(PYTHONIOENCODING=utf-8 python \"cli/assets/scripts/search.py\" \"ERP dashboard sidebar navigation dark mode\" --design-system -p \"ERP\")",
       "Bash(python \"cli/assets/scripts/search.py\" \"sidebar navigation ERP admin\" --domain ux -n 5)",
       "WebSearch",
-      "Bash(node .escpos-check/run.js)"
+      "Bash(node .escpos-check/run.js)",
+      "Bash(node \"C:/Users/linei/AppData/Local/Temp/claude/C--Users-linei-Desktop-coding-toyflow-erp---ERP/10c72e34-d2d3-4e85-99c0-a8c03f4a17a7/scratchpad/latency.mjs\")",
+      "Bash(cp \"C:/Users/linei/AppData/Local/Temp/claude/C--Users-linei-Desktop-coding-toyflow-erp---ERP/10c72e34-d2d3-4e85-99c0-a8c03f4a17a7/scratchpad/latency.mjs\" ./.latency-probe.mjs)",
+      "Bash(node ./.latency-probe.mjs)",
+      "Bash(git stash *)"
     ]
   }
 }

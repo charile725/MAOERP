@@ -281,12 +281,38 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate sale_no - 只取最大編號（避免 Supabase 預設 1000 筆 limit）
-    const { data: latestSale } = await (supabaseServer
-      .from('sales') as any)
-      .select('sale_no')
-      .order('created_at', { ascending: false })
-      .limit(100)
+    // Determine primary payment method and account
+    // If payments array provided, use largest amount; otherwise use single payment_method
+    let primaryPaymentMethod = draft.payment_method
+    if (draft.payments && draft.payments.length > 0) {
+      // Find payment with largest amount
+      const largest = draft.payments.reduce((max, p) => p.amount > max.amount ? p : max, draft.payments[0])
+      primaryPaymentMethod = largest.method
+    }
+
+    // 這三個查詢彼此不相依，並行送出（序列化的話每個都要多等一次 round-trip）
+    const [{ data: latestSale }, { data: account }, { data: businessDaySetting }] = await Promise.all([
+      // Generate sale_no - 只取最大編號（避免 Supabase 預設 1000 筆 limit）
+      (supabaseServer
+        .from('sales') as any)
+        .select('sale_no')
+        .order('created_at', { ascending: false })
+        .limit(100),
+      // Get account_id based on primary payment_method
+      (supabaseServer
+        .from('accounts') as any)
+        .select('id')
+        .eq('payment_method_code', primaryPaymentMethod)
+        .eq('is_active', true)
+        .single(),
+      // 從 business_day_settings 取得當前營業日
+      // 這樣即使跨日（凌晨）營業，在日結前的銷售仍會記錄到正確的營業日
+      (supabaseServer
+        .from('business_day_settings') as any)
+        .select('current_business_date')
+        .eq('source', draft.source)
+        .single(),
+    ])
 
     let saleCount = 0
     if (latestSale && latestSale.length > 0) {
@@ -303,23 +329,6 @@ export async function POST(request: NextRequest) {
 
     let saleNo = generateCode('S', saleCount)
 
-    // Determine primary payment method and account
-    // If payments array provided, use largest amount; otherwise use single payment_method
-    let primaryPaymentMethod = draft.payment_method
-    if (draft.payments && draft.payments.length > 0) {
-      // Find payment with largest amount
-      const largest = draft.payments.reduce((max, p) => p.amount > max.amount ? p : max, draft.payments[0])
-      primaryPaymentMethod = largest.method
-    }
-
-    // Get account_id based on primary payment_method
-    const { data: account } = await (supabaseServer
-      .from('accounts') as any)
-      .select('id')
-      .eq('payment_method_code', primaryPaymentMethod)
-      .eq('is_active', true)
-      .single()
-
     const accountId = account?.id || null
 
     // 取得台灣時間 (UTC+8)
@@ -327,16 +336,7 @@ export async function POST(request: NextRequest) {
     const taiwanTime = new Date(now.getTime() + 8 * 60 * 60 * 1000)
     const createdAt = taiwanTime.toISOString() // 完整的台灣時間戳記
 
-    // 從 business_day_settings 取得當前營業日
-    // 這樣即使跨日（凌晨）營業，在日結前的銷售仍會記錄到正確的營業日
     let saleDate = taiwanTime.toISOString().split('T')[0] // 預設使用當前日期
-
-    const { data: businessDaySetting } = await (supabaseServer
-      .from('business_day_settings') as any)
-      .select('current_business_date')
-      .eq('source', draft.source)
-      .single()
-
     if (businessDaySetting?.current_business_date) {
       saleDate = businessDaySetting.current_business_date
     }
@@ -397,11 +397,12 @@ export async function POST(request: NextRequest) {
     const prizeIds = draft.items.filter(i => i.ichiban_kuji_prize_id).map(i => i.ichiban_kuji_prize_id).filter((id): id is string => !!id)
 
     // 批次查詢商品（含積分欄位）
-    let productMap = new Map<string, { stock: number; allow_negative: boolean; name: string; is_points_base: boolean; points_cost: number | null }>()
+    // cost / avg_cost 一併撈出來，下面組 sale_items 時就不必每筆商品各查一次
+    let productMap = new Map<string, { stock: number; allow_negative: boolean; name: string; is_points_base: boolean; points_cost: number | null; cost: number | null; avg_cost: number | null }>()
     if (productIds.length > 0) {
       const { data: products } = await (supabaseServer
         .from('products') as any)
-        .select('id, stock, allow_negative, name, is_points_base, points_cost')
+        .select('id, stock, allow_negative, name, is_points_base, points_cost, cost, avg_cost')
         .in('id', productIds)
       if (products) {
         productMap = new Map(products.map((p: any) => [p.id, p]))
@@ -601,14 +602,9 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        const productFromMap = item.product_id ? productMap.get(item.product_id) : null
-        const { data: product } = await (supabaseServer
-          .from('products') as any)
-          .select('name, cost, avg_cost')
-          .eq('id', item.product_id)
-          .single()
+        const product = item.product_id ? productMap.get(item.product_id) : null
 
-        const isPointsBase = productFromMap?.is_points_base === true
+        const isPointsBase = product?.is_points_base === true
         const manualPointsUsed = item.points_used_manual || 0
         const isPointsRedemption = manualPointsUsed > 0
 
@@ -945,13 +941,19 @@ export async function POST(request: NextRequest) {
 
       // Process each payment
       for (const payment of paymentsToProcess) {
-        // Get account for this payment method
-        const { data: paymentAccount } = await (supabaseServer
-          .from('accounts') as any)
-          .select('id')
-          .eq('payment_method_code', payment.method)
-          .eq('is_active', true)
-          .single()
+        // 單一付款時就是開頭查過的 primary account，直接沿用省一次 round-trip
+        let paymentAccount: { id: string } | null =
+          payment.method === primaryPaymentMethod && accountId ? { id: accountId } : null
+
+        if (!paymentAccount) {
+          const { data } = await (supabaseServer
+            .from('accounts') as any)
+            .select('id')
+            .eq('payment_method_code', payment.method)
+            .eq('is_active', true)
+            .single()
+          paymentAccount = data
+        }
 
         if (paymentAccount) {
           const accountUpdate = await updateAccountBalance({
