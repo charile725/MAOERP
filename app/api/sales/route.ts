@@ -479,14 +479,32 @@ export async function POST(request: NextRequest) {
     }
 
     // 批次查詢一番賞
-    let prizeMap = new Map<string, { remaining: number; prize_tier: string }>()
+    // prize_name / kuji_id 一併撈出來，下面組 sale_items 時就不必每個賞品各查一次
+    let prizeMap = new Map<string, { remaining: number; prize_tier: string; prize_name: string | null; kuji_id: string | null }>()
     if (prizeIds.length > 0) {
       const { data: prizes } = await (supabaseServer
         .from('ichiban_kuji_prizes') as any)
-        .select('id, remaining, prize_tier')
+        .select('id, remaining, prize_tier, prize_name, kuji_id')
         .in('id', prizeIds)
       if (prizes) {
         prizeMap = new Map(prizes.map((p: any) => [p.id, p]))
+      }
+    }
+
+    // 批次查詢一番賞主檔（avg_cost / name），同樣避免每個賞品各查一次
+    const kujiIds = [...new Set([
+      ...draft.items.map(i => i.ichiban_kuji_id),
+      ...[...prizeMap.values()].map(p => p.kuji_id),
+    ].filter((id): id is string => !!id))]
+
+    let kujiMap = new Map<string, { avg_cost: number | null; name: string | null }>()
+    if (kujiIds.length > 0) {
+      const { data: kujis } = await (supabaseServer
+        .from('ichiban_kuji') as any)
+        .select('id, avg_cost, name')
+        .in('id', kujiIds)
+      if (kujis) {
+        kujiMap = new Map(kujis.map((k: any) => [k.id, k]))
       }
     }
 
@@ -824,68 +842,87 @@ export async function POST(request: NextRequest) {
     }
 
     // 5. Deduct ONLY ichiban kuji remaining (product stock is auto-deducted by DB trigger)
-    for (let idx = 0; idx < draft.items.length; idx++) {
-      const item = draft.items[idx]
-      const insertedItem = insertedSaleItems[idx]
-      // 如果是從一番賞售出，扣除一番賞的 remaining
-      if (item.ichiban_kuji_prize_id) {
-        const { data: prize, error: fetchPrizeError } = await (supabaseServer
-          .from('ichiban_kuji_prizes') as any)
-          .select('remaining')
-          .eq('id', item.ichiban_kuji_prize_id)
-          .single()
+    // 每個賞品逐筆 select + update 的話，一套 10 抽就是 30 次連續 round-trip。
+    // remaining 在上面的 prizeMap 已經查過了，這裡直接沿用，驗證完再一次並行送出所有寫入。
+    const kujiItems = draft.items
+      .map((item, idx) => ({ item, insertedItem: insertedSaleItems[idx] }))
+      .filter(({ item }) => !!item.ichiban_kuji_prize_id)
 
-        if (fetchPrizeError) {
-          // Rollback: delete items and sale
-          await (supabaseServer.from('sale_items') as any).delete().eq('sale_id', sale.id)
-          await (supabaseServer.from('sales') as any).delete().eq('id', sale.id)
+    if (kujiItems.length > 0) {
+      // 同一個賞可能出現在多筆品項，先加總再扣；各自從同一個基準值算會互相覆蓋
+      const neededByPrize = new Map<string, number>()
+      for (const { item } of kujiItems) {
+        const prizeId = item.ichiban_kuji_prize_id!
+        neededByPrize.set(prizeId, (neededByPrize.get(prizeId) || 0) + item.quantity)
+      }
+
+      const rollbackSale = async () => {
+        await (supabaseServer.from('sale_items') as any).delete().eq('sale_id', sale.id)
+        await (supabaseServer.from('sales') as any).delete().eq('id', sale.id)
+      }
+
+      // 先全部驗證再寫入，避免扣到一半才失敗
+      for (const [prizeId, needed] of neededByPrize) {
+        const prize = prizeMap.get(prizeId)
+        if (!prize) {
+          await rollbackSale()
           return NextResponse.json(
-            { ok: false, error: `Failed to fetch prize: ${fetchPrizeError.message}` },
+            { ok: false, error: `Failed to fetch prize: ${prizeId}` },
             { status: 500 }
           )
         }
-
-        // 檢查一番賞庫存
-        if (prize.remaining < item.quantity) {
-          // Rollback: delete items and sale
-          await (supabaseServer.from('sale_items') as any).delete().eq('sale_id', sale.id)
-          await (supabaseServer.from('sales') as any).delete().eq('id', sale.id)
+        if (prize.remaining < needed) {
+          await rollbackSale()
           return NextResponse.json(
             { ok: false, error: `該賞已售完或庫存不足` },
             { status: 400 }
           )
         }
+      }
 
-        // 扣除一番賞庫的 remaining
-        const { error: updatePrizeError } = await (supabaseServer
-          .from('ichiban_kuji_prizes') as any)
-          .update({ remaining: prize.remaining - item.quantity })
-          .eq('id', item.ichiban_kuji_prize_id)
+      // 扣除一番賞的 remaining
+      const deductResults = await Promise.all(
+        [...neededByPrize].map(([prizeId, needed]) =>
+          (supabaseServer
+            .from('ichiban_kuji_prizes') as any)
+            .update({ remaining: prizeMap.get(prizeId)!.remaining - needed })
+            .eq('id', prizeId)
+        )
+      )
 
-        if (updatePrizeError) {
-          // Rollback: delete items and sale
-          await (supabaseServer.from('sale_items') as any).delete().eq('sale_id', sale.id)
-          await (supabaseServer.from('sales') as any).delete().eq('id', sale.id)
-          return NextResponse.json(
-            { ok: false, error: `Failed to deduct prize inventory: ${updatePrizeError.message}` },
-            { status: 500 }
+      const deductFailure = deductResults.find((r: any) => r.error)
+      if (deductFailure) {
+        await rollbackSale()
+        return NextResponse.json(
+          { ok: false, error: `Failed to deduct prize inventory: ${deductFailure.error.message}` },
+          { status: 500 }
+        )
+      }
+
+      // 複選獎：標記選項為已消耗（失敗只記錄，不影響銷售流程）
+      const consumeTargets = kujiItems.filter(
+        ({ item, insertedItem }) => item.selection_option_id && insertedItem
+      )
+      if (consumeTargets.length > 0) {
+        const consumeResults = await Promise.all(
+          consumeTargets.map(({ item, insertedItem }) =>
+            (supabaseServer
+              .from('ichiban_kuji_prize_options') as any)
+              .update({
+                is_consumed: true,
+                consumed_sale_item_id: insertedItem.id,
+              })
+              .eq('id', item.selection_option_id)
           )
-        }
-
-        // 複選獎：標記選項為已消耗
-        if (item.selection_option_id && insertedItem) {
-          const { error: consumeError } = await (supabaseServer
-            .from('ichiban_kuji_prize_options') as any)
-            .update({
-              is_consumed: true,
-              consumed_sale_item_id: insertedItem.id,
-            })
-            .eq('id', item.selection_option_id)
-
-          if (consumeError) {
-            console.error(`[Sales API] Failed to consume option ${item.selection_option_id}:`, consumeError)
+        )
+        consumeResults.forEach((r: any, i: number) => {
+          if (r.error) {
+            console.error(
+              `[Sales API] Failed to consume option ${consumeTargets[i].item.selection_option_id}:`,
+              r.error
+            )
           }
-        }
+        })
       }
     }
 
