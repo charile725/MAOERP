@@ -51,7 +51,10 @@
       "Bash(node ./.latency-probe.mjs)",
       "Bash(git stash *)",
       "Bash(nslookup db.pzqeixevnhseajrqwkdk.supabase.co)",
-      "Bash(nslookup aws-0-ap-northeast-1.pooler.supabase.com)"
+      "Bash(nslookup aws-0-ap-northeast-1.pooler.supabase.com)",
+      "Read(//c/Users/linei/Desktop/coding/**)",
+      "Read(//c/Users/linei/Desktop/**)",
+      "Bash(git checkout *)"
     ]
   }
 }
