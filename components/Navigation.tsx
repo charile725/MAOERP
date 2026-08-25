@@ -9,7 +9,7 @@ import {
   BarChart2, ShoppingCart, Package, Gift, Sparkles,
   Users, Building2, User, Receipt, Truck, CreditCard,
   BookOpen, Building, ClipboardList, Landmark, Wallet,
-  TrendingUp, ChevronDown, LogOut, PanelLeftClose, PanelLeftOpen,
+  TrendingUp, Radio, ChevronDown, LogOut, PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react'
 
 type UserRole = 'admin' | 'staff'
@@ -26,6 +26,7 @@ type NavItem = {
 const navItems: NavItem[] = [
   { href: '/dashboard', label: '營收報表', icon: BarChart2, roles: ['admin'] },
   { href: '/pos', label: '店裡收銀', icon: ShoppingCart, roles: ['admin', 'staff'] },
+  { href: '/pos-live', label: '直播收銀', icon: Radio, roles: ['admin', 'staff'] },
   {
     label: '庫存管理', icon: Package, roles: ['admin', 'staff'],
     submenu: [
@@ -47,7 +48,7 @@ const navItems: NavItem[] = [
     submenu: [
       { href: '/expenses', label: '會計記帳', icon: BookOpen, roles: ['admin', 'staff'] },
       { href: '/fixed-assets', label: '固定資產', icon: Building, roles: ['admin'] },
-      { href: '/ap', label: '應付帳款', icon: ClipboardList, roles: ['admin'] },
+      { href: '/ar', label: '應收帳款', icon: ClipboardList, roles: ['admin'] },
     ],
   },
   {
@@ -81,7 +82,10 @@ export default function Navigation({ collapsed, onToggle, mounted }: Props) {
 
   useEffect(() => {
     const parent = navItems.find(item => item.submenu?.some(sub => sub.href === pathname))
-    if (parent) setOpenSubmenu(parent.label)
+    if (!parent) return
+
+    const frameId = requestAnimationFrame(() => setOpenSubmenu(parent.label))
+    return () => cancelAnimationFrame(frameId)
   }, [pathname])
 
   const handleLogout = async () => {
@@ -134,9 +138,9 @@ export default function Navigation({ collapsed, onToggle, mounted }: Props) {
           ) : (
             <>
               <Link href="/" className="flex items-center gap-2.5 min-w-0">
-                <Image src="/瘋玩logo.jpg" alt="Logo" width={26} height={26} className="rounded-md shrink-0" />
+                <Image src="/毛先生logo.jpg" alt="Logo" width={26} height={26} className="rounded-md shrink-0" />
                 <span className="text-sm font-bold bg-gradient-to-r from-blue-600 to-indigo-500 dark:from-blue-400 dark:to-indigo-400 bg-clip-text text-transparent truncate">
-                  瘋玩 ERP
+                  毛先生 ERP
                 </span>
               </Link>
               <button
@@ -293,14 +297,14 @@ export default function Navigation({ collapsed, onToggle, mounted }: Props) {
           <div className="flex h-14 items-center justify-between">
             <Link href="/" className="flex items-center gap-2 shrink-0">
               <Image
-                src="/瘋玩logo.jpg"
-                alt="瘋玩 ERP Logo"
+                src="/毛先生logo.jpg"
+                alt="毛先生 ERP Logo"
                 width={32}
                 height={32}
                 className="rounded-md"
               />
               <span className="hidden sm:inline text-base font-bold bg-gradient-to-r from-blue-600 to-indigo-500 dark:from-blue-400 dark:to-indigo-400 bg-clip-text text-transparent">
-                瘋玩 ERP
+                毛先生 ERP
               </span>
             </Link>
 

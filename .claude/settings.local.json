@@ -38,8 +38,8 @@
       "Bash(python3:*)",
       "Bash(do echo \"=== $endpoint ===\")",
       "Read(//c/Users/linei/.claude/plugins/cache/ui-ux-pro-max-skill/ui-ux-pro-max/2.0.1/**)",
-      "Bash(python skills/ui-ux-pro-max/scripts/search.py \"ERP dashboard sidebar navigation dark mode professional\" --design-system -p \"瘋玩ERP\")",
-      "Bash(python \"cli/assets/scripts/search.py\" \"ERP dashboard sidebar navigation dark mode professional\" --design-system -p \"瘋玩ERP\")",
+      "Bash(python skills/ui-ux-pro-max/scripts/search.py \"ERP dashboard sidebar navigation dark mode professional\" --design-system -p \"毛先生ERP\")",
+      "Bash(python \"cli/assets/scripts/search.py\" \"ERP dashboard sidebar navigation dark mode professional\" --design-system -p \"毛先生ERP\")",
       "Bash(python \"cli/assets/scripts/search.py\" \"ERP dashboard sidebar navigation dark mode professional\" --design-system -p \"ERP\")",
       "Bash(python -c \"import sys; sys.stdout.reconfigure\\(encoding='utf-8'\\)\")",
       "Bash(PYTHONIOENCODING=utf-8 python \"cli/assets/scripts/search.py\" \"ERP dashboard sidebar navigation dark mode\" --design-system -p \"ERP\")",
@@ -54,7 +54,8 @@
       "Bash(nslookup aws-0-ap-northeast-1.pooler.supabase.com)",
       "Read(//c/Users/linei/Desktop/coding/**)",
       "Read(//c/Users/linei/Desktop/**)",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(nslookup db.rrznbzamoyicgqzwnlxz.supabase.co)"
     ]
   }
 }

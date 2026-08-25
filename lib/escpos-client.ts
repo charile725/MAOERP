@@ -87,7 +87,7 @@ export function buildClientReceiptBytes(data: ClientReceiptData): Uint8Array {
   parts.push(cmd(ESC, 0x40))           // INIT
   parts.push(cmd(ESC, 0x61, 0x01))     // ALIGN CENTER
   parts.push(cmd(ESC, 0x45, 0x01))     // BOLD ON
-  parts.push(t('瘋玩具Crazy Toys三重店'))
+  parts.push(t('毛先生'))
   parts.push(cmd(ESC, 0x45, 0x00))     // BOLD OFF
   parts.push(t('241新北市三重區自強路三段64號'))
   parts.push(t('0987 806 176'))
@@ -127,7 +127,7 @@ export function buildClientReceiptBytes(data: ClientReceiptData): Uint8Array {
   parts.push(cmd(ESC, 0x61, 0x01))     // ALIGN CENTER
   parts.push(cmd(LF))
   parts.push(t('謝謝光臨！歡迎再次光臨'))
-  parts.push(t('瘋玩具・玩具迷的天堂'))
+  parts.push(t('毛先生・玩具迷的天堂'))
   parts.push(cmd(LF))
   parts.push(sep('='))
 

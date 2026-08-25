@@ -36,7 +36,7 @@ export default function Home() {
               transition={{ duration: 0.8, delay: 0.8 }}
               className="inline-block"
             >
-              瘋
+              毛
             </motion.span>
             <motion.span
               initial={{ opacity: 0 }}
@@ -44,7 +44,7 @@ export default function Home() {
               transition={{ duration: 0.8, delay: 1.0 }}
               className="inline-block"
             >
-              玩
+              先生
             </motion.span>
             <motion.span
               initial={{ opacity: 0, scale: 1.5 }}

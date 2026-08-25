@@ -2,8 +2,8 @@ import { MetadataRoute } from 'next'
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: '瘋玩ERP',
-    short_name: '瘋玩ERP',
+    name: '毛先生ERP',
+    short_name: '毛先生ERP',
     description: '簡單好用的 ERP 系統',
     start_url: '/',
     display: 'standalone',
@@ -11,25 +11,25 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: '#2563eb',
     icons: [
       {
-        src: '/icon-192.png',
+        src: '/maosir-icon-192.png',
         sizes: '192x192',
         type: 'image/png',
         purpose: 'any',
       },
       {
-        src: '/icon-512.png',
+        src: '/maosir-icon-512.png',
         sizes: '512x512',
         type: 'image/png',
         purpose: 'any',
       },
       {
-        src: '/icon-192-maskable.png',
+        src: '/maosir-icon-192-maskable.png',
         sizes: '192x192',
         type: 'image/png',
         purpose: 'maskable',
       },
       {
-        src: '/icon-512-maskable.png',
+        src: '/maosir-icon-512-maskable.png',
         sizes: '512x512',
         type: 'image/png',
         purpose: 'maskable',

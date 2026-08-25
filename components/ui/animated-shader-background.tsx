@@ -3,6 +3,9 @@
 import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 
+const TARGET_FPS = 30;
+const RENDER_SCALE = 0.75;
+
 const AnimatedShaderBackground = () => {
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -12,14 +15,24 @@ const AnimatedShaderBackground = () => {
 
         const scene = new THREE.Scene();
         const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        // This shader covers every pixel, so multisampling adds cost without a
+        // visible edge-quality benefit. Render below native resolution and let
+        // the browser upscale the soft aurora background.
+        const renderer = new THREE.WebGLRenderer({
+            antialias: false
+        });
+        renderer.setPixelRatio(RENDER_SCALE);
         renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.domElement.style.display = 'block';
         container.appendChild(renderer.domElement);
+
+        const drawingBufferSize = new THREE.Vector2();
+        renderer.getDrawingBufferSize(drawingBufferSize);
 
         const material = new THREE.ShaderMaterial({
             uniforms: {
                 iTime: { value: 0 },
-                iResolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) }
+                iResolution: { value: drawingBufferSize.clone() }
             },
             vertexShader: `
         void main() {
@@ -68,7 +81,7 @@ const AnimatedShaderBackground = () => {
 
           float f = 2.0 + fbm(p + vec2(iTime * 5.0, 0.0)) * 0.5;
 
-          for (float i = 0.0; i < 35.0; i++) {
+          for (float i = 1.0; i < 35.0; i++) {
             v = p + cos(i * i + (iTime + p.x * 0.08) * 0.025 + i * vec2(13.0, 11.0)) * 3.5 + vec2(sin(iTime * 3.0 + i) * 0.003, cos(iTime * 3.5 - i) * 0.003);
             float tailNoise = fbm(v + vec2(iTime * 0.5, i)) * 0.3 * (1.0 - (i / 35.0));
             vec4 auroraColors = vec4(
@@ -92,29 +105,67 @@ const AnimatedShaderBackground = () => {
         const mesh = new THREE.Mesh(geometry, material);
         scene.add(mesh);
 
-        let frameId: number;
-        const animate = () => {
-            material.uniforms.iTime.value += 0.016;
-            renderer.render(scene, camera);
+        let frameId = 0;
+        let resizeFrameId = 0;
+        let disposed = false;
+        let lastFrameTime = performance.now();
+        const frameInterval = 1000 / TARGET_FPS;
+
+        const animate = (now: number) => {
+            if (disposed) return;
+
             frameId = requestAnimationFrame(animate);
+            const elapsed = now - lastFrameTime;
+            if (elapsed + 0.5 < frameInterval) return;
+
+            // Keep animation speed tied to real time even when frames are
+            // intentionally skipped, while avoiding a large jump after stalls.
+            lastFrameTime = now - (elapsed % frameInterval);
+            material.uniforms.iTime.value += Math.min(elapsed / 1000, 0.1);
+            renderer.render(scene, camera);
         };
-        animate();
+
+        renderer.render(scene, camera);
+        frameId = requestAnimationFrame(animate);
 
         const handleResize = () => {
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            material.uniforms.iResolution.value.set(window.innerWidth, window.innerHeight);
+            if (resizeFrameId) return;
+
+            resizeFrameId = requestAnimationFrame(() => {
+                resizeFrameId = 0;
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.getDrawingBufferSize(drawingBufferSize);
+                material.uniforms.iResolution.value.copy(drawingBufferSize);
+            });
         };
+
+        const handleVisibilityChange = () => {
+            if (document.hidden) {
+                cancelAnimationFrame(frameId);
+                frameId = 0;
+                return;
+            }
+
+            lastFrameTime = performance.now();
+            if (!frameId) frameId = requestAnimationFrame(animate);
+        };
+
         window.addEventListener('resize', handleResize);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
 
         return () => {
+            disposed = true;
             cancelAnimationFrame(frameId);
+            cancelAnimationFrame(resizeFrameId);
             window.removeEventListener('resize', handleResize);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
             if (container.contains(renderer.domElement)) {
                 container.removeChild(renderer.domElement);
             }
             geometry.dispose();
             material.dispose();
             renderer.dispose();
+            renderer.forceContextLoss();
         };
     }, []);
 

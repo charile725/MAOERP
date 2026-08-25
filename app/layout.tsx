@@ -17,17 +17,17 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "瘋玩ERP",
+  title: "毛先生ERP",
   description: "簡單好用的 ERP 系統",
   icons: {
-    icon: '/icon-192.png',
-    apple: '/apple-touch-icon.png',
+    icon: '/maosir-icon-192.png',
+    apple: '/maosir-apple-touch-icon.png',
   },
   manifest: '/manifest.webmanifest',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: '瘋玩ERP',
+    title: '毛先生ERP',
   },
 };
 

@@ -2,18 +2,18 @@ const sharp = require('sharp')
 const fs = require('fs')
 const path = require('path')
 
-const inputFile = path.join(__dirname, '../public/瘋玩logo.jpg')
+const inputFile = path.join(__dirname, '../public/毛先生logo.jpg')
 const outputDir = path.join(__dirname, '../public')
 
 async function generateIcons() {
   console.log('開始生成 PWA 圖標...\n')
 
   const sizes = [
-    { size: 180, name: 'apple-touch-icon.png', padding: 10, bgColor: '#000000' },
-    { size: 192, name: 'icon-192.png', padding: 10, bgColor: '#000000' },
-    { size: 512, name: 'icon-512.png', padding: 20, bgColor: '#000000' },
-    { size: 192, name: 'icon-192-maskable.png', padding: 20, bgColor: '#000000' },
-    { size: 512, name: 'icon-512-maskable.png', padding: 50, bgColor: '#000000' },
+    { size: 180, name: 'maosir-apple-touch-icon.png', padding: 10, bgColor: '#000000' },
+    { size: 192, name: 'maosir-icon-192.png', padding: 10, bgColor: '#000000' },
+    { size: 512, name: 'maosir-icon-512.png', padding: 20, bgColor: '#000000' },
+    { size: 192, name: 'maosir-icon-192-maskable.png', padding: 20, bgColor: '#000000' },
+    { size: 512, name: 'maosir-icon-512-maskable.png', padding: 50, bgColor: '#000000' },
   ]
 
   for (const { size, name, padding, bgColor } of sizes) {

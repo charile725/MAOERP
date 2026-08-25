@@ -43,8 +43,8 @@ export default function LoginPage() {
         {/* Logo/Title */}
         <div className="text-center mb-8">
           <img
-            src="/瘋玩logo.jpg"
-            alt="瘋玩"
+            src="/毛先生logo.jpg"
+            alt="毛先生"
             className="mx-auto w-24 h-24 rounded-2xl shadow-lg mb-4 object-cover"
           />
           <p className="text-gray-600 dark:text-gray-400">請登入您的帳號</p>
@@ -113,7 +113,7 @@ export default function LoginPage() {
 
         {/* Footer */}
         <p className="text-center text-sm text-gray-500 dark:text-gray-400 mt-6">
-          © 2025 瘋玩ERP. All rights reserved.
+          © 2025 毛先生ERP. All rights reserved.
         </p>
       </div>
     </div>

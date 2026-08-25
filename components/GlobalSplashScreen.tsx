@@ -12,22 +12,23 @@ export default function GlobalSplashScreen({
   children,
   showOnEveryVisit = true // 預設每次都顯示（客戶覺得厲害）
 }: GlobalSplashScreenProps) {
-  const [showSplash, setShowSplash] = useState(false)
-  const [isChecking, setIsChecking] = useState(true)
+  const [showSplash, setShowSplash] = useState(showOnEveryVisit)
+  const [isChecking, setIsChecking] = useState(!showOnEveryVisit)
 
   useEffect(() => {
-    if (showOnEveryVisit) {
-      // 每次訪問都顯示
-      setShowSplash(true)
-      setIsChecking(false)
-    } else {
-      // 只在首次訪問顯示
-      const hasVisited = sessionStorage.getItem('hasVisited')
-      if (!hasVisited) {
-        setShowSplash(true)
-        sessionStorage.setItem('hasVisited', 'true')
-      }
-      setIsChecking(false)
+    if (!showOnEveryVisit) {
+      // Read session storage after hydration without forcing a synchronous
+      // second render inside the effect.
+      const frameId = requestAnimationFrame(() => {
+        const hasVisited = sessionStorage.getItem('hasVisited')
+        if (!hasVisited) {
+          setShowSplash(true)
+          sessionStorage.setItem('hasVisited', 'true')
+        }
+        setIsChecking(false)
+      })
+
+      return () => cancelAnimationFrame(frameId)
     }
   }, [showOnEveryVisit])
 
@@ -42,10 +43,11 @@ export default function GlobalSplashScreen({
 
   return (
     <>
-      {showSplash && <SplashScreen onFinish={handleFinish} />}
-      <div className={showSplash ? 'invisible' : 'visible'}>
-        {children}
-      </div>
+      {showSplash ? (
+        <SplashScreen onFinish={handleFinish} />
+      ) : (
+        <div className="visible">{children}</div>
+      )}
     </>
   )
 }
