@@ -4,6 +4,7 @@ import { productSchema } from '@/lib/schemas'
 import { fromZodError } from 'zod-validation-error'
 import { generateCode } from '@/lib/utils'
 import { getCurrentUser } from '@/lib/auth'
+import { ilikeAny } from '@/lib/postgrest'
 
 // GET /api/products - Search products
 export async function GET(request: NextRequest) {
@@ -28,7 +29,7 @@ export async function GET(request: NextRequest) {
 
     // Search by keyword (name, item_code, or barcode)
     if (keyword) {
-      query = query.or(`name.ilike.%${keyword}%,item_code.ilike.%${keyword}%,barcode.ilike.%${keyword}%`)
+      query = query.or(ilikeAny(['name', 'item_code', 'barcode'], keyword))
     }
 
     // Apply sorting

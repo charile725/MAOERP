@@ -3,6 +3,7 @@ import { supabaseServer } from '@/lib/supabase/server'
 import { expenseSchema } from '@/lib/schemas'
 import { fromZodError } from 'zod-validation-error'
 import { updateAccountBalance } from '@/lib/account-service'
+import { getTaiwanWallClock } from '@/lib/timezone'
 
 // GET /api/expenses - List all expenses
 export async function GET(request: NextRequest) {
@@ -91,9 +92,7 @@ export async function POST(request: NextRequest) {
 
     const expense = validation.data
 
-    // 取得台灣時間 (UTC+8)
-    const now = new Date()
-    const taiwanTime = new Date(now.getTime() + 8 * 60 * 60 * 1000)
+
 
     // Insert expense
     const { data, error } = await (supabaseServer
@@ -104,7 +103,7 @@ export async function POST(request: NextRequest) {
         amount: expense.amount,
         account_id: expense.account_id || null,
         note: expense.note || null,
-        created_at: taiwanTime.toISOString(),
+        created_at: getTaiwanWallClock(),
       })
       .select()
       .single()

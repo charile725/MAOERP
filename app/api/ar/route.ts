@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/auth'
+import { ilikeAny } from '@/lib/postgrest'
 
 // GET /api/ar - List accounts receivable
 export async function GET(request: NextRequest) {
@@ -40,10 +41,7 @@ export async function GET(request: NextRequest) {
     // 建立 OR conditions（用於 keyword 搜尋）
     let orConditions: string[] = []
     if (keyword) {
-      const safeKeyword = keyword.replace(/[(),.*\\]/g, '')
-      if (safeKeyword) {
-        orConditions.push(`partner_code.ilike.*${safeKeyword}*`)
-      }
+      orConditions.push(ilikeAny(['partner_code'], keyword))
       if (matchingCustomerCodes.length > 0) {
         orConditions.push(`partner_code.in.(${matchingCustomerCodes.join(',')})`)
       }

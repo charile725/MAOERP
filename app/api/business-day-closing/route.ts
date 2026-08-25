@@ -1,12 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase/server'
-
-// 取得台灣日期 YYYY-MM-DD
-function getTaiwanDate(): string {
-  const now = new Date()
-  const taiwanTime = new Date(now.getTime() + 8 * 60 * 60 * 1000)
-  return taiwanTime.toISOString().split('T')[0]
-}
+import { getTaiwanDateString, getTaiwanTime } from '@/lib/timezone'
 
 // GET /api/business-day-closing - 獲取指定營業日統計，或列出所有日結記錄
 export async function GET(request: NextRequest) {
@@ -14,7 +8,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const source = searchParams.get('source') || 'pos'
     const list = searchParams.get('list') === 'true'
-    const businessDate = searchParams.get('business_date') || getTaiwanDate()
+    const businessDate = searchParams.get('business_date') || getTaiwanDateString()
 
     if (source !== 'pos' && source !== 'live') {
       return NextResponse.json(
@@ -331,7 +325,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const businessDate = business_date || getTaiwanDate()
+    const businessDate = business_date || getTaiwanDateString()
 
     // 1. 檢查是否已日結
     const { data: existingClosing } = await (supabaseServer
@@ -365,8 +359,7 @@ export async function POST(request: NextRequest) {
         .eq('source', 'live')
         .eq('status', 'confirmed')
 
-      const nowLive = new Date()
-      const closingTimeLive = new Date(nowLive.getTime() + 8 * 60 * 60 * 1000).toISOString()
+      const closingTimeLive = getTaiwanTime()
 
       const { data: liveClosing, error: liveError } = await (supabaseServer
         .from('business_day_closings') as any)
@@ -571,9 +564,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 4. 插入日結記錄
-    const now = new Date()
-    const taiwanTime = new Date(now.getTime() + 8 * 60 * 60 * 1000)
-    const closingTime = taiwanTime.toISOString()
+    const closingTime = getTaiwanTime()
 
     const { data: closing, error: closingError } = await (supabaseServer
       .from('business_day_closings') as any)

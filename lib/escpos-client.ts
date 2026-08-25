@@ -1,3 +1,4 @@
+import { getTaiwanDate } from './timezone'
 // Browser-compatible ESC/POS builder using Uint8Array (no Node.js Buffer)
 const LINE_WIDTH = 42
 
@@ -78,8 +79,7 @@ export type ClientReceiptData = {
 export function buildClientReceiptBytes(data: ClientReceiptData): Uint8Array {
   const parts: Uint8Array[] = []
 
-  const now = new Date()
-  const tw = new Date(now.getTime() + 8 * 60 * 60 * 1000)
+  const tw = getTaiwanDate()
   const dateStr = `${tw.getUTCFullYear()}/${String(tw.getUTCMonth() + 1).padStart(2, '0')}/${String(tw.getUTCDate()).padStart(2, '0')}`
   const timeStr = `${String(tw.getUTCHours()).padStart(2, '0')}:${String(tw.getUTCMinutes()).padStart(2, '0')}`
   const subtotal = data.total + data.discount_amount

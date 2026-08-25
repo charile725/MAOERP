@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/auth'
+import { ilikeAny } from '@/lib/postgrest'
 
 // GET /api/ap - List accounts payable
 export async function GET(request: NextRequest) {
@@ -41,9 +42,8 @@ export async function GET(request: NextRequest) {
       if (dueBefore) q = q.lte('due_date', dueBefore)
 
       if (keyword) {
-        const safeKeyword = keyword.replace(/[(),.*\\]/g, '')
         const conditions: string[] = []
-        if (safeKeyword) conditions.push(`partner_code.ilike.%${safeKeyword}%`)
+        conditions.push(ilikeAny(['partner_code'], keyword))
         if (matchingVendorCodes.length > 0) conditions.push(`partner_code.in.(${matchingVendorCodes.join(',')})`)
         if (conditions.length > 0) q = q.or(conditions.join(','))
       }

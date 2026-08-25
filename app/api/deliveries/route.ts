@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase/server'
 import { generateCode } from '@/lib/utils'
+import { getMaxDeliveryNumber } from '@/lib/delivery-no'
 
 // GET /api/deliveries - 獲取出貨單列表
 export async function GET(request: NextRequest) {
@@ -86,16 +87,6 @@ export async function POST(request: NextRequest) {
         { ok: false, error: '缺少必要參數' },
         { status: 400 }
       )
-    }
-
-    // Helper: 取得目前最大的 delivery number（使用 RPC 避免 1000 筆限制）
-    const getMaxDeliveryNumber = async (): Promise<number> => {
-      const { data, error } = await supabaseServer.rpc('get_max_delivery_number')
-      if (error) {
-        console.warn('[getMaxDeliveryNumber] RPC error:', error.message)
-        return 0
-      }
-      return data || 0
     }
 
     // 創建出貨單（含 retry 機制，失敗後重新查詢最大編號）

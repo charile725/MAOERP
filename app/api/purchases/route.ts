@@ -3,6 +3,7 @@ import { supabaseServer } from '@/lib/supabase/server'
 import { purchaseDraftSchema } from '@/lib/schemas'
 import { fromZodError } from 'zod-validation-error'
 import { generateCode } from '@/lib/utils'
+import { ilikeAny } from '@/lib/postgrest'
 
 // GET /api/purchases - List purchases with items summary
 export async function GET(request: NextRequest) {
@@ -57,7 +58,7 @@ export async function GET(request: NextRequest) {
       const { data: matchedProducts } = await (supabaseServer
         .from('products') as any)
         .select('id')
-        .or(`name.ilike.%${keyword}%,item_code.ilike.%${keyword}%`)
+        .or(ilikeAny(['name', 'item_code'], keyword))
       const matchedProductIds: string[] = (matchedProducts || []).map((p: any) => p.id)
 
       // 3. 用 product_ids 查出對應的 purchase_ids
@@ -72,8 +73,7 @@ export async function GET(request: NextRequest) {
 
       // 4. 組合 server-side OR 條件
       const orParts: string[] = [
-        `purchase_no.ilike.%${keyword}%`,
-        `vendor_code.ilike.%${keyword}%`,
+        ilikeAny(['purchase_no', 'vendor_code'], keyword),
       ]
       if (matchedVendorCodes.length > 0) {
         orParts.push(`vendor_code.in.(${matchedVendorCodes.join(',')})`)

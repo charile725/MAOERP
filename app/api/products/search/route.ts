@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase/server'
+import { ilikeAny } from '@/lib/postgrest'
 
 // GET /api/products/search - Quick search for POS (by barcode or name)
 export async function GET(request: NextRequest) {
@@ -29,7 +30,7 @@ export async function GET(request: NextRequest) {
     if (barcode) {
       query = query.eq('barcode', barcode)
     } else if (keyword) {
-      query = query.or(`name.ilike.%${keyword}%,item_code.ilike.%${keyword}%,barcode.ilike.%${keyword}%`)
+      query = query.or(ilikeAny(['name', 'item_code', 'barcode'], keyword))
       query = query.limit(10)
     }
 

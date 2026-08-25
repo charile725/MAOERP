@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers'
 import { supabaseServer } from './supabase/server'
+import { createSessionToken, verifySessionToken } from './session'
 import bcrypt from 'bcryptjs'
 
 export type UserRole = 'admin' | 'staff'
@@ -24,12 +25,11 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
 }
 
 export async function createSession(userId: string): Promise<string> {
-  const sessionId = crypto.randomUUID()
   const expiresAt = new Date(Date.now() + SESSION_DURATION)
+  const token = await createSessionToken(userId, expiresAt.getTime())
 
-  // Store session in cookie
   const cookieStore = await cookies()
-  cookieStore.set(SESSION_COOKIE_NAME, sessionId, {
+  cookieStore.set(SESSION_COOKIE_NAME, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
@@ -37,36 +37,17 @@ export async function createSession(userId: string): Promise<string> {
     path: '/',
   })
 
-  // Store session data in a simple format (userId:expiresAt)
-  // In production, you might want to use a database or Redis
-  const sessionData = `${userId}:${expiresAt.getTime()}`
-  cookieStore.set(`${SESSION_COOKIE_NAME}_data`, sessionData, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    expires: expiresAt,
-    path: '/',
-  })
+  // 清掉舊版的明文 cookie，避免殘留造成混淆
+  cookieStore.delete(`${SESSION_COOKIE_NAME}_data`)
 
-  return sessionId
+  return token
 }
 
 export async function getSession(): Promise<User | null> {
   const cookieStore = await cookies()
-  const sessionId = cookieStore.get(SESSION_COOKIE_NAME)?.value
-  const sessionData = cookieStore.get(`${SESSION_COOKIE_NAME}_data`)?.value
+  const session = await verifySessionToken(cookieStore.get(SESSION_COOKIE_NAME)?.value)
 
-  if (!sessionId || !sessionData) {
-    return null
-  }
-
-  // Parse session data
-  const [userId, expiresAtStr] = sessionData.split(':')
-  const expiresAt = parseInt(expiresAtStr)
-
-  // Check if session expired
-  if (Date.now() > expiresAt) {
-    await deleteSession()
+  if (!session) {
     return null
   }
 
@@ -74,7 +55,7 @@ export async function getSession(): Promise<User | null> {
   const { data: user, error } = await supabaseServer
     .from('users')
     .select('id, username, role, full_name, is_active')
-    .eq('id', userId)
+    .eq('id', session.userId)
     .eq('is_active', true)
     .single()
 

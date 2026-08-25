@@ -7,6 +7,7 @@ import { formatCurrency } from '@/lib/utils'
 import { SWR_KEYS } from '@/lib/swr/keys'
 import type { Product, SaleItem, PaymentMethod } from '@/types'
 import { useSerialPrinter } from '@/hooks/useSerialPrinter'
+import { getTaiwanDateString } from '@/lib/timezone'
 
 // 動態載入相機掃描元件（避免 SSR 問題）
 const CameraScanner = dynamic(() => import('@/components/CameraScanner'), {
@@ -208,11 +209,7 @@ export default function POSPage() {
   const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null)
 
   // Business day closing (日結)
-  const [businessDate, setBusinessDateState] = useState<string>(() => {
-    const now = new Date()
-    const tw = new Date(now.getTime() + 8 * 60 * 60 * 1000)
-    return tw.toISOString().split('T')[0]
-  })
+  const [businessDate, setBusinessDateState] = useState<string>(() => getTaiwanDateString())
   const [alreadyClosed, setAlreadyClosed] = useState(false)
   const [closingStats, setClosingStats] = useState<any>(null)
   const [showClosingModal, setShowClosingModal] = useState(false)

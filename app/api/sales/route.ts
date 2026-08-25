@@ -5,6 +5,9 @@ import { fromZodError } from 'zod-validation-error'
 import { generateCode } from '@/lib/utils'
 import { updateAccountBalance } from '@/lib/account-service'
 import { getTaiwanTime } from '@/lib/timezone'
+import { getTaiwanDate, getTaiwanDateString, getTaiwanWallClock } from '@/lib/timezone'
+import { nextSaleNoFrom, bumpSaleNo, RECENT_SALE_NO_LIMIT } from '@/lib/sale-no'
+import { getMaxDeliveryNumber } from '@/lib/delivery-no'
 
 // GET /api/sales - List sales with items summary
 export async function GET(request: NextRequest) {
@@ -313,7 +316,7 @@ export async function POST(request: NextRequest) {
         .from('sales') as any)
         .select('sale_no')
         .order('created_at', { ascending: false })
-        .limit(100),
+        .limit(RECENT_SALE_NO_LIMIT),
       // Get account_id based on primary payment_method
       (supabaseServer
         .from('accounts') as any)
@@ -332,29 +335,15 @@ export async function POST(request: NextRequest) {
 
     mark('sale_no + account + businessDay (parallel)')
 
-    let saleCount = 0
-    if (latestSale && latestSale.length > 0) {
-      const maxNumber = latestSale.reduce((max: number, sale: any) => {
-        const match = sale.sale_no.match(/\d+/)
-        if (match) {
-          const num = parseInt(match[0], 10)
-          return num > max ? num : max
-        }
-        return max
-      }, 0)
-      saleCount = maxNumber
-    }
-
-    let saleNo = generateCode('S', saleCount)
+    let saleNo = nextSaleNoFrom(latestSale)
 
     const accountId = account?.id || null
 
-    // 取得台灣時間 (UTC+8)
-    const now = new Date()
-    const taiwanTime = new Date(now.getTime() + 8 * 60 * 60 * 1000)
-    const createdAt = taiwanTime.toISOString() // 完整的台灣時間戳記
+    // sales.created_at 是不帶時區的欄位，慣例存台灣牆上時間
+    const taiwanTime = getTaiwanDate()
+    const createdAt = getTaiwanWallClock()
 
-    let saleDate = taiwanTime.toISOString().split('T')[0] // 預設使用當前日期
+    let saleDate = getTaiwanDateString() // 預設使用當前日期
     if (businessDaySetting?.current_business_date) {
       saleDate = businessDaySetting.current_business_date
     }
@@ -390,9 +379,7 @@ export async function POST(request: NextRequest) {
 
       if (error?.code === '23505' && error?.message?.includes('sale_no')) {
         // sale_no 重複，直接遞增編號再試
-        const match = saleNo.match(/\d+/)
-        const currentNum = match ? parseInt(match[0], 10) : saleCount
-        saleNo = generateCode('S', currentNum)
+        saleNo = bumpSaleNo(saleNo)
         console.warn(`[Sales API] sale_no 重複，重試 → ${saleNo} (attempt ${attempt + 1})`)
         continue
       }
@@ -923,7 +910,7 @@ export async function POST(request: NextRequest) {
         store_credit_used: storeCreditUsed,  // 使用的購物金
         total: finalTotal,  // 實收金額 (Net Collected) = subtotal - discount - store_credit
         status: 'confirmed',
-        updated_at: taiwanTime.toISOString(), // 使用台灣時間
+        updated_at: getTaiwanWallClock(),
       })
       .eq('id', sale.id)
       .select()
@@ -1042,16 +1029,6 @@ export async function POST(request: NextRequest) {
     mark('updateAccountBalance (帳戶餘額)')
 
     // 7. 創建出貨單（支援部分出貨）
-    // Helper: 取得目前最大的 delivery number（使用 RPC 避免 1000 筆限制）
-    const getMaxDeliveryNumber = async (): Promise<number> => {
-      const { data, error } = await supabaseServer.rpc('get_max_delivery_number')
-      if (error) {
-        console.warn('[getMaxDeliveryNumber] RPC error:', error.message)
-        return 0
-      }
-      return data || 0
-    }
-
     // Helper: 創建出貨單（含 retry 機制，失敗後重新查詢最大編號）
     const createDeliveryWithRetry = async (
       deliveryData: any,
@@ -1122,7 +1099,7 @@ export async function POST(request: NextRequest) {
       const { data: delivery, error: deliveryError } = await createDeliveryWithRetry({
         sale_id: sale.id,
         status: 'confirmed',
-        delivery_date: taiwanTime.toISOString(),
+        delivery_date: getTaiwanDateString(),
         method: delivery_method || null,
         note: delivery_note || null,
       })

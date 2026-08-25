@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase/server'
 import { generateCode } from '@/lib/utils'
+import { nextSaleNoFrom, RECENT_SALE_NO_LIMIT } from '@/lib/sale-no'
+import { getTaiwanWallClock, getTaiwanDateString } from '@/lib/timezone'
 
 type OrderPreview = {
   rowNumber: number
@@ -168,12 +170,14 @@ export async function POST(request: NextRequest) {
         }
 
         // 3. Create sale (using similar logic to POST /api/sales)
-        // Generate sale_no
-        const { count } = await supabaseServer
-          .from('sales')
-          .select('*', { count: 'exact', head: true })
+        // 單號取「現有最大編號 +1」。不能用總筆數 —— 刪過任何一筆就會倒退並撞號。
+        const { data: recentSaleNos } = await (supabaseServer
+          .from('sales') as any)
+          .select('sale_no')
+          .order('created_at', { ascending: false })
+          .limit(RECENT_SALE_NO_LIMIT)
 
-        const saleNo = generateCode('S', count || 0)
+        const saleNo = nextSaleNoFrom(recentSaleNos)
 
         // Get account_id based on payment_method
         const { data: account } = await (supabaseServer
@@ -185,30 +189,18 @@ export async function POST(request: NextRequest) {
 
         const accountId = account?.id || null
 
-        // 取得台灣時間 (UTC+8)
-        const now = new Date()
-        const taiwanTime = new Date(now.getTime() + 8 * 60 * 60 * 1000)
-        const createdAt = taiwanTime.toISOString() // 完整的台灣時間戳記
+        // sales.created_at 是不帶時區的欄位，慣例存台灣牆上時間
+        const createdAt = getTaiwanWallClock()
 
-        // 根據上次日結時間決定 sale_date（營業日）
-        let saleDate: string
-        const { data: lastClosing } = await (supabaseServer
-          .from('business_day_closings') as any)
-          .select('closing_time')
+        // 營業日以 business_day_settings 為準（與結帳流程同一個來源）。
+        // 原本是拿最後一次日結時間 +1 天推算，凌晨日結時會算到錯的日期。
+        const { data: businessDaySetting } = await (supabaseServer
+          .from('business_day_settings') as any)
+          .select('current_business_date')
           .eq('source', 'live')
-          .order('closing_time', { ascending: false })
-          .limit(1)
           .maybeSingle()
 
-        if (lastClosing?.closing_time) {
-          // 日結後使用「日結日期 + 1 天」作為新的營業日
-          const closingDate = new Date(lastClosing.closing_time)
-          closingDate.setDate(closingDate.getDate() + 1)
-          saleDate = closingDate.toISOString().split('T')[0]
-        } else {
-          // 第一次使用（沒有日結記錄），使用當天台灣時區的零點日期
-          saleDate = taiwanTime.toISOString().split('T')[0]
-        }
+        const saleDate = businessDaySetting?.current_business_date || getTaiwanDateString()
 
         // Create sale (draft)
         const { data: sale, error: saleError } = await (supabaseServer

@@ -3,6 +3,7 @@ import { supabaseServer } from '@/lib/supabase/server'
 import { customerSchema } from '@/lib/schemas'
 import { fromZodError } from 'zod-validation-error'
 import { generateCode } from '@/lib/utils'
+import { ilikeAny } from '@/lib/postgrest'
 
 // GET /api/customers - List customers
 export async function GET(request: NextRequest) {
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest) {
 
     // Search by keyword (name, customer_code, phone, store_address, or delivery_address)
     if (keyword) {
-      query = query.or(`customer_name.ilike.%${keyword}%,customer_code.ilike.%${keyword}%,phone.ilike.%${keyword}%,store_address.ilike.%${keyword}%,delivery_address.ilike.%${keyword}%`)
+      query = query.or(ilikeAny(['customer_name', 'customer_code', 'phone', 'store_address', 'delivery_address'], keyword))
     }
 
     const { data, error } = await query

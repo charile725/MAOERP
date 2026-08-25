@@ -3,6 +3,7 @@ import { supabaseServer } from '@/lib/supabase/server'
 import { vendorSchema } from '@/lib/schemas'
 import { fromZodError } from 'zod-validation-error'
 import { generateCode } from '@/lib/utils'
+import { ilikeAny } from '@/lib/postgrest'
 
 // GET /api/vendors - List vendors
 export async function GET(request: NextRequest) {
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest) {
 
     // Search by keyword (name, vendor_code, phone, or email)
     if (keyword) {
-      query = query.or(`vendor_name.ilike.%${keyword}%,vendor_code.ilike.%${keyword}%,phone.ilike.%${keyword}%,email.ilike.%${keyword}%`)
+      query = query.or(ilikeAny(['vendor_name', 'vendor_code', 'phone', 'email'], keyword))
     }
 
     const { data, error } = await query

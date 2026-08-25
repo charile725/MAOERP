@@ -3,6 +3,7 @@ import { supabaseServer } from '@/lib/supabase/server'
 import { saleUpdateSchema } from '@/lib/schemas'
 import { fromZodError } from 'zod-validation-error'
 import { getTaiwanTime } from '@/lib/timezone'
+import { getTaiwanWallClock } from '@/lib/timezone'
 
 type RouteContext = {
   params: Promise<{ id: string }>
@@ -206,9 +207,7 @@ export async function PATCH(
       }
     }
 
-    // 4. 取得台灣時間 (UTC+8)
-    const now = new Date()
-    const taiwanTime = new Date(now.getTime() + 8 * 60 * 60 * 1000)
+
 
     // 5. Update sale payment method and account_id
     const { data: sale, error } = await (supabaseServer
@@ -216,7 +215,7 @@ export async function PATCH(
       .update({
         payment_method,
         account_id: newAccountId,
-        updated_at: taiwanTime.toISOString(),
+        updated_at: getTaiwanWallClock(),
       })
       .eq('id', id)
       .select()
