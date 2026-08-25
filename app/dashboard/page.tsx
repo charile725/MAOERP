@@ -81,6 +81,7 @@ type BusinessDayClosing = {
   business_date: string
   sales_count: number
   total_sales: number
+  manual_revenue?: number | null
   paid_sales: number
   unpaid_sales: number
   created_at: string
@@ -164,6 +165,14 @@ export default function DashboardPage() {
   const stats = useMemo<DashboardStats>(() => {
     const confirmedSales = salesInRange.filter((s: any) => s.status === 'confirmed')
 
+    // 直播營業日不計算營收：營業額以日結手動輸入的金額為準（成本仍照 sale_items 計算）
+    const selectedClosing: any = reportMode === 'by_business_day'
+      ? businessDayClosings.find((c: any) => c.id === selectedClosingId)
+      : null
+    const liveRevenue: number | null = selectedClosing?.source === 'live'
+      ? Number(selectedClosing.manual_revenue ?? selectedClosing.total_sales ?? 0)
+      : null
+
     // Gross Sales (交易額/原始銷售額)
     const grossSales = confirmedSales.reduce((sum: number, s: any) => {
       if (s.subtotal) return sum + s.subtotal
@@ -180,6 +189,14 @@ export default function DashboardPage() {
       .filter((s: any) => s.is_paid)
       .reduce((sum: number, s: any) => sum + s.total, 0)
     const uncollected = amountDue - actualCollected
+
+    // 直播營業日：營收面一律採手動營業額，折扣／購物金／未收皆不適用
+    const effGrossSales = liveRevenue ?? grossSales
+    const effTotalDiscount = liveRevenue !== null ? 0 : totalDiscount
+    const effStoreCreditUsed = liveRevenue !== null ? 0 : totalStoreCreditUsed
+    const effAmountDue = liveRevenue ?? amountDue
+    const effActualCollected = liveRevenue ?? actualCollected
+    const effUncollected = liveRevenue !== null ? 0 : uncollected
 
     // Calculate total cost（追蹤實際總成本）
     const costBreakdownMap = new Map<string, { unitCost: number; totalCost: number; quantity: number; name: string }>()
@@ -222,7 +239,7 @@ export default function DashboardPage() {
     }))
 
     const totalExpenses = expensesInRange.reduce((sum: number, e: any) => sum + e.amount, 0)
-    const grossProfit = grossSales - totalCost
+    const grossProfit = effGrossSales - totalCost
     const netProfit = grossProfit - totalExpenses
 
     // AR/AP 數據
@@ -244,13 +261,13 @@ export default function DashboardPage() {
     } : { total_monthly: 0, total_assets: 0, total_remaining: 0 }
 
     return {
-      grossSales,
-      totalDiscount,
-      totalStoreCreditUsed,
-      amountDue,
-      actualCollected,
-      uncollected,
-      todaySales: grossSales,
+      grossSales: effGrossSales,
+      totalDiscount: effTotalDiscount,
+      totalStoreCreditUsed: effStoreCreditUsed,
+      amountDue: effAmountDue,
+      actualCollected: effActualCollected,
+      uncollected: effUncollected,
+      todaySales: effGrossSales,
       todayOrders: salesInRange.length,
       totalCost,
       totalExpenses,
@@ -268,7 +285,7 @@ export default function DashboardPage() {
       profitTrend: extendedData.profitTrend,
       depreciation,
     }
-  }, [salesInRange, expensesInRange, extendedData, depData])
+  }, [salesInRange, expensesInRange, extendedData, depData, reportMode, businessDayClosings, selectedClosingId])
 
   if (loading) {
     return (

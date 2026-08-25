@@ -3,15 +3,14 @@
 import { useEffect, useState } from 'react'
 
 export default function ThemeToggle() {
-  const [theme, setTheme] = useState<'light' | 'dark'>('light')
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark')
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
     setMounted(true)
-    // Check localStorage or system preference
+    // 預設夜色模式：沒手動選過就是 dark（不跟隨系統設定）
     const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | null
-    const systemPreference = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-    const initialTheme = savedTheme || systemPreference
+    const initialTheme = savedTheme === 'light' ? 'light' : 'dark'
     setTheme(initialTheme)
     document.documentElement.classList.toggle('dark', initialTheme === 'dark')
     document.documentElement.classList.toggle('light', initialTheme === 'light')
@@ -35,7 +34,7 @@ export default function ThemeToggle() {
   if (!mounted) {
     return (
       <button className="rounded-lg bg-gray-200 p-2 dark:bg-gray-700">
-        <span className="text-xl">🌙</span>
+        <span className="text-xl">☀️</span>
       </button>
     )
   }

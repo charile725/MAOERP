@@ -72,6 +72,9 @@ type ClosingStats = {
     unpaid_sales: number
     unpaid_count: number
     sales_by_account: Record<string, number>
+    // 直播（簡化模式）專用
+    items_count?: number
+    manual_revenue?: number | null
 }
 
 type MobilePOSProps = {
@@ -122,6 +125,10 @@ type MobilePOSProps = {
     fetchProducts: () => void
     // 積分
     setItemPointsUsed?: (index: number, points: number) => void
+    // 直播簡化模式：不計營收，隱藏付款方式／購物金／積分，日結改手動輸入營業額
+    simpleMode?: boolean
+    closingRevenue?: string
+    setClosingRevenue?: (value: string) => void
     // 印表機（optional — pos-live 頁面不傳）
     printerStatus?: PrinterStatus
     connectPrinter?: () => Promise<void>
@@ -172,6 +179,9 @@ export default function MobilePOS({
     fetchCustomers,
     fetchProducts,
     setItemPointsUsed,
+    simpleMode = false,
+    closingRevenue = '',
+    setClosingRevenue,
     printerStatus,
     connectPrinter,
     disconnectPrinter,
@@ -647,16 +657,18 @@ export default function MobilePOS({
                         <span className="text-slate-400">客戶:</span>{' '}
                         {selectedCustomer?.customer_name || '散客'}
                     </button>
-                    <button
-                        onClick={() => {
-                            setTempPaymentMethod(paymentMethod)
-                            setShowPaymentSelection(true)
-                        }}
-                        className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-2 px-3 rounded-lg text-sm text-left"
-                    >
-                        <span className="text-slate-400">付款:</span>{' '}
-                        {getPaymentLabel(paymentMethod)}
-                    </button>
+                    {!simpleMode && (
+                        <button
+                            onClick={() => {
+                                setTempPaymentMethod(paymentMethod)
+                                setShowPaymentSelection(true)
+                            }}
+                            className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-2 px-3 rounded-lg text-sm text-left"
+                        >
+                            <span className="text-slate-400">付款:</span>{' '}
+                            {getPaymentLabel(paymentMethod)}
+                        </button>
+                    )}
                 </div>
 
                 {/* 狀態切換 */}
@@ -1229,87 +1241,133 @@ export default function MobilePOS({
                                         </div>
                                     )}
 
-                                    {/* 總覽 */}
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div className="bg-blue-900/30 rounded-lg p-3">
-                                            <div className="text-blue-400 text-xs mb-1">總銷售筆數</div>
-                                            <div className="text-white text-xl font-bold">{closingStats.sales_count} 筆</div>
+                                    {simpleMode ? (
+                                        <>
+                                            {/* 直播：不計算營收，只看出貨概況並手動輸入營業額 */}
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div className="bg-blue-900/30 rounded-lg p-3">
+                                                    <div className="text-blue-400 text-xs mb-1">銷售筆數</div>
+                                                    <div className="text-white text-xl font-bold">{closingStats.sales_count || 0} 筆</div>
+                                                </div>
+                                                <div className="bg-indigo-900/30 rounded-lg p-3">
+                                                    <div className="text-indigo-400 text-xs mb-1">出貨件數</div>
+                                                    <div className="text-white text-xl font-bold">{closingStats.items_count || 0} 件</div>
+                                                </div>
+                                            </div>
+
+                                            <div className="border-t border-slate-700 pt-4">
+                                                <label className="block text-slate-300 text-sm font-medium mb-2">
+                                                    今日營業額 <span className="text-red-400">*</span>
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    inputMode="decimal"
+                                                    min="0"
+                                                    step="1"
+                                                    value={closingRevenue}
+                                                    onChange={(e) => setClosingRevenue?.(e.target.value)}
+                                                    disabled={alreadyClosed}
+                                                    placeholder="請輸入今日直播營業額"
+                                                    className="w-full border-2 border-slate-600 rounded-lg px-4 py-3 text-2xl font-bold text-white bg-slate-700 placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none disabled:opacity-60"
+                                                />
+                                                <p className="mt-2 text-xs text-slate-400">
+                                                    直播收銀只記錄庫存異動，不自動計算營收。
+                                                </p>
+                                                {alreadyClosed && closingStats.manual_revenue != null && (
+                                                    <p className="mt-2 text-sm text-slate-300">
+                                                        已日結營業額：
+                                                        <span className="font-bold text-emerald-400 ml-1">
+                                                            {formatCurrency(closingStats.manual_revenue)}
+                                                        </span>
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                        {/* 總覽 */}
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="bg-blue-900/30 rounded-lg p-3">
+                                                <div className="text-blue-400 text-xs mb-1">總銷售筆數</div>
+                                                <div className="text-white text-xl font-bold">{closingStats.sales_count} 筆</div>
+                                            </div>
+                                            <div className="bg-emerald-900/30 rounded-lg p-3">
+                                                <div className="text-emerald-400 text-xs mb-1">原始營業額</div>
+                                                <div className="text-white text-xl font-bold">{formatCurrency((closingStats.total_sales || 0) + (closingStats.store_credit_used || 0))}</div>
+                                                {(closingStats.store_credit_used || 0) > 0 && (
+                                                    <div className="text-emerald-400 text-xs mt-1">實收: {formatCurrency(closingStats.total_sales || 0)}</div>
+                                                )}
+                                            </div>
                                         </div>
-                                        <div className="bg-emerald-900/30 rounded-lg p-3">
-                                            <div className="text-emerald-400 text-xs mb-1">原始營業額</div>
-                                            <div className="text-white text-xl font-bold">{formatCurrency((closingStats.total_sales || 0) + (closingStats.store_credit_used || 0))}</div>
-                                            {(closingStats.store_credit_used || 0) > 0 && (
-                                                <div className="text-emerald-400 text-xs mt-1">實收: {formatCurrency(closingStats.total_sales || 0)}</div>
+
+                                        {/* 購物金資訊 */}
+                                        {((closingStats.store_credit_used || 0) > 0 || (closingStats.store_credit_granted || 0) > 0) && (
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div className="bg-orange-900/30 border border-orange-700 rounded-lg p-3">
+                                                    <div className="text-orange-400 text-xs mb-1">購物金折抵</div>
+                                                    <div className="text-white text-lg font-bold">{formatCurrency(closingStats.store_credit_used || 0)}</div>
+                                                </div>
+                                                <div className="bg-purple-900/30 border border-purple-700 rounded-lg p-3">
+                                                    <div className="text-purple-400 text-xs mb-1">購物金轉出</div>
+                                                    <div className="text-white text-lg font-bold">{formatCurrency(closingStats.store_credit_granted || 0)}</div>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* 假營業額（轉購物金前） */}
+                                        {closingStats.store_credit_converted > 0 && (
+                                            <div className="bg-purple-900/30 border border-purple-700 rounded-lg p-3">
+                                                <div className="flex justify-between items-center">
+                                                    <div>
+                                                        <div className="text-purple-400 text-xs mb-1">假營業額（轉購物金前）</div>
+                                                        <div className="text-purple-300 text-xs">含 {closingStats.store_credit_count} 筆已轉購物金</div>
+                                                    </div>
+                                                    <div className="text-white text-xl font-bold">{formatCurrency(closingStats.fake_total_sales)}</div>
+                                                </div>
+                                                <div className="mt-2 pt-2 border-t border-purple-700 text-sm text-purple-300 flex justify-between">
+                                                    <span>轉購物金金額：</span>
+                                                    <span className="font-semibold">-{formatCurrency(closingStats.store_credit_converted)}</span>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* 已收款 vs 未收款 */}
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="bg-emerald-900/30 border border-emerald-700 rounded-lg p-3">
+                                                <div className="text-emerald-400 text-xs mb-1">已收款</div>
+                                                <div className="text-white text-lg font-bold">{formatCurrency(closingStats.paid_sales || 0)}</div>
+                                                <div className="text-emerald-400 text-xs">{closingStats.paid_count || 0} 筆</div>
+                                            </div>
+                                            <div className="bg-orange-900/30 border border-orange-700 rounded-lg p-3">
+                                                <div className="text-orange-400 text-xs mb-1">未收款</div>
+                                                <div className="text-white text-lg font-bold">{formatCurrency(closingStats.unpaid_sales || 0)}</div>
+                                                <div className="text-orange-400 text-xs">{closingStats.unpaid_count || 0} 筆</div>
+                                            </div>
+                                        </div>
+
+                                        {/* 已收款明細（按帳戶分類） */}
+                                        <div className="border-t border-slate-700 pt-4">
+                                            <div className="text-white font-semibold mb-3">已收款明細</div>
+                                            {closingStats.sales_by_account && Object.keys(closingStats.sales_by_account).length > 0 ? (
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    {Object.entries(closingStats.sales_by_account).map(([accountId, amount]) => {
+                                                        const isUntracked = accountId === '__untracked__'
+                                                        const account = isUntracked ? null : paymentAccounts.find(a => a.id === accountId)
+                                                        const label = isUntracked ? '其他／未入帳' : (account?.account_name || accountId)
+                                                        return (
+                                                            <div key={accountId} className="bg-slate-700 rounded-lg px-3 py-2 flex justify-between items-center">
+                                                                <span className="text-slate-300 text-sm">{label}</span>
+                                                                <span className="text-white font-semibold">{formatCurrency(amount as number)}</span>
+                                                            </div>
+                                                        )
+                                                    })}
+                                                </div>
+                                            ) : (
+                                                <p className="text-slate-400 text-sm">無已收款記錄</p>
                                             )}
                                         </div>
-                                    </div>
-
-                                    {/* 購物金資訊 */}
-                                    {((closingStats.store_credit_used || 0) > 0 || (closingStats.store_credit_granted || 0) > 0) && (
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div className="bg-orange-900/30 border border-orange-700 rounded-lg p-3">
-                                                <div className="text-orange-400 text-xs mb-1">購物金折抵</div>
-                                                <div className="text-white text-lg font-bold">{formatCurrency(closingStats.store_credit_used || 0)}</div>
-                                            </div>
-                                            <div className="bg-purple-900/30 border border-purple-700 rounded-lg p-3">
-                                                <div className="text-purple-400 text-xs mb-1">購物金轉出</div>
-                                                <div className="text-white text-lg font-bold">{formatCurrency(closingStats.store_credit_granted || 0)}</div>
-                                            </div>
-                                        </div>
+                                        </>
                                     )}
-
-                                    {/* 假營業額（轉購物金前） */}
-                                    {closingStats.store_credit_converted > 0 && (
-                                        <div className="bg-purple-900/30 border border-purple-700 rounded-lg p-3">
-                                            <div className="flex justify-between items-center">
-                                                <div>
-                                                    <div className="text-purple-400 text-xs mb-1">假營業額（轉購物金前）</div>
-                                                    <div className="text-purple-300 text-xs">含 {closingStats.store_credit_count} 筆已轉購物金</div>
-                                                </div>
-                                                <div className="text-white text-xl font-bold">{formatCurrency(closingStats.fake_total_sales)}</div>
-                                            </div>
-                                            <div className="mt-2 pt-2 border-t border-purple-700 text-sm text-purple-300 flex justify-between">
-                                                <span>轉購物金金額：</span>
-                                                <span className="font-semibold">-{formatCurrency(closingStats.store_credit_converted)}</span>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* 已收款 vs 未收款 */}
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div className="bg-emerald-900/30 border border-emerald-700 rounded-lg p-3">
-                                            <div className="text-emerald-400 text-xs mb-1">已收款</div>
-                                            <div className="text-white text-lg font-bold">{formatCurrency(closingStats.paid_sales || 0)}</div>
-                                            <div className="text-emerald-400 text-xs">{closingStats.paid_count || 0} 筆</div>
-                                        </div>
-                                        <div className="bg-orange-900/30 border border-orange-700 rounded-lg p-3">
-                                            <div className="text-orange-400 text-xs mb-1">未收款</div>
-                                            <div className="text-white text-lg font-bold">{formatCurrency(closingStats.unpaid_sales || 0)}</div>
-                                            <div className="text-orange-400 text-xs">{closingStats.unpaid_count || 0} 筆</div>
-                                        </div>
-                                    </div>
-
-                                    {/* 已收款明細（按帳戶分類） */}
-                                    <div className="border-t border-slate-700 pt-4">
-                                        <div className="text-white font-semibold mb-3">已收款明細</div>
-                                        {closingStats.sales_by_account && Object.keys(closingStats.sales_by_account).length > 0 ? (
-                                            <div className="grid grid-cols-2 gap-2">
-                                                {Object.entries(closingStats.sales_by_account).map(([accountId, amount]) => {
-                                                    const isUntracked = accountId === '__untracked__'
-                                                    const account = isUntracked ? null : paymentAccounts.find(a => a.id === accountId)
-                                                    const label = isUntracked ? '其他／未入帳' : (account?.account_name || accountId)
-                                                    return (
-                                                        <div key={accountId} className="bg-slate-700 rounded-lg px-3 py-2 flex justify-between items-center">
-                                                            <span className="text-slate-300 text-sm">{label}</span>
-                                                            <span className="text-white font-semibold">{formatCurrency(amount as number)}</span>
-                                                        </div>
-                                                    )
-                                                })}
-                                            </div>
-                                        ) : (
-                                            <p className="text-slate-400 text-sm">無已收款記錄</p>
-                                        )}
-                                    </div>
                                 </div>
 
                                 {/* 底部按鈕 */}

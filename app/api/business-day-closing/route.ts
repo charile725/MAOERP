@@ -45,6 +45,49 @@ export async function GET(request: NextRequest) {
       })
     }
 
+    // 直播模式：不計算營收，只回傳筆數與品項數；營業額由日結時手動輸入
+    if (source === 'live') {
+      const { data: liveClosing } = await (supabaseServer
+        .from('business_day_closings') as any)
+        .select('id, business_date, closing_time, manual_revenue')
+        .eq('source', 'live')
+        .eq('business_date', businessDate)
+        .single()
+
+      const { data: liveSales } = await (supabaseServer
+        .from('sales') as any)
+        .select('id')
+        .eq('sale_date', businessDate)
+        .eq('source', 'live')
+        .eq('status', 'confirmed')
+
+      const liveSaleIds = (liveSales || []).map((s: any) => s.id)
+      let itemsCount = 0
+      if (liveSaleIds.length > 0) {
+        const { data: liveItems } = await (supabaseServer
+          .from('sale_items') as any)
+          .select('quantity')
+          .in('sale_id', liveSaleIds)
+        itemsCount = (liveItems || []).reduce(
+          (sum: number, i: any) => sum + (i.quantity || 0), 0
+        )
+      }
+
+      return NextResponse.json({
+        ok: true,
+        data: {
+          business_date: businessDate,
+          already_closed: !!liveClosing,
+          revenue_mode: 'manual',
+          current_stats: {
+            sales_count: liveSaleIds.length,
+            items_count: itemsCount,
+            manual_revenue: liveClosing?.manual_revenue ?? null,
+          },
+        },
+      })
+    }
+
     // 1. 檢查該營業日是否已日結
     const { data: existingClosing } = await (supabaseServer
       .from('business_day_closings') as any)
@@ -279,7 +322,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { source, note, business_date } = body
+    const { source, note, business_date, manual_revenue } = body
 
     if (!source || (source !== 'pos' && source !== 'live')) {
       return NextResponse.json(
@@ -302,6 +345,76 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { ok: false, error: `${businessDate} 已經日結過了，無法重複日結` },
         { status: 409 }
+      )
+    }
+
+    // 直播模式：不從 sales 加總營收，營業額以手動輸入為準
+    if (source === 'live') {
+      const revenue = Number(manual_revenue)
+      if (!Number.isFinite(revenue) || revenue < 0) {
+        return NextResponse.json(
+          { ok: false, error: '請輸入有效的營業額（0 或正數）' },
+          { status: 400 }
+        )
+      }
+
+      const { data: liveSales } = await (supabaseServer
+        .from('sales') as any)
+        .select('id')
+        .eq('sale_date', businessDate)
+        .eq('source', 'live')
+        .eq('status', 'confirmed')
+
+      const nowLive = new Date()
+      const closingTimeLive = new Date(nowLive.getTime() + 8 * 60 * 60 * 1000).toISOString()
+
+      const { data: liveClosing, error: liveError } = await (supabaseServer
+        .from('business_day_closings') as any)
+        .insert({
+          source: 'live',
+          closing_time: closingTimeLive,
+          business_date: businessDate,
+          sales_count: (liveSales || []).length,
+          // total_sales 同步存手動營業額，讓既有報表（儀表板等）不必改就讀得到
+          total_sales: revenue,
+          manual_revenue: revenue,
+          note: note || null,
+        })
+        .select()
+        .single()
+
+      if (liveError) {
+        if (liveError.code === '23505') {
+          return NextResponse.json(
+            { ok: false, error: `${businessDate} 已經日結過了，無法重複日結` },
+            { status: 409 }
+          )
+        }
+        return NextResponse.json(
+          { ok: false, error: liveError.message },
+          { status: 500 }
+        )
+      }
+
+      const nextLiveDate = new Date(businessDate)
+      nextLiveDate.setDate(nextLiveDate.getDate() + 1)
+      const nextLiveDateStr = nextLiveDate.toISOString().split('T')[0]
+
+      const { error: liveSettingsError } = await (supabaseServer
+        .from('business_day_settings') as any)
+        .upsert({
+          source: 'live',
+          current_business_date: nextLiveDateStr,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'source' })
+
+      if (liveSettingsError) {
+        console.warn('[日結] 更新直播營業日設定失敗:', liveSettingsError.message)
+      }
+
+      return NextResponse.json(
+        { ok: true, data: liveClosing, next_business_date: nextLiveDateStr },
+        { status: 201 }
       )
     }
 

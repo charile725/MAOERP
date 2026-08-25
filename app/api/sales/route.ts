@@ -283,6 +283,11 @@ export async function POST(request: NextRequest) {
 
     const draft = validation.data
 
+    // 直播收銀（source='live'）不計算營收：照常建立銷售單與扣庫存，
+    // 但不寫帳戶金流、不建 AR 應收、不動積分與購物金。
+    // 直播營業額改由日結時手動輸入（見 /api/business-day-closing）。
+    const isLive = draft.source === 'live'
+
     // 安全檢查：有未出貨商品時必須有客戶（否則無法追蹤配送）
     const hasNotDeliveredItems = draft.items.some(item => item.isNotDelivered)
     if (hasNotDeliveredItems && !draft.customer_code) {
@@ -672,8 +677,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 3.5. 處理積分（獲得 + 使用）
-    if (draft.customer_code) {
+    // 3.5. 處理積分（獲得 + 使用）— 直播模式不計積分
+    if (!isLive && draft.customer_code) {
       const totalPointsEarned = saleItems.reduce((sum, si) => sum + (si.points_earned || 0), 0)
       const totalPointsUsed = saleItems.reduce((sum, si) => sum + (si.points_used || 0), 0)
 
@@ -749,7 +754,7 @@ export async function POST(request: NextRequest) {
     let storeCreditUsed = 0
     let finalTotal = total
 
-    if (draft.customer_code && draft.use_store_credit !== false) {
+    if (!isLive && draft.customer_code && draft.use_store_credit !== false) {
       // 获取客户购物金余额
       const { data: customer, error: customerError } = await (supabaseServer
         .from('customers') as any)
@@ -987,8 +992,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 6.5. 更新帳戶餘額（僅當已付款時）
-    if (effectiveIsPaid) {
+    // 6.5. 更新帳戶餘額（僅當已付款時）— 直播模式不進金流
+    if (!isLive && effectiveIsPaid) {
       // Determine payments to process
       const paymentsToProcess = draft.payments && draft.payments.length > 0
         ? draft.payments
@@ -1235,7 +1240,8 @@ export async function POST(request: NextRequest) {
       .eq('id', sale.id)
 
     // 10. 自動創建應收帳款（AR）記錄 - 如果客戶未付款且有應收金額
-    if (draft.customer_code && !effectiveIsPaid && finalTotal > 0) {
+    //     直播模式不產生 AR（不計營收，也就沒有應收）
+    if (!isLive && draft.customer_code && !effectiveIsPaid && finalTotal > 0) {
       // 計算每個商品的到期日（預設 7 天後）
       const dueDate = new Date(taiwanTime)
       dueDate.setDate(dueDate.getDate() + 7)

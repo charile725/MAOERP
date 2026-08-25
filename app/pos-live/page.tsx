@@ -163,8 +163,8 @@ export default function POSPage() {
   const [addingCustomer, setAddingCustomer] = useState(false)
   const phoneInputRef = useRef<HTMLInputElement>(null)
 
-  // 購物金折抵開關（預設自動折抵）
-  const [useStoreCredit, setUseStoreCredit] = useState(true)
+  // 直播模式不使用購物金折抵（不計營收，購物金屬於金流）
+  const [useStoreCredit, setUseStoreCredit] = useState(false)
 
   // Customer search
   const [customerSearchQuery, setCustomerSearchQuery] = useState('')
@@ -210,6 +210,8 @@ export default function POSPage() {
   const [closingStats, setClosingStats] = useState<any>(null)
   const [showClosingModal, setShowClosingModal] = useState(false)
   const [closingNote, setClosingNote] = useState('')
+  // 直播不計算營收，營業額於日結時手動輸入
+  const [closingRevenue, setClosingRevenue] = useState('')
   const [closingInProgress, setClosingInProgress] = useState(false)
   const [businessDateLoaded, setBusinessDateLoaded] = useState(false)
 
@@ -350,7 +352,12 @@ export default function POSPage() {
       alert(`${businessDate} 已經日結過了，無法重複日結`)
       return
     }
-    if (!confirm(`確定要對 ${businessDate} 執行日結嗎？\n\n日結後，新的銷售將記錄到下一個營業日。`)) {
+    const revenue = Number(closingRevenue)
+    if (closingRevenue.trim() === '' || !Number.isFinite(revenue) || revenue < 0) {
+      alert('請輸入今日營業額（0 或正數）')
+      return
+    }
+    if (!confirm(`確定要對 ${businessDate} 執行日結嗎？\n\n營業額：${formatCurrency(revenue)}\n日結後，新的銷售將記錄到下一個營業日。`)) {
       return
     }
 
@@ -359,7 +366,12 @@ export default function POSPage() {
       const res = await fetch('/api/business-day-closing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ note: closingNote, source: salesMode, business_date: businessDate }),
+        body: JSON.stringify({
+          note: closingNote,
+          source: salesMode,
+          business_date: businessDate,
+          manual_revenue: revenue,
+        }),
       })
 
       const data = await res.json()
@@ -374,6 +386,7 @@ export default function POSPage() {
         }
         setShowClosingModal(false)
         setClosingNote('')
+        setClosingRevenue('')
         await fetchClosingStats()
       } else {
         alert(`日結失敗：${data.error}`)
@@ -869,27 +882,6 @@ export default function POSPage() {
       return
     }
 
-    // 積分底數商品必須選擇客戶
-    const hasPointsBaseItems = cart.some(item => item.product.is_points_base && !item.isFreeGift)
-    if (hasPointsBaseItems && !selectedCustomer) {
-      setError('銷售積分底數時必須選擇客戶')
-      return
-    }
-
-    // 積分兌換必須選擇客戶且積分足夠
-    const cartHasRedemption = cart.some(item => item.isPointsRedemption)
-    if (cartHasRedemption) {
-      if (!selectedCustomer) {
-        setError('積分兌換時必須選擇客戶')
-        return
-      }
-      const availablePoints = (selectedCustomer.loyalty_points || 0) + totalPointsEarned
-      if (totalPointsUsed > availablePoints) {
-        setError(`積分不足！需要 ${totalPointsUsed} 積分，目前 ${availablePoints} 積分`)
-        return
-      }
-    }
-
     // 有未出貨商品時，必須選擇客戶（否則無法追蹤配送）
     const hasNotDeliveredItems = cart.some(item => item.isNotDelivered)
     if (!selectedCustomer && hasNotDeliveredItems) {
@@ -899,17 +891,6 @@ export default function POSPage() {
         return
       } else {
         setError('有未出貨商品時，必須選擇客戶')
-        return
-      }
-    }
-
-    if (!selectedCustomer && !isPaid) {
-      const shouldAddCustomer = confirm('未收款訂單需要選擇客戶\n\n要建立新客戶嗎？')
-      if (shouldAddCustomer) {
-        setShowQuickAddCustomer(true)
-        return
-      } else {
-        setError('未收款訂單需要選擇客戶')
         return
       }
     }
@@ -939,7 +920,7 @@ export default function POSPage() {
           note: note || undefined,
           discount_type: discountType,
           discount_value: discountValue,
-          use_store_credit: useStoreCredit,
+          use_store_credit: false, // 直播模式不使用購物金
           // 傳送每個品項的出貨狀態（官方套獎品 realProductId 為 null）
           items: checkoutCart.map((item) => ({
             product_id: item.ichiban_kuji_prize_id ? (item.realProductId ?? null) : item.product_id,
@@ -949,8 +930,6 @@ export default function POSPage() {
             ichiban_kuji_id: item.ichiban_kuji_id,
             selection_option_id: item.selectionOptionId,
             isNotDelivered: item.isNotDelivered || false,
-            is_points_redemption: (item.pointsUsed || 0) > 0,
-            points_used_manual: item.pointsUsed || 0,
           })),
         }),
       })
@@ -1305,6 +1284,9 @@ export default function POSPage() {
   if (isMobile) {
     return (
       <MobilePOS
+        simpleMode
+        closingRevenue={closingRevenue}
+        setClosingRevenue={setClosingRevenue}
         cart={cart}
         setCart={setCart}
         products={products}
@@ -1481,16 +1463,13 @@ export default function POSPage() {
                           key={product.id}
                           className={`rounded-lg p-2.5 transition-all flex flex-col min-h-[90px] relative ${isNegativeStock
                             ? 'bg-slate-700 border border-red-500/50'
-                            : product.is_points_base
-                              ? 'bg-amber-900/50 border border-amber-600/70'
-                              : 'bg-slate-700'
+                            : 'bg-slate-700'
                             }`}
                         >
                           {/* 標籤區 */}
                           <div className="absolute top-1.5 right-1.5 flex gap-1">
                             {isPinned && <span className="text-xs">已固定</span>}
                             {isLowStock && <span className="text-[10px] bg-amber-500 text-white px-1 rounded">低庫存</span>}
-                            {product.is_points_base && <span className="text-[10px] bg-yellow-500 text-black px-1 rounded">積分</span>}
                           </div>
                           {/* 主按鈕區（點擊加入購物車）*/}
                           <button
@@ -1506,16 +1485,6 @@ export default function POSPage() {
                             {/* 庫存 - 小字 */}
                             <div className="text-[10px] text-slate-400">庫存 {product.stock}</div>
                           </button>
-                          {/* 積分兌換按鈕 */}
-                          {product.points_cost && (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); addToCartAsRedemption(product) }}
-                              className="mt-1 w-full text-[10px] bg-yellow-600 hover:bg-yellow-500 text-white py-0.5 rounded text-center transition-colors"
-                              title={`使用 ${product.points_cost} 積分兌換`}
-                            >
-                              🎫 {product.points_cost}點兌換
-                            </button>
-                          )}
                         </div>
                       )
                     })}
@@ -1739,12 +1708,6 @@ export default function POSPage() {
                             {cart[item.indices![0]]?.isNotDelivered && (
                               <span className="ml-2 text-xs bg-orange-500 text-white px-2 py-0.5 rounded">未出貨</span>
                             )}
-                            {cart[item.indices![0]]?.isPointsRedemption && (
-                              <span className="ml-2 text-xs bg-yellow-600 text-white px-2 py-0.5 rounded">🎫 積分兌換</span>
-                            )}
-                            {item.product.is_points_base && !cart[item.indices![0]]?.isFreeGift && !cart[item.indices![0]]?.isPointsRedemption && (
-                              <span className="ml-2 text-xs bg-yellow-500 text-black px-2 py-0.5 rounded">⭐ +{item.quantity}積分</span>
-                            )}
                           </div>
                           <div className="text-xs text-gray-600 dark:text-gray-400">
                             {hasComboDiscount && (
@@ -1774,23 +1737,6 @@ export default function POSPage() {
                               />
                               <span className="text-xs text-gray-600 dark:text-gray-400">未出貨</span>
                             </label>
-                            {selectedCustomer && !item.ichiban_kuji_id && (
-                              <div className="flex items-center gap-1">
-                                <span className="text-xs text-yellow-400">🎫</span>
-                                <input
-                                  type="number"
-                                  min={0}
-                                  value={cart[item.indices![0]]?.pointsUsed || ''}
-                                  onChange={(e) => setItemPointsUsed(item.indices![0], parseInt(e.target.value) || 0)}
-                                  placeholder="積分"
-                                  className="w-16 rounded border border-yellow-500 bg-slate-700 px-1.5 py-0.5 text-xs text-yellow-300 placeholder:text-gray-500 focus:outline-none focus:border-yellow-300"
-                                />
-                                <span className="text-xs text-yellow-400">點</span>
-                                {(cart[item.indices![0]]?.pointsUsed || 0) > 0 && (
-                                  <button onClick={() => setItemPointsUsed(item.indices![0], 0)} className="text-xs text-gray-500 hover:text-gray-300">×</button>
-                                )}
-                              </div>
-                            )}
                           </div>
                         </div>
                         <button
@@ -1938,20 +1884,6 @@ export default function POSPage() {
                   已使用購物金 {formatCurrency(storeCreditUsed)}，餘額將變為 {formatCurrency(selectedCustomer!.store_credit - storeCreditUsed)}
                 </div>
               )}
-              {/* 積分摘要 */}
-              {selectedCustomer && (totalPointsEarned > 0 || totalPointsUsed > 0) && (
-                <div className="mt-2 p-2 bg-yellow-900/20 border border-yellow-600/50 rounded-lg text-xs">
-                  {totalPointsEarned > 0 && (
-                    <div className="text-yellow-400">⭐ 本次獲得 +{totalPointsEarned} 積分</div>
-                  )}
-                  {totalPointsUsed > 0 && (
-                    <div className="text-yellow-400">🎫 本次使用 -{totalPointsUsed} 積分</div>
-                  )}
-                  <div className="text-yellow-300 mt-0.5 font-medium">
-                    結帳後積分：{(selectedCustomer.loyalty_points || 0) + totalPointsEarned - totalPointsUsed} 點
-                  </div>
-                </div>
-              )}
             </div>
           </div>
 
@@ -2057,69 +1989,6 @@ export default function POSPage() {
                   + 新增客戶
                 </button>
 
-                {/* 显示选中客户的购物金余额 & 積分 */}
-                {selectedCustomer && (
-                  <div className="mt-2 p-2.5 bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-300 dark:border-blue-700 rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">購物金餘額</span>
-                      <span className={`text-lg font-bold ${selectedCustomer.store_credit >= 0
-                        ? 'text-green-600 dark:text-green-400'
-                        : 'text-red-600 dark:text-red-400'
-                        }`}>
-                        ${selectedCustomer.store_credit?.toFixed(2) || '0.00'}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between mt-1">
-                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">積分</span>
-                      <span className="text-lg font-bold text-yellow-600 dark:text-yellow-400">
-                        ★ {selectedCustomer.loyalty_points || 0} 點
-                      </span>
-                    </div>
-                    {selectedCustomer.store_credit > 0 && (
-                      <button
-                        onClick={() => setUseStoreCredit(!useStoreCredit)}
-                        className={`mt-1.5 w-full py-1.5 rounded text-xs font-medium transition-colors ${
-                          useStoreCredit
-                            ? 'bg-green-600 text-white hover:bg-green-700'
-                            : 'bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-400 dark:hover:bg-gray-500'
-                        }`}
-                      >
-                        {useStoreCredit ? '自動折抵購物金' : '不使用購物金'}
-                      </button>
-                    )}
-                    {selectedCustomer.credit_limit > 0 && (
-                      <div className="flex items-center justify-between mt-1">
-                        <span className="text-xs text-gray-600 dark:text-gray-400">信用額度</span>
-                        <span className="text-xs text-gray-600 dark:text-gray-400">
-                          ${selectedCustomer.credit_limit.toFixed(2)}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Payment Method - Button Grid (從帳戶動態載入) */}
-              <div>
-                <label className="block font-medium mb-1.5 text-sm text-slate-300">付款方式</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {paymentAccounts.map((account) => (
-                    <button
-                      key={account.id}
-                      onClick={() => {
-                        setPaymentMethod(account.payment_method_code as PaymentMethod)
-                        // 只有待定是未收款，其他都是已收款
-                        setIsPaid(account.payment_method_code !== 'pending')
-                      }}
-                      className={`py-2.5 px-3 rounded-lg text-sm transition-all ${paymentMethod === account.payment_method_code
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                        }`}
-                    >
-                      {(account.display_name || account.account_name).replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '')}
-                    </button>
-                  ))}
-                </div>
               </div>
 
               {/* Discount - Button Selection */}
@@ -2591,133 +2460,53 @@ export default function POSPage() {
                       </div>
                     )}
 
-                    {/* 統計摘要 */}
+                    {/* 今日出貨概況（直播不計算營收，僅記錄庫存） */}
                     <div className="grid grid-cols-2 gap-4">
                       <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
                         <div className="text-sm font-medium text-blue-800 dark:text-blue-400 mb-1">
-                          總銷售筆數
+                          銷售筆數
                         </div>
                         <div className="text-2xl font-bold text-blue-600 dark:text-blue-300">
-                          {closingStats.sales_count} 筆
+                          {closingStats.sales_count || 0} 筆
                         </div>
                       </div>
-                      <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
-                        <div className="text-sm font-medium text-green-800 dark:text-green-400 mb-1">
-                          原始營業額
+                      <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg p-4">
+                        <div className="text-sm font-medium text-indigo-800 dark:text-indigo-400 mb-1">
+                          出貨件數
                         </div>
-                        <div className="text-2xl font-bold text-green-600 dark:text-green-300">
-                          {formatCurrency((closingStats.total_sales || 0) + (closingStats.store_credit_used || 0))}
-                        </div>
-                        {(closingStats.store_credit_used || 0) > 0 && (
-                          <div className="text-xs text-green-600 dark:text-green-400 mt-1">
-                            實收: {formatCurrency(closingStats.total_sales || 0)}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* 購物金資訊 */}
-                    {((closingStats.store_credit_used || 0) > 0 || (closingStats.store_credit_granted || 0) > 0) && (
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-4 border-2 border-orange-200 dark:border-orange-700">
-                          <div className="text-sm font-medium text-orange-800 dark:text-orange-400 mb-1">
-                            購物金折抵
-                          </div>
-                          <div className="text-xl font-bold text-orange-600 dark:text-orange-300">
-                            {formatCurrency(closingStats.store_credit_used || 0)}
-                          </div>
-                        </div>
-                        <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4 border-2 border-purple-200 dark:border-purple-700">
-                          <div className="text-sm font-medium text-purple-800 dark:text-purple-400 mb-1">
-                            購物金轉出
-                          </div>
-                          <div className="text-xl font-bold text-purple-600 dark:text-purple-300">
-                            {formatCurrency(closingStats.store_credit_granted || 0)}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* 假營業額（轉購物金前） */}
-                    {closingStats.store_credit_converted > 0 && (
-                      <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4 border-2 border-purple-200 dark:border-purple-700">
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <div className="text-sm font-medium text-purple-800 dark:text-purple-400 mb-1">
-                              假營業額（轉購物金前）
-                            </div>
-                            <div className="text-xs text-purple-600 dark:text-purple-400">
-                              含 {closingStats.store_credit_count} 筆已轉購物金
-                            </div>
-                          </div>
-                          <div className="text-2xl font-bold text-purple-600 dark:text-purple-300">
-                            {formatCurrency(closingStats.fake_total_sales)}
-                          </div>
-                        </div>
-                        <div className="mt-2 pt-2 border-t border-purple-200 dark:border-purple-700 text-sm text-purple-700 dark:text-purple-300">
-                          <div className="flex justify-between">
-                            <span>轉購物金金額：</span>
-                            <span className="font-semibold">-{formatCurrency(closingStats.store_credit_converted)}</span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* 已收款 vs 未收款 */}
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-lg p-4 border-2 border-emerald-200 dark:border-emerald-700">
-                        <div className="text-sm font-medium text-emerald-800 dark:text-emerald-400 mb-1">
-                          已收款
-                        </div>
-                        <div className="text-xl font-bold text-emerald-600 dark:text-emerald-300">
-                          {formatCurrency(closingStats.paid_sales || 0)}
-                        </div>
-                        <div className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
-                          {closingStats.paid_count || 0} 筆
-                        </div>
-                      </div>
-                      <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-4 border-2 border-orange-200 dark:border-orange-700">
-                        <div className="text-sm font-medium text-orange-800 dark:text-orange-400 mb-1">
-                          未收款
-                        </div>
-                        <div className="text-xl font-bold text-orange-600 dark:text-orange-300">
-                          {formatCurrency(closingStats.unpaid_sales || 0)}
-                        </div>
-                        <div className="text-xs text-orange-600 dark:text-orange-400 mt-1">
-                          {closingStats.unpaid_count || 0} 筆
+                        <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-300">
+                          {closingStats.items_count || 0} 件
                         </div>
                       </div>
                     </div>
 
-                    {/* 已收款明細 */}
+                    {/* 手動輸入營業額 */}
                     <div className="border-t dark:border-gray-700 pt-4">
-                      <h3 className="font-semibold text-lg mb-3 text-gray-900 dark:text-gray-100">已收款明細</h3>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="flex justify-between items-center bg-emerald-50 dark:bg-emerald-900/20 rounded px-4 py-2 border border-emerald-200 dark:border-emerald-700">
-                          <span className="text-emerald-700 dark:text-emerald-300">現金</span>
-                          <span className="font-semibold text-emerald-900 dark:text-emerald-100">
-                            {formatCurrency(closingStats.paid_cash || 0)}
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        今日營業額 <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        step="1"
+                        value={closingRevenue}
+                        onChange={(e) => setClosingRevenue(e.target.value)}
+                        disabled={alreadyClosed}
+                        placeholder="請輸入今日直播營業額"
+                        className="w-full border-2 dark:border-gray-600 rounded-lg px-4 py-3 text-2xl font-bold text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 focus:border-green-500 focus:outline-none disabled:opacity-60"
+                      />
+                      <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                        直播收銀只記錄庫存異動，不自動計算營收。這裡輸入的金額就是當日直播營業額。
+                      </p>
+                      {alreadyClosed && closingStats.manual_revenue != null && (
+                        <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+                          已日結營業額：
+                          <span className="font-bold text-green-600 dark:text-green-400 ml-1">
+                            {formatCurrency(closingStats.manual_revenue)}
                           </span>
-                        </div>
-                        <div className="flex justify-between items-center bg-emerald-50 dark:bg-emerald-900/20 rounded px-4 py-2 border border-emerald-200 dark:border-emerald-700">
-                          <span className="text-emerald-700 dark:text-emerald-300">刷卡</span>
-                          <span className="font-semibold text-emerald-900 dark:text-emerald-100">
-                            {formatCurrency(closingStats.paid_card || 0)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-center bg-emerald-50 dark:bg-emerald-900/20 rounded px-4 py-2 border border-emerald-200 dark:border-emerald-700">
-                          <span className="text-emerald-700 dark:text-emerald-300">轉帳</span>
-                          <span className="font-semibold text-emerald-900 dark:text-emerald-100">
-                            {formatCurrency(closingStats.paid_transfer || 0)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-center bg-emerald-50 dark:bg-emerald-900/20 rounded px-4 py-2 border border-emerald-200 dark:border-emerald-700">
-                          <span className="text-emerald-700 dark:text-emerald-300">貨到付款</span>
-                          <span className="font-semibold text-emerald-900 dark:text-emerald-100">
-                            {formatCurrency(closingStats.paid_cod || 0)}
-                          </span>
-                        </div>
-                      </div>
+                        </p>
+                      )}
                     </div>
 
                     {/* 備註 */}

@@ -5,11 +5,14 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  color-scheme: light;
 }
 
 :root.dark {
   --background: #0a0a0a;
   --foreground: #ededed;
+  /* 讓原生表單控件、捲軸也跟著暗色 */
+  color-scheme: dark;
 }
 
 @theme inline {

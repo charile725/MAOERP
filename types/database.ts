@@ -494,6 +494,7 @@ export interface Database {
           unpaid_transfer: number
           unpaid_cod: number
           sales_by_account: Json | null
+          manual_revenue: number | null
           note: string | null
           created_by: string | null
           created_at: string
@@ -522,6 +523,7 @@ export interface Database {
           unpaid_transfer?: number
           unpaid_cod?: number
           sales_by_account?: Json | null
+          manual_revenue?: number | null
           note?: string | null
           created_by?: string | null
           created_at?: string
@@ -550,6 +552,7 @@ export interface Database {
           unpaid_transfer?: number
           unpaid_cod?: number
           sales_by_account?: Json | null
+          manual_revenue?: number | null
           note?: string | null
           created_by?: string | null
           created_at?: string
