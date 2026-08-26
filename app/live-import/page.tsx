@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useMemo } from 'react'
+import useSWR from 'swr'
 import * as XLSX from 'xlsx'
 import Papa from 'papaparse'
 import { formatCurrency, formatPaymentMethod } from '@/lib/utils'
@@ -39,7 +40,26 @@ type OrderPreview = {
   validation: ValidationResult
 }
 
+type PaymentAccount = {
+  id: string
+  account_name: string
+  display_name: string | null
+  payment_method_code: string | null
+}
+
 export default function LiveImportPage() {
+  // 付款方式一律以「帳戶管理」設定的為準，不要在這裡另外寫死清單
+  const { data: rawAccounts = [] } = useSWR<PaymentAccount[]>('/api/accounts?active_only=true')
+  const paymentOptions = useMemo(
+    () => rawAccounts
+      .filter(acc => acc.payment_method_code)
+      .map(acc => ({
+        code: acc.payment_method_code as string,
+        label: acc.display_name || acc.account_name,
+      })),
+    [rawAccounts]
+  )
+
   const [parsedData, setParsedData] = useState<ParsedRow[]>([])
   const [orderPreviews, setOrderPreviews] = useState<OrderPreview[]>([])
   const [importing, setImporting] = useState(false)
@@ -146,9 +166,8 @@ export default function LiveImportPage() {
         validation.valid = false
       }
 
-      // Validate payment method
-      const validPaymentMethods = ['cash', 'card', 'transfer_cathay', 'transfer_fubon',
-        'transfer_esun', 'transfer_union', 'transfer_linepay', 'cod', 'pending']
+      // Validate payment method（以帳戶管理的設定為準）
+      const validPaymentMethods = paymentOptions.map(opt => opt.code)
       if (!validPaymentMethods.includes(row.paymentMethod)) {
         validation.errors.push(`付款方式 "${row.paymentMethod}" 無效`)
         validation.valid = false
@@ -220,7 +239,7 @@ export default function LiveImportPage() {
   const downloadTemplate = () => {
     const template = [
       ['客戶名稱', '客戶電話', '商品清單', '付款方式', '備註', '已收款', '折扣類型', '折扣值'],
-      ['王小明', '0912345678', '4711234567890,2;4711234567891,1', 'transfer_linepay', '直播訂單範例（使用條碼）', '是', 'none', '0'],
+      ['王小明', '0912345678', '4711234567890,2;4711234567891,1', paymentOptions[0]?.code || 'cash', '直播訂單範例（使用條碼）', '是', 'none', '0'],
       ['李大華', '0923456789', '鬼滅之刃一番賞/A賞,1;鬼滅之刃一番賞/B賞,2', 'cash', '一番賞範例', '是', 'percent', '10'],
       ['張三', '0934567890', '4711234567890,3;鬼滅之刃一番賞/C賞,1', 'card', '混合範例（條碼+一番賞）', '是', 'amount', '50'],
     ]
@@ -245,7 +264,7 @@ export default function LiveImportPage() {
       {
         type: 'list',
         sqref: 'D2:D1000',
-        formulas: ['"cash,card,transfer_linepay,transfer_cathay,transfer_fubon,transfer_esun,transfer_union,cod,pending"'],
+        formulas: [`"${paymentOptions.map(opt => opt.code).join(',')}"`],
         showDropDown: true,
         promptTitle: '付款方式',
         prompt: '請選擇付款方式',
@@ -297,15 +316,7 @@ export default function LiveImportPage() {
       [],
       ['付款方式代碼對照表：'],
       ['代碼', '說明'],
-      ['cash', '現金'],
-      ['card', '刷卡'],
-      ['transfer_linepay', '轉帳 - LINE Pay'],
-      ['transfer_cathay', '轉帳 - 國泰'],
-      ['transfer_fubon', '轉帳 - 富邦'],
-      ['transfer_esun', '轉帳 - 玉山'],
-      ['transfer_union', '轉帳 - 聯邦'],
-      ['cod', '貨到付款'],
-      ['pending', '待確定'],
+      ...paymentOptions.map(opt => [opt.code, opt.label]),
       [],
       ['折扣類型說明：'],
       ['代碼', '說明'],

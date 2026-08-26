@@ -67,6 +67,8 @@ export type PaymentMethod =
   | 'transfer_linepay'
   | 'transfer_linebank'
   | 'transfer_post'
+  | 'transfer_sunny'
+  | 'transfer_ctbc'
   | 'cod'
   | 'pending'
 

@@ -1847,13 +1847,11 @@ export default function POSPage() {
                           }}
                           className="flex-1 rounded px-2 py-1.5 text-sm bg-slate-600 text-white border border-slate-500 focus:border-indigo-500 focus:outline-none"
                         >
-                          <option value="cash">現金</option>
-                          <option value="card">刷卡</option>
-                          <option value="transfer_cathay">國泰</option>
-                          <option value="transfer_fubon">富邦</option>
-                          <option value="transfer_esun">玉山</option>
-                          <option value="transfer_union">聯邦</option>
-                          <option value="transfer_linepay">LINE</option>
+                          {paymentAccounts.map((account) => (
+                            <option key={account.id} value={account.payment_method_code as string}>
+                              {account.display_name || account.account_name}
+                            </option>
+                          ))}
                         </select>
                         <input
                           type="number"
