@@ -38,13 +38,28 @@ const FORMATS = {
     description: '60×20mm 標籤貼紙（熱感/標籤機）',
     pageWidth: 60,
     pageHeight: 20,
-    labelWidth: 58,
-    labelHeight: 18,
-    barcodeHeight: 7,
-    nameFontSize: 4,
-    codeFontSize: 2.5,
+    // 標籤幾乎填滿整張貼紙，只留 0.2mm 餘裕：太剛好會被瀏覽器的進位擠出一張空白頁
+    labelWidth: 59.6,
+    labelHeight: 19.4,
+    barcodeHeight: 12,
+    nameHeight: 3.2,
+    codeFontSize: 4.5,
     perPage: 1,
   },
+}
+
+/**
+ * 估算商品名稱在 SVG viewBox（寬 550）裡會佔多寬。
+ * 中日文字約 1em、半形字約 0.55em；超過就用 textLength 壓縮，避免被切掉。
+ */
+const NAME_VIEWBOX_WIDTH = 550
+const NAME_FONT_UNITS = 24
+
+function estimateNameWidth(text: string): number {
+  return Array.from(text).reduce(
+    (width, ch) => width + (/[\u2e80-\u9fff\uac00-\ud7af\uff00-\uff60]/.test(ch) ? 1 : 0.55),
+    0
+  ) * NAME_FONT_UNITS
 }
 
 export default function BarcodePrintPage() {
@@ -312,7 +327,7 @@ export default function BarcodePrintPage() {
             flex-direction: column !important;
             align-items: center !important;
             justify-content: center !important;
-            gap: 0.5mm !important;
+            gap: 0.4mm !important;
             background: #fff !important;
             color: #000 !important;
             box-sizing: border-box !important;
@@ -320,11 +335,12 @@ export default function BarcodePrintPage() {
             overflow: hidden !important;
             width: ${formatConfig.labelWidth}mm !important;
             height: ${formatConfig.labelHeight}mm !important;
-            padding: 1mm 1.5mm !important;
+            padding: 0.4mm 1.5mm !important;
             ${isA4 ? 'border: 0.5px solid #eee !important;' : 'border: none !important;'}
             ${!isA4 ? `
               page-break-after: always !important;
-              margin: 0 auto !important;
+              /* 上下各留 0.2mm，內容中心正好落在 20mm 貼紙的正中間 */
+              margin: 0.2mm auto !important;
             ` : ''}
           }
 
@@ -344,23 +360,11 @@ export default function BarcodePrintPage() {
 
           .barcode-wrap img {
             display: block !important;
-            height: ${formatConfig.barcodeHeight}mm !important;
-            width: auto !important;
-            max-width: 100% !important;
-            max-height: 100% !important;
-          }
-
-          .meta-row .name {
-            display: block !important;
-            font-size: ${formatConfig.nameFontSize}pt;
-            font-weight: 400 !important;
-            line-height: 1.2 !important;
-            text-align: center !important;
-            white-space: nowrap !important;
-            overflow: hidden !important;
-            text-overflow: ellipsis !important;
             width: 100% !important;
-            max-width: 100% !important;
+            height: auto !important;
+            max-height: ${formatConfig.barcodeHeight}mm !important;
+            /* 條碼太長時高度會被 max-height 夾住，contain 保住比例不讓條寬變形（變形會掃不到） */
+            object-fit: contain !important;
           }
 
           .meta-row .code,
@@ -373,7 +377,7 @@ export default function BarcodePrintPage() {
           }
 
           .meta-row .price {
-            margin-left: 1.5mm !important;
+            margin-left: 2mm !important;
             font-weight: 700 !important;
           }
 
@@ -597,9 +601,14 @@ export default function BarcodePrintPage() {
             Array.from({ length: item.copies }).map((_, idx) => (
               <div key={`${item.id}-${item.source}-${idx}`} className="label">
                 <div className="meta-row">
-                  <svg viewBox="0 0 550 14" width={`${formatConfig.labelWidth - 3}mm`} height="1.8mm" style={{ display: 'block' }}>
-                    <text x="275" y="11" textAnchor="middle" fontSize="11" fontWeight="400" fill="black"
-                      textLength={item.name.length > 38 ? '550' : undefined}
+                  <svg
+                    viewBox={`0 0 ${NAME_VIEWBOX_WIDTH} 31`}
+                    width={`${formatConfig.labelWidth - 3}mm`}
+                    height={`${formatConfig.nameHeight}mm`}
+                    style={{ display: 'block' }}
+                  >
+                    <text x={NAME_VIEWBOX_WIDTH / 2} y="23" textAnchor="middle" fontSize={NAME_FONT_UNITS} fontWeight="400" fill="black"
+                      textLength={estimateNameWidth(item.name) > NAME_VIEWBOX_WIDTH ? NAME_VIEWBOX_WIDTH : undefined}
                       lengthAdjust="spacingAndGlyphs">
                       {item.name}
                     </text>
@@ -607,7 +616,7 @@ export default function BarcodePrintPage() {
                 </div>
                 <div className="barcode-wrap">
                   <img
-                    src={`/api/barcode?text=${encodeURIComponent(item.barcode)}&type=code128&scale=${isA4 ? '0.5' : '0.4'}&height=${formatConfig.barcodeHeight}`}
+                    src={`/api/barcode?text=${encodeURIComponent(item.barcode)}&type=code128&scale=3&height=${formatConfig.barcodeHeight}`}
                     alt={item.barcode}
                   />
                 </div>
