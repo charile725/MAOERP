@@ -7,7 +7,6 @@ export const SWR_KEYS = {
   FIXED_ASSETS: '/api/fixed-assets',
   FIXED_ASSETS_SUMMARY: '/api/fixed-assets/summary',
   FINANCE_DASHBOARD: '/api/finance/dashboard',
-  PURCHASE_RECEIVING_STATS: '/api/purchase-receiving-stats',
   SHORTAGE_STATS: '/api/shortage-stats',
 } as const
 
@@ -44,12 +43,6 @@ export function deliveriesKey(params?: Record<string, string>) {
 
 export function arKey(params?: Record<string, string>) {
   const base = '/api/ar'
-  if (!params || Object.keys(params).length === 0) return base
-  return `${base}?${new URLSearchParams(params)}`
-}
-
-export function apKey(params?: Record<string, string>) {
-  const base = '/api/ap'
   if (!params || Object.keys(params).length === 0) return base
   return `${base}?${new URLSearchParams(params)}`
 }

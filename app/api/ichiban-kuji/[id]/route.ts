@@ -411,7 +411,7 @@ export async function PATCH(
     // 讀取當前一番賞資料
     const { data: kuji, error: fetchError } = await (supabaseServer
       .from('ichiban_kuji') as any)
-      .select('id, is_active, is_received, set_type')
+      .select('id, is_active, set_type')
       .eq('id', id)
       .single()
 
@@ -424,21 +424,9 @@ export async function PATCH(
 
     const updateData: any = {}
 
-    // 處理啟用/停用
+    // 處理啟用/停用（已無收貨流程，不再擋未收貨）
     if (typeof body.is_active === 'boolean') {
-      // 啟用時檢查：官方套未收貨不給啟用
-      if (body.is_active && kuji.is_received === false) {
-        return NextResponse.json(
-          { ok: false, error: '尚未收貨，無法啟用' },
-          { status: 400 }
-        )
-      }
       updateData.is_active = body.is_active
-    }
-
-    // 處理收貨確認
-    if (typeof body.is_received === 'boolean') {
-      updateData.is_received = body.is_received
     }
 
     if (Object.keys(updateData).length === 0) {

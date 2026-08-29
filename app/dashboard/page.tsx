@@ -22,9 +22,7 @@ type DashboardStats = {
   grossProfit: number
   netProfit: number
   totalAR: number
-  totalAP: number
   overdueAR: number
-  overdueAP: number
   costBreakdown?: Array<{
     product_name: string
     cost: number
@@ -39,15 +37,7 @@ type DashboardStats = {
     over90: number
     total: number
   }
-  apAging?: {
-    current: number
-    days31_60: number
-    days61_90: number
-    over90: number
-    total: number
-  }
   arOverdueList?: Array<{ partner_code: string; balance: number; days_overdue: number }>
-  apOverdueList?: Array<{ partner_code: string; balance: number; days_overdue: number }>
   inventory?: {
     totalValue: number
     totalQuantity: number
@@ -247,10 +237,6 @@ export default function DashboardPage() {
     const overdueAR = (extendedData.arAging?.days31_60 || 0) +
       (extendedData.arAging?.days61_90 || 0) +
       (extendedData.arAging?.over90 || 0)
-    const totalAP = extendedData.apAging?.total || 0
-    const overdueAP = (extendedData.apAging?.days31_60 || 0) +
-      (extendedData.apAging?.days61_90 || 0) +
-      (extendedData.apAging?.over90 || 0)
 
     // 折舊數據
     const depSummary = depData?.summary
@@ -274,14 +260,10 @@ export default function DashboardPage() {
       grossProfit,
       netProfit,
       totalAR,
-      totalAP,
       overdueAR,
-      overdueAP,
       costBreakdown,
       arAging: extendedData.arAging,
-      apAging: extendedData.apAging,
       arOverdueList: extendedData.arOverdueList,
-      apOverdueList: extendedData.apOverdueList,
       profitTrend: extendedData.profitTrend,
       depreciation,
     }
@@ -503,8 +485,8 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* KPI Cards - Row 2: AR/AP/庫存 */}
-        <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+        {/* KPI Cards - Row 2: 應收帳款 / 固定資產攤提 */}
+        <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
           <div className="rounded-lg bg-white dark:bg-gray-800 p-6 shadow">
             <div className="text-sm font-medium text-gray-900 dark:text-gray-100">應收帳款</div>
             <div className="mt-2 text-3xl font-bold text-blue-600">
@@ -513,18 +495,6 @@ export default function DashboardPage() {
             {stats.overdueAR > 0 && (
               <div className="mt-1 text-sm text-red-600">
                 逾期: {formatCurrency(stats.overdueAR)}
-              </div>
-            )}
-          </div>
-
-          <div className="rounded-lg bg-white dark:bg-gray-800 p-6 shadow">
-            <div className="text-sm font-medium text-gray-900 dark:text-gray-100">應付帳款</div>
-            <div className="mt-2 text-3xl font-bold text-orange-600">
-              {formatCurrency(stats.totalAP)}
-            </div>
-            {stats.overdueAP > 0 && (
-              <div className="mt-1 text-sm text-red-600">
-                逾期: {formatCurrency(stats.overdueAP)}
               </div>
             )}
           </div>

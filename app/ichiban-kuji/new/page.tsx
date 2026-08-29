@@ -618,7 +618,7 @@ export default function NewIchibanKujiPage() {
                 </div>
                 <div className="md:col-span-2">
                   <p className="text-xs text-orange-600 dark:text-orange-400">
-                    建立後將自動產生應付帳款，一番賞預設為未收貨、未啟用狀態
+                    建立後一番賞預設為未啟用狀態，確認內容無誤再啟用
                   </p>
                 </div>
               </div>

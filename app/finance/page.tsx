@@ -41,13 +41,6 @@ type FinanceData = {
     days61_90: number
     over90: number
   }
-  apAging?: {
-    total: number
-    current: number
-    days31_60: number
-    days61_90: number
-    over90: number
-  }
 }
 
 const ACCOUNT_TYPE_LABELS = {
@@ -89,8 +82,7 @@ export default function FinanceDashboardPage() {
   }
 
   const arTotal = data.arAging?.total || 0
-  const apTotal = data.apAging?.total || 0
-  const netCashPosition = data.totals.total + arTotal - apTotal
+  const netCashPosition = data.totals.total + arTotal
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
@@ -98,7 +90,7 @@ export default function FinanceDashboardPage() {
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">現金流</h1>
           <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-            帳戶總餘額 + 應收帳款 - 應付帳款
+            帳戶總餘額 + 應收帳款
           </p>
         </div>
 
@@ -120,16 +112,6 @@ export default function FinanceDashboardPage() {
                   <div className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">應收帳款</div>
                   <div className="text-3xl font-bold text-green-600">
                     {formatCurrency(arTotal)}
-                  </div>
-                </div>
-
-                <div className="text-2xl font-bold text-gray-400 hidden md:block">-</div>
-
-                {/* 應付帳款 */}
-                <div className="text-center flex-1">
-                  <div className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">應付帳款</div>
-                  <div className="text-3xl font-bold text-red-600">
-                    {formatCurrency(apTotal)}
                   </div>
                 </div>
 

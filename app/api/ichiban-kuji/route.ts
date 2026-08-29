@@ -248,10 +248,10 @@ export async function POST(request: NextRequest) {
       last_prize_product_id: isOfficial ? null : (draft.last_prize_product_id || null),
     }
 
-    // 官方套：設定廠商、未收貨、未啟用
+    // 官方套：設定廠商、未啟用（沒有收貨流程，建立時就當作已到貨）
     if (isOfficial) {
       insertData.vendor_code = draft.vendor_code
-      insertData.is_received = false
+      insertData.is_received = true
       insertData.is_active = false
     }
 
@@ -326,27 +326,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 官方套：建立 AP（應付帳款）記錄
-    if (isOfficial && draft.vendor_code && totalCost > 0) {
-      const { error: apError } = await (supabaseServer
-        .from('partner_accounts') as any)
-        .insert({
-          partner_type: 'vendor',
-          partner_code: draft.vendor_code,
-          direction: 'AP',
-          ref_type: 'ichiban_kuji',
-          ref_id: kuji.id,
-          amount: totalCost,
-          received_paid: 0,
-          due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          status: 'unpaid',
-        })
-
-      if (apError) {
-        console.error('[Ichiban Kuji POST] Failed to create AP record:', apError)
-        // AP 建立失敗不阻斷流程，只記錄錯誤
-      }
-    }
+    // 進貨一律不建應付帳款，帳務由老板自己管
 
     return NextResponse.json(
       { ok: true, data: kuji },

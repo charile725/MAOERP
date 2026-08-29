@@ -12,8 +12,6 @@ type PurchaseItem = {
   cost: number
   subtotal?: number  // 小計（優先使用，避免小數點問題）
   product_id: string
-  received_quantity: number
-  is_received: boolean
   payment_status?: 'unpaid' | 'partial' | 'paid'  // 付款狀態
   products: {
     name: string
@@ -30,7 +28,6 @@ type Purchase = {
   total: number
   status: string
   is_paid: boolean
-  receiving_status: string
   created_at: string
   note?: string
   item_count?: number
@@ -64,8 +61,6 @@ type FlattenedItem = {
   product_name: string
   unit: string
   quantity: number
-  received_quantity: number
-  is_received: boolean
   cost: number
   subtotal?: number  // 小計（優先使用，避免小數點問題）
   payment_status?: 'unpaid' | 'partial' | 'paid'  // 品項付款狀態
@@ -84,12 +79,10 @@ type ProductPurchaseStats = {
   item_code: string
   total_quantity: number
   total_cost: number
-  pending_quantity: number  // 未收貨總數量
   vendor_purchases: {
     vendor_name: string
     vendor_code: string
     quantity: number
-    pending_quantity: number
     purchase_count: number
   }[]
 }
@@ -102,7 +95,6 @@ export default function PurchasesPage() {
   const [searchKeyword, setSearchKeyword] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
-  const [showUnreceivedOnly, setShowUnreceivedOnly] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(20)
@@ -118,38 +110,14 @@ export default function PurchasesPage() {
   if (dateFrom) purchaseParams.date_from = dateFrom
   if (dateTo) purchaseParams.date_to = dateTo
 
-  const { data: rawPurchases = [], isLoading: loading, mutate } = useSWR<Purchase[]>(purchasesKey(purchaseParams))
-
-  // Post-process purchases: compute receiving_status
-  const purchases = useMemo(() => {
-    return rawPurchases.map((purchase) => {
-      const items = purchase.purchase_items || []
-      let receiving_status = 'none'
-
-      if (items.length > 0) {
-        const allReceived = items.every(item => item.is_received === true)
-        const anyReceived = items.some(item => (item.received_quantity || 0) > 0)
-
-        if (allReceived) {
-          receiving_status = 'completed'
-        } else if (anyReceived) {
-          receiving_status = 'partial'
-        }
-      }
-
-      return {
-        ...purchase,
-        receiving_status
-      }
-    })
-  }, [rawPurchases])
+  const { data: purchases = [], isLoading: loading, mutate } = useSWR<Purchase[]>(purchasesKey(purchaseParams))
 
   // Compute product stats when keyword is active
   const productStats = useMemo<ProductPurchaseStats | null>(() => {
     if (!searchKeyword || purchases.length === 0) return null
 
     const stats: { [key: string]: ProductPurchaseStats } = {}
-    const vendorMap: { [productKey: string]: { [vendorKey: string]: { vendor_name: string, vendor_code: string, quantity: number, pending_quantity: number, purchase_count: number } } } = {}
+    const vendorMap: { [productKey: string]: { [vendorKey: string]: { vendor_name: string, vendor_code: string, quantity: number, purchase_count: number } } } = {}
     const kw = searchKeyword.toLowerCase()
 
     purchases.forEach((purchase: Purchase) => {
@@ -163,15 +131,12 @@ export default function PurchasesPage() {
           const productKey = `${item.product_id}`
           const vendorKey = purchase.vendor_code
 
-          const pendingQty = Math.max(0, item.quantity - (item.received_quantity || 0))
-
           if (!stats[productKey]) {
             stats[productKey] = {
               product_name: item.products.name,
               item_code: item.products.item_code,
               total_quantity: 0,
               total_cost: 0,
-              pending_quantity: 0,
               vendor_purchases: []
             }
             vendorMap[productKey] = {}
@@ -179,19 +144,16 @@ export default function PurchasesPage() {
 
           stats[productKey].total_quantity += item.quantity
           stats[productKey].total_cost += item.subtotal || Math.round(item.quantity * item.cost)
-          stats[productKey].pending_quantity += pendingQty
 
           if (!vendorMap[productKey][vendorKey]) {
             vendorMap[productKey][vendorKey] = {
               vendor_name: purchase.vendors?.vendor_name || purchase.vendor_code,
               vendor_code: purchase.vendor_code,
               quantity: 0,
-              pending_quantity: 0,
               purchase_count: 0
             }
           }
           vendorMap[productKey][vendorKey].quantity += item.quantity
-          vendorMap[productKey][vendorKey].pending_quantity += pendingQty
           vendorMap[productKey][vendorKey].purchase_count += 1
         })
       }
@@ -226,10 +188,7 @@ export default function PurchasesPage() {
     setExpandedVendors(newExpanded)
   }
 
-  const displayedPurchases = useMemo(() => {
-    if (!showUnreceivedOnly) return purchases
-    return purchases.filter(p => p.receiving_status !== 'completed')
-  }, [purchases, showUnreceivedOnly])
+  const displayedPurchases = purchases
 
   // 按廠商分組（舊版，保留但不使用）
   const vendorGroups = useMemo(() => {
@@ -297,8 +256,6 @@ export default function PurchasesPage() {
             product_name: item.products.name,
             unit: item.products.unit,
             quantity: item.quantity,
-            received_quantity: item.received_quantity || 0,
-            is_received: item.is_received,
             cost: item.cost,
             subtotal: item.subtotal,
             payment_status: item.payment_status
@@ -368,44 +325,6 @@ export default function PurchasesPage() {
       }
     } catch (err) {
       alert('刪除失敗')
-    } finally {
-      setDeleting(null)
-    }
-  }
-
-  const handleReceiveItem = async (itemId: string, productName: string, remainingQty: number) => {
-    const quantityStr = prompt(`收貨數量（剩餘: ${remainingQty}）：`, remainingQty.toString())
-    if (!quantityStr) return
-
-    const quantity = parseInt(quantityStr, 10)
-    if (isNaN(quantity) || quantity <= 0) {
-      alert('請輸入有效的數量')
-      return
-    }
-
-    if (quantity > remainingQty) {
-      alert(`收貨數量不能超過剩餘數量（${remainingQty}）`)
-      return
-    }
-
-    setDeleting(itemId)
-    try {
-      const res = await fetch(`/api/purchase-items/${itemId}/receive`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ quantity }),
-      })
-
-      const data = await res.json()
-
-      if (data.ok) {
-        alert(data.message || '收貨成功，庫存已增加')
-        mutate()
-      } else {
-        alert(`收貨失敗：${data.error}`)
-      }
-    } catch (err) {
-      alert('收貨失敗')
     } finally {
       setDeleting(null)
     }
@@ -495,24 +414,6 @@ export default function PurchasesPage() {
                 />
                 按廠商分組
               </label>
-              <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700 dark:text-gray-300 min-h-[44px]">
-                <input
-                  type="checkbox"
-                  checked={showUnreceivedOnly}
-                  onChange={(e) => {
-                    setShowUnreceivedOnly(e.target.checked)
-                    setCurrentPage(1)
-                  }}
-                  className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-                顯示未收貨
-              </label>
-              <Link
-                href="/purchase-receiving"
-                className="text-sm text-red-600 dark:text-red-400 hover:underline min-h-[44px] flex items-center"
-              >
-                未收貨統計
-              </Link>
               {isAdmin && (
                 <Link
                   href="/purchases/official-kuji"
@@ -537,17 +438,11 @@ export default function PurchasesPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4 mb-6">
+            <div className="grid grid-cols-2 gap-4 mb-6">
               <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
                 <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">總進貨數量</div>
                 <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">
                   {productStats.total_quantity}
-                </div>
-              </div>
-              <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
-                <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">未收貨數量</div>
-                <div className="text-3xl font-bold text-amber-600 dark:text-amber-400">
-                  {productStats.pending_quantity}
                 </div>
               </div>
               <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
@@ -580,11 +475,6 @@ export default function PurchasesPage() {
                       <div className="text-lg font-bold text-gray-900 dark:text-gray-100">
                         {vendor.quantity} 個
                       </div>
-                      {vendor.pending_quantity > 0 && (
-                        <div className="text-sm font-medium text-amber-600 dark:text-amber-400">
-                          📦 未收貨 {vendor.pending_quantity} 個
-                        </div>
-                      )}
                       <div className="text-xs text-gray-500 dark:text-gray-400">
                         {vendor.purchase_count} 筆進貨
                       </div>
@@ -670,7 +560,6 @@ export default function PurchasesPage() {
                                 <th className="py-2 text-left text-xs font-semibold text-gray-900 dark:text-gray-100">品號</th>
                                 <th className="py-2 text-left text-xs font-semibold text-gray-900 dark:text-gray-100">商品名稱</th>
                                 <th className="py-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">數量</th>
-                                <th className="py-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">已收貨</th>
                                 {isAdmin && (
                                   <>
                                     <th className="py-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">成本</th>
@@ -684,9 +573,7 @@ export default function PurchasesPage() {
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                              {group.items.map((item) => {
-                                const remainingQty = item.quantity - item.received_quantity
-                                return (
+                              {group.items.map((item) => (
                                   <tr key={item.id} className="hover:bg-white dark:hover:bg-gray-800">
                                     <td className="py-3 text-sm text-gray-900 dark:text-gray-100">
                                       <Link
@@ -706,18 +593,6 @@ export default function PurchasesPage() {
                                     </td>
                                     <td className="py-3 text-right text-sm text-gray-900 dark:text-gray-100">
                                       {item.quantity} {item.unit}
-                                    </td>
-                                    <td className="py-3 text-right text-sm">
-                                      <span
-                                        className={`font-medium ${item.is_received
-                                          ? 'text-green-600 dark:text-green-400'
-                                          : item.received_quantity > 0
-                                            ? 'text-yellow-600 dark:text-yellow-400'
-                                            : 'text-gray-600 dark:text-gray-400'
-                                          }`}
-                                      >
-                                        {item.received_quantity} / {item.quantity}
-                                      </span>
                                     </td>
                                     {isAdmin && (
                                       <>
@@ -751,15 +626,6 @@ export default function PurchasesPage() {
                                     </td>
                                     <td className="py-3 text-center text-sm">
                                       <div className="flex gap-2 justify-center">
-                                        {!item.is_received && (
-                                          <button
-                                            onClick={() => handleReceiveItem(item.id, item.product_name, remainingQty)}
-                                            disabled={deleting === item.id}
-                                            className="rounded bg-blue-600 px-2 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-                                          >
-                                            {deleting === item.id ? '...' : '收貨'}
-                                          </button>
-                                        )}
                                         {isAdmin && (
                                           <button
                                             onClick={() => handleDeleteItem(item.id, item.product_name, item.purchase_id)}
@@ -773,8 +639,7 @@ export default function PurchasesPage() {
                                       </div>
                                     </td>
                                   </tr>
-                                )
-                              })}
+                              ))}
                             </tbody>
                           </table>
                         </div>
@@ -827,7 +692,6 @@ export default function PurchasesPage() {
                       <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">進貨日期</th>
                       <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900 dark:text-gray-100">審核</th>
                       <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900 dark:text-gray-100">付款</th>
-                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900 dark:text-gray-100">收貨</th>
                       {isAdmin && (
                         <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900 dark:text-gray-100">操作</th>
                       )}
@@ -888,22 +752,6 @@ export default function PurchasesPage() {
                                 {purchase.is_paid ? '✓ 已付' : '○ 未付'}
                               </span>
                             </td>
-                            <td className="px-6 py-4 text-center text-sm">
-                              <span
-                                className={`inline-flex items-center gap-1 text-xs ${purchase.receiving_status === 'completed'
-                                  ? 'text-blue-600 dark:text-blue-400'
-                                  : purchase.receiving_status === 'partial'
-                                    ? 'text-amber-600 dark:text-amber-400'
-                                    : 'text-gray-500 dark:text-gray-400'
-                                  }`}
-                              >
-                                {purchase.receiving_status === 'completed'
-                                  ? '📦 已收貨'
-                                  : purchase.receiving_status === 'partial'
-                                    ? '⚡ 部分收貨'
-                                    : '• 未收貨'}
-                              </span>
-                            </td>
                             {isAdmin && (
                               <td className="px-6 py-4 text-center text-sm" onClick={(e) => e.stopPropagation()}>
                                 <div className="flex gap-2 justify-center">
@@ -929,7 +777,7 @@ export default function PurchasesPage() {
                           </tr>
                           {expandedRows.has(purchase.id) && purchase.purchase_items && (
                             <tr key={`${purchase.id}-details`}>
-                              <td colSpan={isAdmin ? 9 : 7} className="bg-gray-50 dark:bg-gray-900 px-6 py-4">
+                              <td colSpan={isAdmin ? 8 : 6} className="bg-gray-50 dark:bg-gray-900 px-6 py-4">
                                 <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
                                   {purchase.note && (
                                     <div className="mb-3 rounded bg-blue-50 px-3 py-2 text-sm text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
@@ -943,7 +791,6 @@ export default function PurchasesPage() {
                                         <th className="pb-2 text-left text-xs font-semibold text-gray-900 dark:text-gray-100">品號</th>
                                         <th className="pb-2 text-left text-xs font-semibold text-gray-900 dark:text-gray-100">商品名稱</th>
                                         <th className="pb-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">進貨數量</th>
-                                        <th className="pb-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">已收貨</th>
                                         {isAdmin && (
                                           <>
                                             <th className="pb-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">成本</th>
@@ -951,15 +798,13 @@ export default function PurchasesPage() {
                                             <th className="pb-2 text-center text-xs font-semibold text-gray-900 dark:text-gray-100">付款</th>
                                           </>
                                         )}
-                                        {(isAdmin || purchase.status === 'approved') && (
+                                        {isAdmin && (
                                           <th className="pb-2 text-center text-xs font-semibold text-gray-900 dark:text-gray-100">操作</th>
                                         )}
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y dark:divide-gray-700">
-                                      {purchase.purchase_items.map((item) => {
-                                        const remainingQty = item.quantity - (item.received_quantity || 0)
-                                        return (
+                                      {purchase.purchase_items.map((item) => (
                                           <tr key={item.id}>
                                             <td className="py-2 text-sm text-gray-900 dark:text-gray-100">
                                               <Link
@@ -981,18 +826,6 @@ export default function PurchasesPage() {
                                             </td>
                                             <td className="py-2 text-right text-sm text-gray-900 dark:text-gray-100">
                                               {item.quantity} {item.products.unit}
-                                            </td>
-                                            <td className="py-2 text-right text-sm">
-                                              <span
-                                                className={`font-medium ${item.is_received
-                                                  ? 'text-green-600 dark:text-green-400'
-                                                  : item.received_quantity > 0
-                                                    ? 'text-yellow-600 dark:text-yellow-400'
-                                                    : 'text-gray-600 dark:text-gray-400'
-                                                  }`}
-                                              >
-                                                {item.received_quantity || 0} / {item.quantity}
-                                              </span>
                                             </td>
                                             {isAdmin && (
                                               <>
@@ -1018,34 +851,22 @@ export default function PurchasesPage() {
                                                 </td>
                                               </>
                                             )}
-                                            {(isAdmin || purchase.status === 'approved') && (
+                                            {isAdmin && (
                                               <td className="py-2 text-center text-sm">
                                                 <div className="flex gap-2 justify-center">
-                                                  {!item.is_received && (
-                                                    <button
-                                                      onClick={() => handleReceiveItem(item.id, item.products.name, remainingQty)}
-                                                      disabled={deleting === item.id}
-                                                      className="rounded bg-blue-600 px-2 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-                                                    >
-                                                      {deleting === item.id ? '收貨中' : '收貨'}
-                                                    </button>
-                                                  )}
-                                                  {isAdmin && (
-                                                    <button
-                                                      onClick={() => handleDeleteItem(item.id, item.products.name, purchase.id)}
-                                                      disabled={deleting === item.id}
-                                                      className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-base font-bold disabled:text-gray-300 disabled:cursor-not-allowed"
-                                                      title="刪除項目"
-                                                    >
-                                                      {deleting === item.id ? '...' : '⋯'}
-                                                    </button>
-                                                  )}
+                                                  <button
+                                                    onClick={() => handleDeleteItem(item.id, item.products.name, purchase.id)}
+                                                    disabled={deleting === item.id}
+                                                    className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-base font-bold disabled:text-gray-300 disabled:cursor-not-allowed"
+                                                    title="刪除項目"
+                                                  >
+                                                    {deleting === item.id ? '...' : '⋯'}
+                                                  </button>
                                                 </div>
                                               </td>
                                             )}
                                           </tr>
-                                        )
-                                      })}
+                                      ))}
                                     </tbody>
                                   </table>
                                 </div>

@@ -9,14 +9,6 @@ function daysSince(dateString: string): number {
   return Math.floor(diffTime / (1000 * 60 * 60 * 24))
 }
 
-// Helper function to calculate days until a date
-function daysUntil(dateString: string): number {
-  const date = new Date(dateString)
-  const today = new Date()
-  const diffTime = date.getTime() - today.getTime()
-  return Math.floor(diffTime / (1000 * 60 * 60 * 24))
-}
-
 // GET /api/finance/dashboard - 獲取財務總覽數據
 export async function GET(request: NextRequest) {
   try {
@@ -149,64 +141,6 @@ export async function GET(request: NextRequest) {
     // 排序逾期清單（逾期天數最多的排前面）
     arOverdueList.sort((a, b) => b.days_overdue - a.days_overdue)
 
-    // ========== 新增：AP 到期提醒 ==========
-    const { data: apAccounts } = await supabaseServer
-      .from('partner_accounts')
-      .select('balance, due_date, partner_code, ref_id')
-      .eq('partner_type', 'vendor')
-      .eq('direction', 'AP')
-      .neq('status', 'paid')
-
-    const apAging = {
-      current: 0,
-      days31_60: 0,
-      days61_90: 0,
-      over90: 0,
-      total: 0
-    }
-
-    const apDueSoon: Array<{ partner_code: string; balance: number; days_until_due: number }> = []
-    const apOverdueList: Array<{ partner_code: string; balance: number; days_overdue: number }> = []
-
-      ; (apAccounts as any[])?.forEach(ap => {
-        const daysUntilDue = daysUntil(ap.due_date)
-        apAging.total += ap.balance
-
-        if (daysUntilDue >= 0) {
-          // 未到期
-          if (daysUntilDue <= 7) {
-            apDueSoon.push({
-              partner_code: ap.partner_code,
-              balance: ap.balance,
-              days_until_due: daysUntilDue
-            })
-          }
-          apAging.current += ap.balance
-        } else {
-          // 已逾期
-          const daysOverdue = Math.abs(daysUntilDue)
-          if (daysOverdue <= 30) {
-            apAging.current += ap.balance
-          } else if (daysOverdue <= 60) {
-            apAging.days31_60 += ap.balance
-          } else if (daysOverdue <= 90) {
-            apAging.days61_90 += ap.balance
-          } else {
-            apAging.over90 += ap.balance
-          }
-
-          apOverdueList.push({
-            partner_code: ap.partner_code,
-            balance: ap.balance,
-            days_overdue: daysOverdue
-          })
-        }
-      })
-
-    // 排序
-    apDueSoon.sort((a, b) => a.days_until_due - b.days_until_due)
-    apOverdueList.sort((a, b) => b.days_overdue - a.days_overdue)
-
     // ========== 新增：庫存總金額 ==========
     const { data: products } = await supabaseServer
       .from('products')
@@ -294,9 +228,6 @@ export async function GET(request: NextRequest) {
         // 新增數據
         arAging,
         arOverdueList: arOverdueList.slice(0, 10), // 前10筆
-        apAging,
-        apDueSoon: apDueSoon.slice(0, 10),
-        apOverdueList: apOverdueList.slice(0, 10),
         inventory: {
           totalValue: inventoryValue,
           totalQuantity: inventoryCount
