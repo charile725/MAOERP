@@ -315,6 +315,10 @@ export default function NewPurchasePage() {
       const data = await res.json()
 
       if (data.ok) {
+        // 入庫失敗時 API 仍會建單，所以要讓使用者看到警告再離開，避免以為沒成功又重送一次
+        if (data.warning) {
+          alert(data.warning)
+        }
         router.push('/purchases')
       } else {
         setError(data.error || '建立失敗')
@@ -365,7 +369,7 @@ export default function NewPurchasePage() {
                 className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
               />
               <label htmlFor="isPaid" className="ml-2 text-sm text-gray-900 dark:text-gray-100">
-                已付款（勾選後不會產生應付帳款）
+                已付款（僅作記錄，不影響帳務）
               </label>
             </div>
 
@@ -564,7 +568,7 @@ export default function NewPurchasePage() {
               disabled={loading || items.length === 0}
               className="flex-1 rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:bg-gray-300 dark:disabled:bg-gray-600"
             >
-              {loading ? '建立中...' : '確認進貨'}
+              {loading ? '建立中...' : '確認進貨（直接入庫）'}
             </button>
           </div>
         </form>

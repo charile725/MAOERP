@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase/server'
 import { z } from 'zod'
 import { fromZodError } from 'zod-validation-error'
+import { receivePurchaseItems } from '@/lib/purchase-stock'
 
 type RouteContext = {
   params: Promise<{ id: string }>
@@ -20,7 +21,7 @@ const approvePurchaseSchema = z.object({
   ).min(1, 'At least one item is required'),
 })
 
-// POST /api/purchases/:id/approve - Boss approves purchase and updates inventory & AP
+// POST /api/purchases/:id/approve - Boss approves purchase and updates inventory
 export async function POST(
   request: NextRequest,
   context: RouteContext
@@ -84,7 +85,11 @@ export async function POST(
     }
 
     // 3. Update existing items or insert new items
+    // subtotal 一定要寫：purchases.total 是資料庫 trigger 從各品項 subtotal 加總出來的，
+    // 少寫這欄的話品項留在 null，批准後整張單的金額會變成 0。
     const updatePromises = items.map(async (item) => {
+      const subtotal = item.subtotal !== undefined ? item.subtotal : Math.round(item.quantity * item.cost)
+
       if (item.id && existingItemIds.has(item.id)) {
         // Update existing item
         return await (supabaseServer
@@ -92,6 +97,7 @@ export async function POST(
           .update({
             quantity: item.quantity,
             cost: item.cost,
+            subtotal,
           })
           .eq('id', item.id)
           .select()
@@ -105,6 +111,7 @@ export async function POST(
             product_id: item.product_id,
             quantity: item.quantity,
             cost: item.cost,
+            subtotal,
           })
           .select()
           .single()
@@ -134,25 +141,7 @@ export async function POST(
       .single()
     const purchaseNo = purchaseData?.purchase_no || id
 
-    // 5. 批准時立刻更新商品參考成本（cost & avg_cost）
-    // 庫存不在此更新，只在收貨時更新
-    // 用 Map 確保同一商品以最後一筆 cost 為準
-    const productCostMap = new Map<string, number>()
-    items.forEach(item => {
-      if (item.cost > 0) productCostMap.set(item.product_id, item.cost)
-    })
-
-    await Promise.all(
-      Array.from(productCostMap.entries()).map(([productId, cost]) =>
-        (supabaseServer.from('products') as any)
-          .update({ cost, avg_cost: cost })
-          .eq('id', productId)
-      )
-    )
-
-    console.log(`[Approve] Purchase ${purchaseNo} approved. Updated cost for ${productCostMap.size} products.`)
-
-    // 6. Update purchase to confirmed
+    // 5. Update purchase to confirmed
     const { data: confirmedPurchase, error: confirmError } = await (supabaseServer
       .from('purchases') as any)
       .update({
@@ -170,34 +159,27 @@ export async function POST(
       )
     }
 
-    // 7. Create accounts payable for each item (since not paid)
-    const apRecords = updatedItems.map((item: any) => ({
-      partner_type: 'vendor',
-      partner_code: purchase.vendor_code,
-      direction: 'AP',
-      ref_type: 'purchase',
-      ref_id: id,
-      purchase_item_id: item.id,
-      amount: item.subtotal || Math.round(item.quantity * item.cost),
-      received_paid: 0,
-      due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days from now
-      status: 'unpaid',
-    }))
+    // 6. 進貨直接連動庫存：批准當下就入庫並重算平均成本，沒有另外的收貨步驟
+    const { errors: stockErrors } = await receivePurchaseItems(
+      id,
+      purchaseNo,
+      updatedItems.map((item: any) => ({
+        id: item.id,
+        product_id: item.product_id,
+        quantity: item.quantity,
+        cost: item.cost,
+      }))
+    )
 
-    const { error: apError } = await (supabaseServer
-      .from('partner_accounts') as any)
-      .insert(apRecords)
-
-    if (apError) {
-      console.error('Failed to create AP records:', apError)
-      // Don't fail the whole transaction, just log the error
-    }
+    // 進貨不再產生應付帳款，付款與否只靠進貨單上的「已付款」註記
 
     return NextResponse.json(
       {
         ok: true,
         data: confirmedPurchase,
-        message: '進貨單已批准，應付帳款已建立。請於收貨時更新庫存。'
+        message: stockErrors.length > 0
+          ? `進貨單已批准，但有品項未入庫：${stockErrors.join('；')}`
+          : '進貨單已批准，庫存已更新'
       },
       { status: 200 }
     )

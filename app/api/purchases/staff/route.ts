@@ -134,6 +134,7 @@ export async function POST(request: NextRequest) {
       product_id: item.product_id,
       quantity: item.quantity,
       cost: 0,  // Boss will fill the cost later during approval
+      subtotal: 0,  // 同上，批准時才會填入實際金額
     }))
 
     const { error: itemsError } = await (supabaseServer

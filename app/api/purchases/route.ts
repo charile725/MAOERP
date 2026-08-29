@@ -4,6 +4,7 @@ import { purchaseDraftSchema } from '@/lib/schemas'
 import { fromZodError } from 'zod-validation-error'
 import { generateCode } from '@/lib/utils'
 import { ilikeAny } from '@/lib/postgrest'
+import { receivePurchaseItems } from '@/lib/purchase-stock'
 
 // GET /api/purchases - List purchases with items summary
 export async function GET(request: NextRequest) {
@@ -100,26 +101,6 @@ export async function GET(request: NextRequest) {
     let filteredData = data
 
     // Calculate summary for each purchase
-    // 收集所有 purchase_item IDs 來查詢付款狀態
-    const allItemIds = filteredData?.flatMap((p: any) => 
-      (p.purchase_items || []).map((item: any) => item.id)
-    ) || []
-
-    // 查詢每個品項的付款狀態
-    let paymentStatusMap: Map<string, string> = new Map()
-    if (allItemIds.length > 0) {
-      const { data: apRecords } = await (supabaseServer
-        .from('partner_accounts') as any)
-        .select('purchase_item_id, status')
-        .in('purchase_item_id', allItemIds)
-
-      if (apRecords) {
-        apRecords.forEach((ap: any) => {
-          paymentStatusMap.set(ap.purchase_item_id, ap.status)
-        })
-      }
-    }
-
     const purchasesWithSummary = filteredData?.map((purchase: any) => {
       const items = purchase.purchase_items || []
       const totalQuantity = items.reduce((sum: number, item: any) => sum + item.quantity, 0)
@@ -127,10 +108,10 @@ export async function GET(request: NextRequest) {
         ? items.reduce((sum: number, item: any) => sum + item.cost, 0) / items.length
         : 0
 
-      // 為每個品項加入付款狀態
+      // 付款狀態直接看進貨單的「已付款」註記（進貨不再產生應付帳款）
       const itemsWithPaymentStatus = items.map((item: any) => ({
         ...item,
-        payment_status: paymentStatusMap.get(item.id) || (purchase.is_paid ? 'paid' : null)
+        payment_status: purchase.is_paid ? 'paid' : 'unpaid'
       }))
 
       return {
@@ -281,13 +262,12 @@ export async function POST(request: NextRequest) {
     // 3. Calculate total（使用傳入的小計）
     const total = draft.items.reduce((sum, item) => sum + (item.subtotal || Math.round(item.quantity * item.cost)), 0)
 
-    // 4. Update purchase to approved (老板创建的进货单直接审核通过，不需要审核)
-    // 库存不在这里增加，等收货时再增加
+    // 4. 老板自己開的進貨單不需要審核，直接算已核准
     const { data: confirmedPurchase, error: confirmError } = await (supabaseServer
       .from('purchases') as any)
       .update({
         total,
-        status: 'approved', // 老板创建的进货单直接审核通过
+        status: 'approved',
       })
       .eq('id', purchase.id)
       .select()
@@ -300,33 +280,28 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 6. Create accounts payable for each item (if not paid)
-    if (!draft.is_paid && insertedItems) {
-      const apRecords = insertedItems.map((item: any) => ({
-        partner_type: 'vendor',
-        partner_code: draft.vendor_code,
-        direction: 'AP',
-        ref_type: 'purchase',
-        ref_id: purchase.id,
-        purchase_item_id: item.id,
-        amount: item.subtotal,
-        received_paid: 0,
-        due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days from now
-        status: 'unpaid',
+    // 5. 進貨直接連動庫存：建立當下就入庫，沒有另外的收貨步驟
+    const { errors: stockErrors } = await receivePurchaseItems(
+      purchase.id,
+      purchase.purchase_no,
+      (insertedItems || []).map((item: any) => ({
+        id: item.id,
+        product_id: item.product_id,
+        quantity: item.quantity,
+        cost: item.cost,
       }))
+    )
 
-      const { error: apError } = await (supabaseServer
-        .from('partner_accounts') as any)
-        .insert(apRecords)
-
-      if (apError) {
-        console.error('Failed to create AP records:', apError)
-        // Don't fail the whole transaction, just log the error
-      }
-    }
+    // 進貨不再產生應付帳款，付款與否只靠進貨單上的「已付款」註記
 
     return NextResponse.json(
-      { ok: true, data: confirmedPurchase },
+      {
+        ok: true,
+        data: confirmedPurchase,
+        warning: stockErrors.length > 0
+          ? `進貨單 ${purchase.purchase_no} 已建立，但有品項未入庫：${stockErrors.join('；')}`
+          : undefined,
+      },
       { status: 201 }
     )
   } catch (error) {

@@ -171,7 +171,7 @@ export default function ReviewPurchasePage() {
       const data = await res.json()
 
       if (data.ok) {
-        alert('進貨單已批准，庫存和應付帳款已更新')
+        alert('進貨單已批准，庫存已更新')
         router.push('/purchases')
       } else {
         setError(data.error || '批准失敗')

@@ -238,10 +238,10 @@ export async function DELETE(
               newAvgCost = 0
             }
 
-            // 只更新平均成本
+            // 進貨時 avg_cost 與 cost 是一起寫的，回補也要一起還原，否則 cost 會停在舊進貨價
             await (supabaseServer
               .from('products') as any)
-              .update({ avg_cost: newAvgCost })
+              .update({ avg_cost: newAvgCost, cost: newAvgCost })
               .eq('id', item.product_id)
 
             console.log(`[Delete Purchase ${id}] Restored product ${item.product_id}: stock reduced by ${receivedQty}, avg_cost: ${oldAvgCost.toFixed(2)} -> ${newAvgCost.toFixed(2)}`)
