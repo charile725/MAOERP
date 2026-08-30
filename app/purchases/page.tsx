@@ -279,7 +279,15 @@ export default function PurchasesPage() {
   }
 
   const handleDeletePurchase = async (id: string, purchaseNo: string) => {
-    if (!confirm(`確定要刪除進貨單 ${purchaseNo} 嗎？\n\n此操作將會回補庫存，且無法復原。`)) {
+    // 刪除會連庫存一起扣回去，而且救不回來（成本、廠商都沒有地方可以回推），
+    // 所以要求把單號打出來，避免手滑按到就整張單消失。
+    const typed = prompt(
+      `確定要刪除進貨單 ${purchaseNo} 嗎？\n\n` +
+      `庫存會一起扣回去，且無法復原。\n` +
+      `確定的話請輸入單號 ${purchaseNo}：`
+    )
+    if (typed?.trim().toUpperCase() !== purchaseNo.toUpperCase()) {
+      if (typed !== null) alert('單號不符，已取消刪除')
       return
     }
 
@@ -630,10 +638,10 @@ export default function PurchasesPage() {
                                           <button
                                             onClick={() => handleDeleteItem(item.id, item.product_name, item.purchase_id)}
                                             disabled={deleting === item.id}
-                                            className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-base font-bold disabled:text-gray-300 disabled:cursor-not-allowed"
-                                            title="刪除項目"
+                                            className="rounded border border-red-300 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:text-gray-300 disabled:cursor-not-allowed dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20"
+                                            title="刪除這個品項並回補庫存"
                                           >
-                                            {deleting === item.id ? '...' : '⋯'}
+                                            {deleting === item.id ? '刪除中' : '刪除'}
                                           </button>
                                         )}
                                       </div>
@@ -766,10 +774,10 @@ export default function PurchasesPage() {
                                   <button
                                     onClick={() => handleDeletePurchase(purchase.id, purchase.purchase_no)}
                                     disabled={deleting === purchase.id}
-                                    className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-lg font-bold disabled:text-gray-300 disabled:cursor-not-allowed"
-                                    title="更多操作"
+                                    className="rounded border border-red-300 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:text-gray-300 disabled:cursor-not-allowed dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20"
+                                    title="刪除整張進貨單並回補庫存"
                                   >
-                                    {deleting === purchase.id ? '...' : '⋯'}
+                                    {deleting === purchase.id ? '刪除中' : '刪除'}
                                   </button>
                                 </div>
                               </td>
@@ -857,10 +865,10 @@ export default function PurchasesPage() {
                                                   <button
                                                     onClick={() => handleDeleteItem(item.id, item.products.name, purchase.id)}
                                                     disabled={deleting === item.id}
-                                                    className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-base font-bold disabled:text-gray-300 disabled:cursor-not-allowed"
-                                                    title="刪除項目"
+                                                    className="rounded border border-red-300 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:text-gray-300 disabled:cursor-not-allowed dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20"
+                                                    title="刪除這個品項並回補庫存"
                                                   >
-                                                    {deleting === item.id ? '...' : '⋯'}
+                                                    {deleting === item.id ? '刪除中' : '刪除'}
                                                   </button>
                                                 </div>
                                               </td>
