@@ -326,7 +326,9 @@ export default function PurchasesPage() {
       const data = await res.json()
 
       if (data.ok) {
-        alert('刪除成功，庫存已回補')
+        alert(data.data?.purchase_removed
+          ? '刪除成功，庫存已回補。這是該進貨單的最後一個品項，整張單也一併移除了'
+          : '刪除成功，庫存已回補')
         mutate()
       } else {
         alert(`刪除失敗：${data.error}`)
