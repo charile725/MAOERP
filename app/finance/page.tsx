@@ -160,6 +160,34 @@ export default function FinanceDashboardPage() {
 
         {isAdmin && (
           <>
+            {/* 當日現金流 */}
+            <div className="mb-6 rounded-lg bg-white dark:bg-gray-800 p-6 shadow">
+              <h2 className="mb-4 text-xl font-semibold text-gray-900 dark:text-gray-100">
+                {flowLabel}現金流
+              </h2>
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-900/20">
+                  <div className="mb-1 text-sm font-medium text-green-800 dark:text-green-400">收入（銷售）</div>
+                  <div className="text-2xl font-bold text-green-600">{formatCurrency(data.today.sales)}</div>
+                </div>
+                <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
+                  <div className="mb-1 text-sm font-medium text-red-800 dark:text-red-400">支出</div>
+                  <div className="text-2xl font-bold text-red-600">{formatCurrency(data.today.expenses)}</div>
+                </div>
+                <div className={`rounded-lg border p-4 ${data.today.netCashFlow >= 0
+                  ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-900/20'
+                  : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/20'
+                  }`}>
+                  <div className={`mb-1 text-sm font-medium ${data.today.netCashFlow >= 0 ? 'text-emerald-800 dark:text-emerald-400' : 'text-red-800 dark:text-red-400'}`}>
+                    淨現金流
+                  </div>
+                  <div className={`text-2xl font-bold ${data.today.netCashFlow >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                    {formatCurrency(data.today.netCashFlow)}
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* 現金流總覽 */}
             <div className="mb-6 rounded-lg bg-white dark:bg-gray-800 p-6 shadow">
               <div className="flex flex-col items-center gap-4 md:flex-row md:justify-between">
@@ -210,33 +238,6 @@ export default function FinanceDashboardPage() {
               </div>
             </div>
 
-            {/* 當日現金流 */}
-            <div className="mb-6 rounded-lg bg-white dark:bg-gray-800 p-6 shadow">
-              <h2 className="mb-4 text-xl font-semibold text-gray-900 dark:text-gray-100">
-                {flowLabel}現金流
-              </h2>
-              <div className="grid gap-4 md:grid-cols-3">
-                <div className="rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-900/20">
-                  <div className="mb-1 text-sm font-medium text-green-800 dark:text-green-400">收入（銷售）</div>
-                  <div className="text-2xl font-bold text-green-600">{formatCurrency(data.today.sales)}</div>
-                </div>
-                <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
-                  <div className="mb-1 text-sm font-medium text-red-800 dark:text-red-400">支出</div>
-                  <div className="text-2xl font-bold text-red-600">{formatCurrency(data.today.expenses)}</div>
-                </div>
-                <div className={`rounded-lg border p-4 ${data.today.netCashFlow >= 0
-                  ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-900/20'
-                  : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/20'
-                  }`}>
-                  <div className={`mb-1 text-sm font-medium ${data.today.netCashFlow >= 0 ? 'text-emerald-800 dark:text-emerald-400' : 'text-red-800 dark:text-red-400'}`}>
-                    淨現金流
-                  </div>
-                  <div className={`text-2xl font-bold ${data.today.netCashFlow >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                    {formatCurrency(data.today.netCashFlow)}
-                  </div>
-                </div>
-              </div>
-            </div>
           </>
         )}
 
