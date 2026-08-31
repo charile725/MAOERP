@@ -15,14 +15,9 @@ export default function NewVendorPage() {
 
     const formData = new FormData(e.currentTarget)
 
+    // 廠商編號由後端自動產生（進貨單靠它關聯，不讓使用者填）
     const data = {
       vendor_name: formData.get('vendor_name'),
-      contact_person: formData.get('contact_person') || null,
-      phone: formData.get('phone') || null,
-      email: formData.get('email') || null,
-      address: formData.get('address') || null,
-      payment_terms: formData.get('payment_terms') || null,
-      bank_account: formData.get('bank_account') || null,
       note: formData.get('note') || null,
     }
 
@@ -49,7 +44,7 @@ export default function NewVendorPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 dark:bg-gray-900">
-      <div className="mx-auto max-w-2xl">
+      <div className="mx-auto max-w-lg">
         <h1 className="mb-6 text-3xl font-bold text-gray-900 dark:text-gray-100">新增廠商</h1>
 
         <form onSubmit={handleSubmit} className="rounded-lg bg-white p-4 shadow dark:bg-gray-800 md:p-6">
@@ -65,69 +60,8 @@ export default function NewVendorPage() {
               type="text"
               name="vendor_name"
               required
+              autoFocus
               className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
-            />
-          </div>
-
-          <div className="mb-4">
-            <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">聯絡人</label>
-            <input
-              type="text"
-              name="contact_person"
-              className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-gray-900 placeholder:text-gray-400 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder:text-gray-500"
-              placeholder="選填"
-            />
-          </div>
-
-          <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">電話</label>
-              <input
-                type="text"
-                name="phone"
-                className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-gray-900 placeholder:text-gray-400 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder:text-gray-500"
-                placeholder="選填"
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">Email</label>
-              <input
-                type="email"
-                name="email"
-                className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-gray-900 placeholder:text-gray-400 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder:text-gray-500"
-                placeholder="選填"
-              />
-            </div>
-          </div>
-
-          <div className="mb-4">
-            <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">地址</label>
-            <input
-              type="text"
-              name="address"
-              className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-gray-900 placeholder:text-gray-400 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder:text-gray-500"
-              placeholder="選填"
-            />
-          </div>
-
-          <div className="mb-4">
-            <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">付款條件</label>
-            <input
-              type="text"
-              name="payment_terms"
-              className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-gray-900 placeholder:text-gray-400 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder:text-gray-500"
-              placeholder="例：月結 30 天"
-            />
-          </div>
-
-          <div className="mb-4">
-            <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">銀行帳號</label>
-            <input
-              type="text"
-              name="bank_account"
-              className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-gray-900 placeholder:text-gray-400 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder:text-gray-500"
-              placeholder="選填"
             />
           </div>
 
@@ -137,7 +71,7 @@ export default function NewVendorPage() {
               name="note"
               rows={3}
               className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-gray-900 placeholder:text-gray-400 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder:text-gray-500"
-              placeholder="選填"
+              placeholder="選填，例如聯絡方式、出貨習慣"
             />
           </div>
 

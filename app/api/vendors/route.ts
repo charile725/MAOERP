@@ -21,9 +21,9 @@ export async function GET(request: NextRequest) {
       query = query.eq('is_active', active === 'true')
     }
 
-    // Search by keyword (name, vendor_code, phone, or email)
+    // 廠商只留名稱與備註，搜尋也只找這兩個（編號留著是因為進貨單靠它關聯）
     if (keyword) {
-      query = query.or(ilikeAny(['vendor_name', 'vendor_code', 'phone', 'email'], keyword))
+      query = query.or(ilikeAny(['vendor_name', 'vendor_code', 'note'], keyword))
     }
 
     const { data, error } = await query

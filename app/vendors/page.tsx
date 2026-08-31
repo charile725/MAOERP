@@ -17,16 +17,13 @@ import { Button } from '@/components/ui/button'
 export default function VendorsPage() {
   const [keyword, setKeyword] = useState('')
   const [searchKeyword, setSearchKeyword] = useState('')
-  const [activeFilter, setActiveFilter] = useState<boolean | null>(null)
 
-  const swrKey = vendorsKey({
-    ...(searchKeyword ? { keyword: searchKeyword } : {}),
-    ...(activeFilter !== null ? { active: String(activeFilter) } : {}),
-  })
+  const swrKey = vendorsKey(searchKeyword ? { keyword: searchKeyword } : {})
   const { data: vendors = [], isLoading: loading, mutate } = useSWR<Vendor[]>(swrKey)
 
   const [editingVendor, setEditingVendor] = useState<Vendor | null>(null)
-  const [formData, setFormData] = useState<Partial<Vendor>>({})
+  const [editName, setEditName] = useState('')
+  const [editNote, setEditNote] = useState('')
   const [error, setError] = useState('')
   const [processing, setProcessing] = useState(false)
 
@@ -46,13 +43,13 @@ export default function VendorsPage() {
 
   const openEditModal = (vendor: Vendor) => {
     setEditingVendor(vendor)
-    setFormData(vendor)
+    setEditName(vendor.vendor_name)
+    setEditNote(vendor.note || '')
     setError('')
   }
 
   const closeEditModal = () => {
     setEditingVendor(null)
-    setFormData({})
     setError('')
   }
 
@@ -64,10 +61,14 @@ export default function VendorsPage() {
     setError('')
 
     try {
+      // 只送名稱與備註，其他欄位維持原樣（廠商編號是進貨單的關聯鍵，不能動）
       const res = await fetch(`/api/vendors?id=${editingVendor.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          vendor_name: editName.trim(),
+          note: editNote.trim() || null,
+        }),
       })
 
       const data = await res.json()
@@ -110,7 +111,7 @@ export default function VendorsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
-      <div className="mx-auto max-w-7xl">
+      <div className="mx-auto max-w-4xl">
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">廠商管理</h1>
           <Link
@@ -121,54 +122,22 @@ export default function VendorsPage() {
           </Link>
         </div>
 
-        {/* Filters */}
-        <div className="mb-6 rounded-lg bg-white dark:bg-gray-800 p-4 shadow">
-          <form onSubmit={handleSearch} className="mb-4 flex gap-2">
-            <input
-              type="text"
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              placeholder="搜尋廠商名稱、編號、電話或 Email"
-              className="flex-1 rounded border border-gray-300 dark:border-gray-600 px-4 py-2 text-gray-900 dark:text-gray-100 dark:bg-gray-700 placeholder:text-gray-900 dark:placeholder:text-gray-400"
-            />
-            <button
-              type="submit"
-              className="rounded bg-blue-600 px-6 py-2 font-medium text-white hover:bg-blue-700"
-            >
-              搜尋
-            </button>
-          </form>
-
-          <div className="flex gap-2">
-            <button
-              onClick={() => setActiveFilter(null)}
-              className={`rounded px-4 py-1 font-medium ${activeFilter === null
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600'
-                }`}
-            >
-              全部
-            </button>
-            <button
-              onClick={() => setActiveFilter(true)}
-              className={`rounded px-4 py-1 font-medium ${activeFilter === true
-                ? 'bg-green-600 text-white'
-                : 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600'
-                }`}
-            >
-              啟用
-            </button>
-            <button
-              onClick={() => setActiveFilter(false)}
-              className={`rounded px-4 py-1 font-medium ${activeFilter === false
-                ? 'bg-red-600 text-white'
-                : 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600'
-                }`}
-            >
-              停用
-            </button>
-          </div>
-        </div>
+        {/* 搜尋 */}
+        <form onSubmit={handleSearch} className="mb-6 flex gap-2">
+          <input
+            type="text"
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            placeholder="搜尋廠商名稱或備註"
+            className="flex-1 rounded border border-gray-300 dark:border-gray-600 px-4 py-2 text-gray-900 dark:text-gray-100 dark:bg-gray-700 placeholder:text-gray-400 dark:placeholder:text-gray-400"
+          />
+          <button
+            type="submit"
+            className="rounded bg-blue-600 px-6 py-2 font-medium text-white hover:bg-blue-700"
+          >
+            搜尋
+          </button>
+        </form>
 
         {/* Vendors table */}
         <div className="rounded-lg bg-white dark:bg-gray-800 shadow">
@@ -181,35 +150,16 @@ export default function VendorsPage() {
               <table className="w-full">
                 <thead className="border-b bg-gray-50 dark:bg-gray-900">
                   <tr>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">廠商編號</th>
                     <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">廠商名稱</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">聯絡人</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">電話</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">Email</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">付款條件</th>
-                    <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900 dark:text-gray-100">狀態</th>
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">備註</th>
                     <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900 dark:text-gray-100">操作</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                   {paginatedVendors.map((vendor) => (
                     <tr key={vendor.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                      <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{vendor.vendor_code}</td>
                       <td className="px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">{vendor.vendor_name}</td>
-                      <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{vendor.contact_person || '-'}</td>
-                      <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{vendor.phone || '-'}</td>
-                      <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{vendor.email || '-'}</td>
-                      <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{vendor.payment_terms || '-'}</td>
-                      <td className="px-6 py-4 text-center text-sm">
-                        <span
-                          className={`inline-block rounded px-2 py-1 text-xs ${vendor.is_active
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-red-100 text-red-800'
-                            }`}
-                        >
-                          {vendor.is_active ? '啟用' : '停用'}
-                        </span>
-                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400 whitespace-pre-wrap">{vendor.note || '-'}</td>
                       <td className="px-6 py-4 text-center text-sm">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -285,7 +235,7 @@ export default function VendorsPage() {
       {/* Edit Modal */}
       {editingVendor && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-          <div className="w-full max-w-2xl rounded-lg bg-white dark:bg-gray-800 p-6">
+          <div className="w-full max-w-lg rounded-lg bg-white dark:bg-gray-800 p-6">
             <h2 className="mb-4 text-2xl font-semibold text-gray-900 dark:text-gray-100">編輯廠商</h2>
 
             {error && (
@@ -293,114 +243,27 @@ export default function VendorsPage() {
             )}
 
             <form onSubmit={handleUpdate} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">
-                    廠商編號 <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.vendor_code || ''}
-                    onChange={(e) => setFormData({ ...formData, vendor_code: e.target.value })}
-                    className="w-full rounded border border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-gray-100 dark:bg-gray-700"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">
-                    廠商名稱 <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.vendor_name || ''}
-                    onChange={(e) => setFormData({ ...formData, vendor_name: e.target.value })}
-                    className="w-full rounded border border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-gray-100 dark:bg-gray-700"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">聯絡人</label>
-                  <input
-                    type="text"
-                    value={formData.contact_person || ''}
-                    onChange={(e) => setFormData({ ...formData, contact_person: e.target.value })}
-                    className="w-full rounded border border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-gray-100 dark:bg-gray-700"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">電話</label>
-                  <input
-                    type="text"
-                    value={formData.phone || ''}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full rounded border border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-gray-100 dark:bg-gray-700"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">Email</label>
-                  <input
-                    type="email"
-                    value={formData.email || ''}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full rounded border border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-gray-100 dark:bg-gray-700"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">付款條件</label>
-                  <input
-                    type="text"
-                    value={formData.payment_terms || ''}
-                    onChange={(e) => setFormData({ ...formData, payment_terms: e.target.value })}
-                    className="w-full rounded border border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-gray-100 dark:bg-gray-700"
-                  />
-                </div>
-              </div>
-
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">銀行帳號</label>
+                <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">
+                  廠商名稱 <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="text"
-                  value={formData.bank_account || ''}
-                  onChange={(e) => setFormData({ ...formData, bank_account: e.target.value })}
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
                   className="w-full rounded border border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-gray-100 dark:bg-gray-700"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">地址</label>
-                <input
-                  type="text"
-                  value={formData.address || ''}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                  className="w-full rounded border border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-gray-100 dark:bg-gray-700"
+                  required
                 />
               </div>
 
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">備註</label>
                 <textarea
-                  value={formData.note || ''}
-                  onChange={(e) => setFormData({ ...formData, note: e.target.value })}
+                  value={editNote}
+                  onChange={(e) => setEditNote(e.target.value)}
                   rows={3}
                   className="w-full rounded border border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-gray-100 dark:bg-gray-700"
                 />
-              </div>
-
-              <div>
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={formData.is_active ?? true}
-                    onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                    className="h-4 w-4"
-                  />
-                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">啟用</span>
-                </label>
               </div>
 
               <div className="flex gap-2">
