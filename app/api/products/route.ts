@@ -54,70 +54,9 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // 查詢待出貨數量：只查詢當前頁面商品的待出貨
-    let pendingMap: Record<string, number> = {}
-    const productIds = (data || []).map((p: any) => p.id)
-
-    if (productIds.length > 0) {
-      // 直接查詢這些商品在已確認銷售中的 sale_items
-      const { data: saleItems } = await (supabaseServer
-        .from('sale_items') as any)
-        .select(`
-          id,
-          product_id,
-          quantity,
-          store_credit_qty,
-          sales!inner (
-            status
-          )
-        `)
-        .in('product_id', productIds)
-        .eq('sales.status', 'confirmed')
-
-      if (saleItems && saleItems.length > 0) {
-        const saleItemIds = saleItems.map((si: any) => si.id)
-
-        // 查詢已確認出貨數量
-        const { data: deliveryItems } = await (supabaseServer
-          .from('delivery_items') as any)
-          .select(`
-            sale_item_id,
-            quantity,
-            deliveries!inner (
-              status
-            )
-          `)
-          .in('sale_item_id', saleItemIds)
-          .eq('deliveries.status', 'confirmed')
-
-        const deliveredMap: Record<string, number> = {}
-        if (deliveryItems) {
-          for (const di of deliveryItems as any[]) {
-            deliveredMap[di.sale_item_id] = (deliveredMap[di.sale_item_id] || 0) + Number(di.quantity)
-          }
-        }
-
-        // 計算每個商品的待出貨數量
-        for (const si of saleItems as any[]) {
-          const deliveredQty = deliveredMap[si.id] || 0
-          const storeCreditQty = si.store_credit_qty || 0
-          const pendingQty = si.quantity - deliveredQty - storeCreditQty
-          if (pendingQty > 0) {
-            pendingMap[si.product_id] = (pendingMap[si.product_id] || 0) + pendingQty
-          }
-        }
-      }
-    }
-
-    // 合併待出貨數量到商品資料
-    const enrichedData = (data || []).map((product: any) => ({
-      ...product,
-      pending_delivery: pendingMap[product.id] || 0,
-    }))
-
     return NextResponse.json({
       ok: true,
-      data: enrichedData,
+      data: data || [],
       pagination: {
         page,
         pageSize,

@@ -13,7 +13,6 @@ export type Product = {
   is_active: boolean
   tags: string[]
   image_url?: string | null
-  pending_delivery?: number
   created_at?: string
   updated_at?: string
   is_points_base?: boolean       // 積分底數：賣出一個 = 客戶獲得 1 積分
