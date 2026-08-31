@@ -5,6 +5,7 @@ import useSWR from 'swr'
 import Link from 'next/link'
 import { formatCurrency } from '@/lib/utils'
 import { SWR_KEYS } from '@/lib/swr/keys'
+import CashFlowPanel from '@/components/CashFlowPanel'
 
 type DashboardStats = {
   // 營收口徑
@@ -514,6 +515,9 @@ export default function DashboardPage() {
 
 
 
+
+        {/* 現金流：報表頁一起看得到，日期自己選（跟上面的營收區間各自獨立） */}
+        <CashFlowPanel collapsible />
 
         {/* Cost Breakdown - Collapsible */}
         {stats.costBreakdown && stats.costBreakdown.length > 0 && (() => {
