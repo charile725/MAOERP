@@ -3,6 +3,7 @@ import { supabaseServer } from '@/lib/supabase/server'
 import { z } from 'zod'
 import { fromZodError } from 'zod-validation-error'
 import { getCurrentUser } from '@/lib/auth'
+import { receivePurchaseItems } from '@/lib/purchase-stock'
 
 // Simplified schema for staff purchase submission (quantity only, no cost)
 const staffPurchaseSchema = z.object({
@@ -16,7 +17,7 @@ const staffPurchaseSchema = z.object({
   ).min(1, 'At least one item is required'),
 })
 
-// POST /api/purchases/staff - Staff submits purchase for approval
+// POST /api/purchases/staff - 員工開進貨單，建單即入庫（沒有審核流程）
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -89,19 +90,19 @@ export async function POST(request: NextRequest) {
       const purchaseNo = `P${nextNum.toString().padStart(4, '0')}`
 
       // Build note with staff info and user note
-      const staffNote = `員工進貨申請 (by ${user.username})`
+      const staffNote = `員工進貨 (by ${user.username})`
       const fullNote = draft.note ? `${staffNote} - ${draft.note}` : staffNote
 
-      // 1. Create purchase (status: pending for staff submission)
+      // 1. Create purchase（沒有審核，建立就是成立）
       const result = await (supabaseServer
         .from('purchases') as any)
         .insert({
           purchase_no: purchaseNo,
           vendor_code: draft.vendor_code,
-          is_paid: false,  // Staff doesn't handle payment
+          is_paid: false,
           note: fullNote,
-          status: 'pending',  // Pending approval from boss
-          total: 0,  // Will be calculated after boss adds cost
+          status: 'approved',
+          total: 0,  // 員工不填成本，金額由老闆之後補
           created_by: user.username,
         })
         .select()
@@ -128,16 +129,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 2. Insert purchase items with cost = 0 (boss will fill later)
+    // 2. Insert purchase items with cost = 0（員工只報數量，成本老闆之後自己補）
     const purchaseItems = draft.items.map((item) => ({
       purchase_id: purchase.id,
       product_id: item.product_id,
       quantity: item.quantity,
-      cost: 0,  // Boss will fill the cost later during approval
-      subtotal: 0,  // 同上，批准時才會填入實際金額
+      cost: 0,
+      subtotal: 0,
     }))
 
-    const { error: itemsError } = await (supabaseServer
+    const { data: insertedItems, error: itemsError } = await (supabaseServer
       .from('purchase_items') as any)
       .insert(purchaseItems)
       .select()
@@ -151,15 +152,26 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // NOTE: For pending status:
-    // - No inventory update (will happen when boss approves)
-    // - No AP records created (will be created when boss approves)
+    // 3. 建單即入庫，跟老闆開的單一樣（成本 0 不會動到平均成本）
+    const { errors: stockErrors } = await receivePurchaseItems(
+      purchase.id,
+      purchase.purchase_no,
+      (insertedItems || []).map((item: any) => ({
+        id: item.id,
+        product_id: item.product_id,
+        quantity: item.quantity,
+        cost: item.cost,
+      }))
+    )
 
     return NextResponse.json(
       {
         ok: true,
         data: purchase,
-        message: '進貨申請已提交，等待主管審核'
+        message: `進貨單 ${purchase.purchase_no} 已建立，庫存已更新`,
+        warning: stockErrors.length > 0
+          ? `進貨單 ${purchase.purchase_no} 已建立，但有品項未入庫：${stockErrors.join('；')}`
+          : undefined,
       },
       { status: 201 }
     )

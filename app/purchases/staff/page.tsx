@@ -270,12 +270,13 @@ export default function StaffPurchasePage() {
       const data = await res.json()
 
       if (data.ok) {
+        if (data.warning) alert(data.warning)
         router.push('/purchases')
       } else {
-        setError(data.error || '提交失敗')
+        setError(data.error || '建立失敗')
       }
     } catch (err) {
-      setError('提交失敗')
+      setError('建立失敗')
     } finally {
       setLoading(false)
     }
@@ -287,7 +288,7 @@ export default function StaffPurchasePage() {
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">員工進貨登記</h1>
           <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-            只需填寫數量，成本和其他資料由主管後續補充
+            只需填寫數量，建立後直接進庫存；成本由主管後續補充
           </p>
         </div>
 
@@ -418,7 +419,7 @@ export default function StaffPurchasePage() {
                     {creatingProduct ? '建立中...' : '建立並加入進貨清單'}
                   </button>
                   <p className="text-xs text-gray-600 dark:text-gray-400">
-                    註：成本、售價等資訊將由主管後續補充
+                    註：成本、售價等資訊由主管後續補充
                   </p>
                 </div>
               </div>
@@ -496,7 +497,7 @@ export default function StaffPurchasePage() {
               disabled={loading || items.length === 0}
               className="flex-1 rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:bg-gray-300 dark:disabled:bg-gray-600"
             >
-              {loading ? '提交中...' : '提交進貨申請'}
+              {loading ? '建立中...' : '建立進貨單'}
             </button>
           </div>
         </form>

@@ -12,7 +12,6 @@ type PurchaseItem = {
   cost: number
   subtotal?: number  // 小計（優先使用，避免小數點問題）
   product_id: string
-  payment_status?: 'unpaid' | 'partial' | 'paid'  // 付款狀態
   products: {
     name: string
     item_code: string
@@ -26,8 +25,6 @@ type Purchase = {
   vendor_code: string
   purchase_date: string
   total: number
-  status: string
-  is_paid: boolean
   created_at: string
   note?: string
   item_count?: number
@@ -54,8 +51,6 @@ type FlattenedItem = {
   purchase_id: string
   purchase_no: string
   purchase_date: string
-  purchase_status: string
-  is_paid: boolean
   product_id: string
   item_code: string
   product_name: string
@@ -63,7 +58,6 @@ type FlattenedItem = {
   quantity: number
   cost: number
   subtotal?: number  // 小計（優先使用，避免小數點問題）
-  payment_status?: 'unpaid' | 'partial' | 'paid'  // 品項付款狀態
 }
 
 type VendorItemGroup = {
@@ -249,8 +243,6 @@ export default function PurchasesPage() {
             purchase_id: purchase.id,
             purchase_no: purchase.purchase_no,
             purchase_date: purchase.purchase_date,
-            purchase_status: purchase.status,
-            is_paid: purchase.is_paid,
             product_id: item.product_id,
             item_code: item.products.item_code,
             product_name: item.products.name,
@@ -258,7 +250,6 @@ export default function PurchasesPage() {
             quantity: item.quantity,
             cost: item.cost,
             subtotal: item.subtotal,
-            payment_status: item.payment_status
           })
           groups[key].total_amount += item.subtotal || Math.round(item.quantity * item.cost)
           groups[key].total_quantity += item.quantity
@@ -574,7 +565,6 @@ export default function PurchasesPage() {
                                   <>
                                     <th className="py-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">成本</th>
                                     <th className="py-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">小計</th>
-                                    <th className="py-2 text-center text-xs font-semibold text-gray-900 dark:text-gray-100">付款</th>
                                   </>
                                 )}
                                 <th className="py-2 text-left text-xs font-semibold text-gray-900 dark:text-gray-100">進貨單</th>
@@ -611,20 +601,6 @@ export default function PurchasesPage() {
                                         </td>
                                         <td className="py-3 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">
                                           {formatCurrency(item.subtotal || Math.round(item.quantity * item.cost))}
-                                        </td>
-                                        <td className="py-3 text-center text-sm">
-                                          <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${item.payment_status === 'paid'
-                                              ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                                              : item.payment_status === 'partial'
-                                                ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-                                                : item.payment_status === 'unpaid'
-                                                  ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                                                  : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
-                                            }`}>
-                                            {item.payment_status === 'paid' ? '已付' :
-                                              item.payment_status === 'partial' ? '部分' :
-                                                item.payment_status === 'unpaid' ? '未付' : '-'}
-                                          </span>
                                         </td>
                                       </>
                                     )}
@@ -700,8 +676,6 @@ export default function PurchasesPage() {
                       )}
                       <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">商品摘要</th>
                       <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">進貨日期</th>
-                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900 dark:text-gray-100">審核</th>
-                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900 dark:text-gray-100">付款</th>
                       {isAdmin && (
                         <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900 dark:text-gray-100">操作</th>
                       )}
@@ -742,37 +716,9 @@ export default function PurchasesPage() {
                             <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
                               {formatDate(purchase.purchase_date)}
                             </td>
-                            <td className="px-6 py-4 text-center text-sm">
-                              <span
-                                className={`inline-flex items-center gap-1 text-xs ${purchase.status === 'approved'
-                                  ? 'text-green-600 dark:text-green-400'
-                                  : 'text-orange-500 dark:text-orange-400'
-                                  }`}
-                              >
-                                {purchase.status === 'approved' ? '✓ 已審核' : '○ 待審核'}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 text-center text-sm">
-                              <span
-                                className={`inline-flex items-center gap-1 text-xs ${purchase.is_paid
-                                  ? 'text-green-600 dark:text-green-400'
-                                  : 'text-gray-500 dark:text-gray-400'
-                                  }`}
-                              >
-                                {purchase.is_paid ? '✓ 已付' : '○ 未付'}
-                              </span>
-                            </td>
                             {isAdmin && (
                               <td className="px-6 py-4 text-center text-sm" onClick={(e) => e.stopPropagation()}>
                                 <div className="flex gap-2 justify-center">
-                                  {purchase.status === 'pending' && (
-                                    <Link
-                                      href={`/purchases/${purchase.id}/review`}
-                                      className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700"
-                                    >
-                                      審核
-                                    </Link>
-                                  )}
                                   <button
                                     onClick={() => handleDeletePurchase(purchase.id, purchase.purchase_no)}
                                     disabled={deleting === purchase.id}
@@ -787,7 +733,7 @@ export default function PurchasesPage() {
                           </tr>
                           {expandedRows.has(purchase.id) && purchase.purchase_items && (
                             <tr key={`${purchase.id}-details`}>
-                              <td colSpan={isAdmin ? 8 : 6} className="bg-gray-50 dark:bg-gray-900 px-6 py-4">
+                              <td colSpan={isAdmin ? 6 : 4} className="bg-gray-50 dark:bg-gray-900 px-6 py-4">
                                 <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
                                   {purchase.note && (
                                     <div className="mb-3 rounded bg-blue-50 px-3 py-2 text-sm text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
@@ -805,7 +751,6 @@ export default function PurchasesPage() {
                                           <>
                                             <th className="pb-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">成本</th>
                                             <th className="pb-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100">小計</th>
-                                            <th className="pb-2 text-center text-xs font-semibold text-gray-900 dark:text-gray-100">付款</th>
                                           </>
                                         )}
                                         {isAdmin && (
@@ -844,20 +789,6 @@ export default function PurchasesPage() {
                                                 </td>
                                                 <td className="py-2 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">
                                                   {formatCurrency(item.subtotal || Math.round(item.quantity * item.cost))}
-                                                </td>
-                                                <td className="py-2 text-center text-sm">
-                                                  <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${item.payment_status === 'paid'
-                                                      ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                                                      : item.payment_status === 'partial'
-                                                        ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-                                                        : item.payment_status === 'unpaid'
-                                                          ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                                                          : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
-                                                    }`}>
-                                                    {item.payment_status === 'paid' ? '已付' :
-                                                      item.payment_status === 'partial' ? '部分' :
-                                                        item.payment_status === 'unpaid' ? '未付' : '-'}
-                                                  </span>
                                                 </td>
                                               </>
                                             )}

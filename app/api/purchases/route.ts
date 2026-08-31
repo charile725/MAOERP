@@ -108,18 +108,11 @@ export async function GET(request: NextRequest) {
         ? items.reduce((sum: number, item: any) => sum + item.cost, 0) / items.length
         : 0
 
-      // 付款狀態直接看進貨單的「已付款」註記（進貨不再產生應付帳款）
-      const itemsWithPaymentStatus = items.map((item: any) => ({
-        ...item,
-        payment_status: purchase.is_paid ? 'paid' : 'unpaid'
-      }))
-
       return {
         ...purchase,
         item_count: items.length,
         total_quantity: totalQuantity,
         avg_cost: avgCost,
-        purchase_items: itemsWithPaymentStatus
       }
     })
 
@@ -204,7 +197,7 @@ export async function POST(request: NextRequest) {
         .insert({
           purchase_no: purchaseNo,
           vendor_code: draft.vendor_code,
-          is_paid: draft.is_paid,
+          is_paid: false,
           note: draft.note || null,
           status: 'draft',
           total: 0,
@@ -262,7 +255,7 @@ export async function POST(request: NextRequest) {
     // 3. Calculate total（使用傳入的小計）
     const total = draft.items.reduce((sum, item) => sum + (item.subtotal || Math.round(item.quantity * item.cost)), 0)
 
-    // 4. 老板自己開的進貨單不需要審核，直接算已核准
+    // 4. 進貨單沒有審核流程，建立就算成立
     const { data: confirmedPurchase, error: confirmError } = await (supabaseServer
       .from('purchases') as any)
       .update({
@@ -291,8 +284,6 @@ export async function POST(request: NextRequest) {
         cost: item.cost,
       }))
     )
-
-    // 進貨不再產生應付帳款，付款與否只靠進貨單上的「已付款」註記
 
     return NextResponse.json(
       {

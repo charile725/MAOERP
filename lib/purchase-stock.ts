@@ -67,6 +67,10 @@ export async function receivePurchaseItems(
 
     if (!product) continue
 
+    // 成本 0 代表「這次沒填成本」（例如員工開的單），不是真的免費。
+    // 拿去加權會把商品的平均成本稀釋掉，所以直接跳過不動成本。
+    if (!item.cost || item.cost <= 0) continue
+
     const currentStock = Number(product.stock) || 0
     const oldStock = currentStock - qty
     const oldAvgCost = Number(product.avg_cost) || 0
