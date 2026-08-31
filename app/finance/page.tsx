@@ -2,8 +2,9 @@
 
 import React from 'react'
 import useSWR from 'swr'
-import { SWR_KEYS } from '@/lib/swr/keys'
+import { SWR_KEYS, financeDashboardKey } from '@/lib/swr/keys'
 import { formatCurrency } from '@/lib/utils'
+import { getTaiwanDateString } from '@/lib/timezone'
 
 type UserRole = 'admin' | 'staff'
 
@@ -27,6 +28,7 @@ type FinanceData = {
     petty_cash: number
     total: number
   }
+  date: string
   today: {
     sales: number
     expenses: number
@@ -49,32 +51,98 @@ const ACCOUNT_TYPE_LABELS = {
   petty_cash: '零用金',
 }
 
+/**
+ * 日期加減天數。
+ * 一律用 UTC 運算：字串本來就是台灣日期，補 T00:00:00Z 當 UTC 解析再位移，
+ * 才不會因為執行環境的時區而跳日。
+ */
+function shiftDate(date: string, days: number): string {
+  const d = new Date(date + 'T00:00:00Z')
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().split('T')[0]
+}
+
+function formatDateLabel(date: string): string {
+  const [y, m, d] = date.split('-')
+  return `${y}/${m}/${d}`
+}
+
 export default function FinanceDashboardPage() {
   const { data: authData } = useSWR<{ role: UserRole }>(SWR_KEYS.AUTH_ME)
   const userRole = authData?.role ?? null
 
-  const { data, isLoading: loading } = useSWR<FinanceData>(SWR_KEYS.FINANCE_DASHBOARD)
+  const today = getTaiwanDateString()
+  const [selectedDate, setSelectedDate] = React.useState(today)
+  const isToday = selectedDate === today
+
+  const { data, isLoading: loading } = useSWR<FinanceData>(
+    financeDashboardKey({ date: selectedDate })
+  )
 
   const isAdmin = userRole === 'admin'
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
-        <div className="mx-auto max-w-7xl">
-          <div className="rounded-lg bg-white dark:bg-gray-800 p-8 text-center text-gray-900 dark:text-gray-100 shadow">
-            載入中...
-          </div>
-        </div>
-      </div>
-    )
-  }
+  // 帳戶餘額是「當下」的數字，跟看哪一天無關，只有現金流的進出會跟著日期跑
+  const flowLabel = isToday ? '今日' : formatDateLabel(selectedDate)
 
-  if (!data) {
+  const dateBar = (
+    <div className="mb-6 flex flex-wrap items-center gap-2 rounded-lg bg-white dark:bg-gray-800 p-4 shadow">
+      <span className="mr-1 text-sm font-medium text-gray-600 dark:text-gray-400">查看日期</span>
+      <button
+        onClick={() => setSelectedDate(shiftDate(selectedDate, -1))}
+        className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+        title="前一天"
+      >
+        ← 前一天
+      </button>
+      <input
+        type="date"
+        value={selectedDate}
+        max={today}
+        onChange={(e) => {
+          if (e.target.value) setSelectedDate(e.target.value)
+        }}
+        className="rounded border border-gray-300 px-3 py-1.5 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+      />
+      <button
+        onClick={() => setSelectedDate(shiftDate(selectedDate, 1))}
+        disabled={isToday}
+        className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:text-gray-300 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700 dark:disabled:text-gray-600"
+        title="後一天"
+      >
+        後一天 →
+      </button>
+      <button
+        onClick={() => setSelectedDate(today)}
+        disabled={isToday}
+        className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300 dark:disabled:bg-gray-600"
+      >
+        今天
+      </button>
+      {!isToday && (
+        <span className="text-sm text-amber-600 dark:text-amber-400">
+          正在看 {formatDateLabel(selectedDate)} 的現金流
+        </span>
+      )}
+    </div>
+  )
+
+  const header = (
+    <div className="mb-6">
+      <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">現金流</h1>
+      <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+        帳戶總餘額 + 應收帳款
+      </p>
+    </div>
+  )
+
+  if (loading || !data) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
         <div className="mx-auto max-w-7xl">
+          {header}
+          {dateBar}
           <div className="rounded-lg bg-white dark:bg-gray-800 p-8 text-center text-gray-900 dark:text-gray-100 shadow">
-            載入失敗
+            {loading ? '載入中...' : '載入失敗'}
           </div>
         </div>
       </div>
@@ -87,12 +155,8 @@ export default function FinanceDashboardPage() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
       <div className="mx-auto max-w-7xl">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">現金流</h1>
-          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-            帳戶總餘額 + 應收帳款
-          </p>
-        </div>
+        {header}
+        {dateBar}
 
         {isAdmin && (
           <>
@@ -146,9 +210,11 @@ export default function FinanceDashboardPage() {
               </div>
             </div>
 
-            {/* 今日現金流 */}
+            {/* 當日現金流 */}
             <div className="mb-6 rounded-lg bg-white dark:bg-gray-800 p-6 shadow">
-              <h2 className="mb-4 text-xl font-semibold text-gray-900 dark:text-gray-100">今日現金流</h2>
+              <h2 className="mb-4 text-xl font-semibold text-gray-900 dark:text-gray-100">
+                {flowLabel}現金流
+              </h2>
               <div className="grid gap-4 md:grid-cols-3">
                 <div className="rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-900/20">
                   <div className="mb-1 text-sm font-medium text-green-800 dark:text-green-400">收入（銷售）</div>
@@ -212,8 +278,8 @@ export default function FinanceDashboardPage() {
                       <tr>
                         <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">帳戶名稱</th>
                         <th className="px-6 py-3 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">餘額</th>
-                        <th className="px-6 py-3 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">今日收入</th>
-                        <th className="px-6 py-3 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">今日支出</th>
+                        <th className="px-6 py-3 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">{flowLabel}收入</th>
+                        <th className="px-6 py-3 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">{flowLabel}支出</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200 dark:divide-gray-700">

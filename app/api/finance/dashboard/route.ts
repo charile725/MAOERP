@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase/server'
+import { getTaiwanDateString } from '@/lib/timezone'
 
 // Helper function to calculate days since a date
 function daysSince(dateString: string): number {
@@ -9,10 +10,17 @@ function daysSince(dateString: string): number {
   return Math.floor(diffTime / (1000 * 60 * 60 * 24))
 }
 
-// GET /api/finance/dashboard - 獲取財務總覽數據
+// GET /api/finance/dashboard?date=YYYY-MM-DD - 獲取財務總覽數據（date 不給就是今天）
 export async function GET(request: NextRequest) {
   try {
-    const today = new Date().toISOString().split('T')[0]
+    // 一律用台灣日期：Vercel 跑在 UTC，直接 new Date() 會讓台灣時間早上 8 點前算成前一天
+    const today = getTaiwanDateString()
+
+    // 現金流可以指定要看哪一天；格式不對就退回今天，不要讓亂填的參數把查詢打壞
+    const requestedDate = request.nextUrl.searchParams.get('date')
+    const targetDate = requestedDate && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate)
+      ? requestedDate
+      : today
 
     // 1. 獲取所有帳戶及其餘額
     const { data: accounts, error: accountsError } = await (supabaseServer
@@ -29,11 +37,11 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // 2. 計算今日支出
+    // 2. 計算指定日期的支出
     const { data: todayExpenses, error: expensesError } = await (supabaseServer
       .from('expenses') as any)
       .select('amount, account_id')
-      .eq('date', today)
+      .eq('date', targetDate)
 
     if (expensesError) {
       return NextResponse.json(
@@ -47,12 +55,12 @@ export async function GET(request: NextRequest) {
       0
     ) || 0
 
-    // 3. 計算今日銷售收入
+    // 3. 計算指定日期的銷售收入
     const { data: todaySales, error: salesError } = await (supabaseServer
       .from('sales') as any)
       .select('total, payment_method, account_id, is_paid')
-      .gte('sale_date', today)
-      .lte('sale_date', today + 'T23:59:59')
+      .gte('sale_date', targetDate)
+      .lte('sale_date', targetDate + 'T23:59:59')
       .eq('is_paid', true)
 
     const todaySalesTotal = salesError ? 0 : (todaySales?.reduce(
@@ -75,10 +83,10 @@ export async function GET(request: NextRequest) {
       total: accounts?.reduce((sum: number, a: any) => sum + a.balance, 0) || 0,
     }
 
-    // 6. 今日淨現金流
+    // 6. 當日淨現金流
     const todayNetCashFlow = todaySalesTotal - todayExpensesTotal
 
-    // 7. 今日各帳戶支出統計
+    // 7. 當日各帳戶支出統計
     const todayExpensesByAccount = todayExpenses?.reduce((acc: any, exp: any) => {
       if (exp.account_id) {
         acc[exp.account_id] = (acc[exp.account_id] || 0) + exp.amount
@@ -86,7 +94,7 @@ export async function GET(request: NextRequest) {
       return acc
     }, {}) || {}
 
-    // 8. 今日各帳戶收入統計
+    // 8. 當日各帳戶收入統計
     const todaySalesByAccount = todaySales?.reduce((acc: any, sale: any) => {
       if (sale.account_id) {
         acc[sale.account_id] = (acc[sale.account_id] || 0) + sale.total
@@ -218,6 +226,7 @@ export async function GET(request: NextRequest) {
       data: {
         accounts: accountsByType,
         totals,
+        date: targetDate,
         today: {
           sales: todaySalesTotal,
           expenses: todayExpensesTotal,

@@ -76,3 +76,9 @@ export function dashboardKey(params?: Record<string, string>) {
   if (!params || Object.keys(params).length === 0) return base
   return `${base}?${new URLSearchParams(params)}`
 }
+
+export function financeDashboardKey(params?: Record<string, string>) {
+  const base = '/api/finance/dashboard'
+  if (!params || Object.keys(params).length === 0) return base
+  return `${base}?${new URLSearchParams(params)}`
+}
