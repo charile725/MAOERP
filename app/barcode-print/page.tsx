@@ -4,6 +4,7 @@ import React, { useState, useRef } from 'react'
 import useSWR from 'swr'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { formatCurrency } from '@/lib/utils'
+import NumberInput from '@/components/NumberInput'
 
 type Product = {
   id: string
@@ -561,11 +562,12 @@ export default function BarcodePrintPage() {
                           >
                             -
                           </button>
-                          <input
-                            type="number"
+                          <NumberInput
                             min="1"
+                            decimal={false}
                             value={item.copies}
-                            onChange={e => updateCopies(item.id, item.source, parseInt(e.target.value) || 1)}
+                            onChange={(v) => updateCopies(item.id, item.source, v)}
+                            emptyValue={1}
                             className="w-16 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-2 py-1 text-center text-sm text-gray-900 dark:text-gray-100"
                           />
                           <button

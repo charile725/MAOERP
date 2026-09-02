@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import NumberInput from '@/components/NumberInput'
 
 export default function NewProductPage() {
   const router = useRouter()
@@ -166,17 +167,16 @@ export default function NewProductPage() {
               <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">
                 成本 <span className="text-xs text-gray-500 dark:text-gray-400">（參考成本）</span>
               </label>
-              <input
-                type="number"
+              <NumberInput
                 name="cost"
                 min="0"
                 step="0.01"
                 value={costValue}
-                onChange={(e) => {
-                  const v = parseFloat(e.target.value) || 0
+                onChange={(v) => {
                   setCostValue(v)
                   if (v !== 0) setCostZeroConfirmed(false)
                 }}
+                emptyValue={0}
                 className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
               />
               {costValue === 0 && (

@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
+import NumberInput from '@/components/NumberInput'
 
 export default function CustomersPage() {
   const [keyword, setKeyword] = useState('')
@@ -718,12 +719,12 @@ export default function CustomersPage() {
 
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">信用額度</label>
-                  <input
-                    type="number"
+                  <NumberInput
                     step="0.01"
                     min="0"
                     value={formData.credit_limit ?? 0}
-                    onChange={(e) => setFormData({ ...formData, credit_limit: parseFloat(e.target.value) || 0 })}
+                    onChange={(v) => setFormData({ ...formData, credit_limit: v })}
+                    emptyValue={0}
                     className="w-full rounded border border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-gray-100 dark:bg-gray-700"
                   />
                   <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">設為 0 表示不允許欠款</p>

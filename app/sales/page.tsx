@@ -8,6 +8,7 @@ import { SWR_KEYS, salesKey } from '@/lib/swr/keys'
 import { paginatedFetcher } from '@/lib/swr/fetcher'
 import { formatCurrency, formatDate, formatDateTime, formatPaymentMethod } from '@/lib/utils'
 import { useSerialPrinter } from '@/hooks/useSerialPrinter'
+import NumberInput from '@/components/NumberInput'
 
 // Portal Dropdown 組件
 function PortalDropdown({
@@ -1854,18 +1855,16 @@ export default function SalesPage() {
                         </td>
                         <td className="py-2 text-right text-sm text-gray-500">{item.quantity}</td>
                         <td className="py-2 text-right">
-                          <input
-                            type="number"
+                          <NumberInput
                             min="0"
+                            decimal={false}
                             value={correctionItem?.new_quantity ?? item.quantity}
-                            onChange={(e) => {
+                            onChange={(v) => {
                               const newItems = [...correctionItems]
-                              newItems[index] = {
-                                ...newItems[index],
-                                new_quantity: parseInt(e.target.value) || 0,
-                              }
+                              newItems[index] = { ...newItems[index], new_quantity: v }
                               setCorrectionItems(newItems)
                             }}
+                            emptyValue={0}
                             className="w-20 px-2 py-1 text-right rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                           />
                         </td>

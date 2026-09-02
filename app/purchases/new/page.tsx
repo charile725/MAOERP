@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { formatCurrency } from '@/lib/utils'
 import type { Product } from '@/types'
+import NumberInput from '@/components/NumberInput'
 
 // 動態載入相機掃描元件（避免 SSR 問題）
 const CameraScanner = dynamic(() => import('@/components/CameraScanner'), {
@@ -468,23 +469,20 @@ export default function NewPurchasePage() {
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          <input
-                            type="number"
+                          <NumberInput
+                            decimal={false}
                             value={item.quantity}
-                            onChange={(e) =>
-                              updateItem(index, 'quantity', parseInt(e.target.value) || 0)
-                            }
+                            onChange={(v) => updateItem(index, 'quantity', v)}
+                            emptyValue={0}
                             min="1"
                             className="w-20 rounded border border-gray-300 bg-white px-2 py-1 text-center text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
                           />
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <input
-                            type="number"
+                          <NumberInput
                             value={Math.round(item.cost * 100) / 100}
-                            onChange={(e) =>
-                              updateItem(index, 'cost', parseFloat(e.target.value) || 0)
-                            }
+                            onChange={(v) => updateItem(index, 'cost', v)}
+                            emptyValue={0}
                             min="0"
                             step="0.01"
                             className="w-28 rounded border border-gray-300 bg-white px-2 py-1 text-right text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
@@ -492,12 +490,10 @@ export default function NewPurchasePage() {
                           />
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <input
-                            type="number"
+                          <NumberInput
                             value={getItemSubtotal(item)}
-                            onChange={(e) =>
-                              updateItemSubtotal(index, parseFloat(e.target.value) || 0)
-                            }
+                            onChange={(v) => updateItemSubtotal(index, v)}
+                            emptyValue={0}
                             min="0"
                             className="w-28 rounded border border-blue-300 bg-blue-50 px-2 py-1 text-right font-semibold text-gray-900 dark:border-blue-600 dark:bg-blue-900/30 dark:text-gray-100"
                             title="輸入小計自動計算單價"

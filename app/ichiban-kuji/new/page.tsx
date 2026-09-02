@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { formatCurrency } from '@/lib/utils'
+import NumberInput from '@/components/NumberInput'
 
 type Vendor = {
   vendor_code: string
@@ -647,21 +648,22 @@ export default function NewIchibanKujiPage() {
                 {comboPrices.map((combo, index) => (
                   <div key={index} className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
                     <div className="flex w-full flex-1 flex-wrap items-center gap-2">
-                      <input
-                        type="number"
+                      <NumberInput
                         min="1"
+                        decimal={false}
                         value={combo.draws}
-                        onChange={(e) => updateComboPrice(index, 'draws', parseInt(e.target.value) || 1)}
+                        onChange={(v) => updateComboPrice(index, 'draws', v)}
+                        emptyValue={1}
                         className="w-24 rounded border border-gray-300 bg-white px-3 py-2 text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
                         placeholder="抽數"
                       />
                       <span className="text-gray-600 dark:text-gray-400">抽</span>
-                      <input
-                        type="number"
+                      <NumberInput
                         min="0"
                         step="1"
                         value={combo.price}
-                        onChange={(e) => updateComboPrice(index, 'price', parseFloat(e.target.value) || 0)}
+                        onChange={(v) => updateComboPrice(index, 'price', v)}
+                        emptyValue={0}
                         className="w-32 rounded border border-gray-300 bg-white px-3 py-2 text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
                         placeholder="價格"
                       />
@@ -708,21 +710,22 @@ export default function NewIchibanKujiPage() {
                 {openingComboPrices.map((combo, index) => (
                   <div key={index} className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
                     <div className="flex w-full flex-1 flex-wrap items-center gap-2">
-                      <input
-                        type="number"
+                      <NumberInput
                         min="1"
+                        decimal={false}
                         value={combo.draws}
-                        onChange={(e) => updateOpeningComboPrice(index, 'draws', parseInt(e.target.value) || 1)}
+                        onChange={(v) => updateOpeningComboPrice(index, 'draws', v)}
+                        emptyValue={1}
                         className="w-24 rounded border border-gray-300 bg-white px-3 py-2 text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
                         placeholder="抽數"
                       />
                       <span className="text-gray-600 dark:text-gray-400">抽</span>
-                      <input
-                        type="number"
+                      <NumberInput
                         min="0"
                         step="1"
                         value={combo.price}
-                        onChange={(e) => updateOpeningComboPrice(index, 'price', parseFloat(e.target.value) || 0)}
+                        onChange={(v) => updateOpeningComboPrice(index, 'price', v)}
+                        emptyValue={0}
                         className="w-32 rounded border border-gray-300 bg-white px-3 py-2 text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
                         placeholder="價格"
                       />
@@ -797,11 +800,12 @@ export default function NewIchibanKujiPage() {
                           />
                         </td>
                         <td className="py-2 pr-2">
-                          <input
-                            type="number"
+                          <NumberInput
                             min="1"
+                            decimal={false}
                             value={prize.quantity}
-                            onChange={(e) => updatePrize(index, 'quantity', parseInt(e.target.value) || 1)}
+                            onChange={(v) => updatePrize(index, 'quantity', v)}
+                            emptyValue={1}
                             className="w-full rounded border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
                           />
                         </td>
@@ -846,11 +850,12 @@ export default function NewIchibanKujiPage() {
                       {/* 數量 */}
                       <div className="flex items-center gap-1">
                         <span className="text-xs text-gray-500 dark:text-gray-400">數量</span>
-                        <input
-                          type="number"
+                        <NumberInput
                           min="1"
+                          decimal={false}
                           value={prize.quantity}
-                          onChange={(e) => updatePrize(index, 'quantity', parseInt(e.target.value) || 1)}
+                          onChange={(v) => updatePrize(index, 'quantity', v)}
+                          emptyValue={1}
                           className="w-20 rounded border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
                         />
                       </div>

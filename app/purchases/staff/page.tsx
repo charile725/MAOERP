@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import type { Product } from '@/types'
+import NumberInput from '@/components/NumberInput'
 
 // 動態載入相機掃描元件（避免 SSR 問題）
 const CameraScanner = dynamic(() => import('@/components/CameraScanner'), {
@@ -453,12 +454,11 @@ export default function StaffPurchasePage() {
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          <input
-                            type="number"
+                          <NumberInput
+                            decimal={false}
                             value={item.quantity}
-                            onChange={(e) =>
-                              updateQuantity(index, parseInt(e.target.value) || 0)
-                            }
+                            onChange={(v) => updateQuantity(index, v)}
+                            emptyValue={0}
                             min="1"
                             className="w-20 rounded border border-gray-300 bg-white px-2 py-1 text-center text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
                           />

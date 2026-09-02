@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
 import { useSubmitGuard } from '@/hooks/useSubmitGuard'
+import NumberInput from '@/components/NumberInput'
 
 type Account = {
   id: string
@@ -392,12 +393,12 @@ export default function AccountsPage() {
                   <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">
                     金額
                   </label>
-                  <input
-                    type="number"
+                  <NumberInput
                     required
                     min="1"
                     value={transferData.amount}
-                    onChange={(e) => setTransferData({ ...transferData, amount: Number(e.target.value) })}
+                    onChange={(v) => setTransferData({ ...transferData, amount: v })}
+                    emptyValue={0}
                     className="w-full rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:outline-none"
                   />
                 </div>
