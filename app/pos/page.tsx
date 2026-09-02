@@ -8,6 +8,7 @@ import { SWR_KEYS } from '@/lib/swr/keys'
 import type { Product, SaleItem, PaymentMethod } from '@/types'
 import { useSerialPrinter } from '@/hooks/useSerialPrinter'
 import { getTaiwanDateString } from '@/lib/timezone'
+import NumberInput from '@/components/NumberInput'
 
 // 動態載入相機掃描元件（避免 SSR 問題）
 const CameraScanner = dynamic(() => import('@/components/CameraScanner'), {
@@ -97,9 +98,6 @@ const posProductsFetcher = async (url: string) => {
 export default function POSPage() {
   const [barcode, setBarcode] = useState('')
   const [cart, setCart] = useState<CartItem[]>([])
-  // 數量輸入框編輯中的原始字串。受控 input 直接綁數字的話，清空會變 NaN 被彈回原值，
-  // 就沒辦法把 1 刪掉改打 21。編輯中先存字串，離開輸入框才收斂。
-  const [qtyDraft, setQtyDraft] = useState<{ key: string; value: string } | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
   const [isPaid, setIsPaid] = useState(true)
 
@@ -873,6 +871,14 @@ export default function POSPage() {
   }
 
   const total = Math.max(0, subtotal - discountAmount)
+
+  // 折 $30 快捷鍵目前折了幾份。直接從折扣金額推導，不另外開 state，
+  // 這樣結帳後 / 切成百分比折扣時就會自動歸零，不用到處補重置。
+  const QUICK_DISCOUNT_UNIT = 30
+  const quick30Count =
+    discountType === 'amount' && discountValue > 0 && discountValue % QUICK_DISCOUNT_UNIT === 0
+      ? discountValue / QUICK_DISCOUNT_UNIT
+      : 0
 
   // 计算购物金抵扣（预览）
   const storeCreditUsed = useStoreCredit && selectedCustomer && selectedCustomer.store_credit > 0
@@ -2119,21 +2125,12 @@ export default function POSPage() {
                                     >
                                       −
                                     </button>
-                                    <input
-                                      type="number"
+                                    <NumberInput
                                       min="1"
-                                      value={qtyDraft?.key === `qty:${item.indices![0]}` ? qtyDraft.value : item.quantity}
-                                      onChange={(e) => {
-                                        const raw = e.target.value
-                                        setQtyDraft({ key: `qty:${item.indices![0]}`, value: raw })
-                                        const newQty = parseInt(raw, 10)
-                                        if (!isNaN(newQty) && newQty > 0) {
-                                          updateQuantity(item.indices![0], newQty)
-                                        }
-                                      }}
-                                      onFocus={(e) => e.currentTarget.select()}
-                                      onBlur={() => setQtyDraft(null)}
-                                      onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                                      decimal={false}
+                                      blurOnEnter
+                                      value={item.quantity}
+                                      onChange={(v) => { if (v > 0) updateQuantity(item.indices![0], v) }}
                                       className="w-8 h-6 text-center text-xs bg-slate-600 text-white border border-slate-500 rounded focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                     />
                                     <button
@@ -2198,30 +2195,14 @@ export default function POSPage() {
                                               >
                                                 −
                                               </button>
-                                              <input
-                                                type="number"
+                                              <NumberInput
                                                 min="0"
-                                                value={qtyDraft?.key === row.key ? qtyDraft.value : count}
-                                                onChange={(e) => {
-                                                  const raw = e.target.value
-                                                  setQtyDraft({ key: row.key, value: raw })
-                                                  const v = parseInt(raw, 10)
-                                                  // 打到一半可能是空字串或 0，先留在草稿裡，離開輸入框才收斂
-                                                  if (!isNaN(v) && v >= 1) {
-                                                    setIchibanPrizeQuantity(item.ichiban_kuji_id!, row.prizeId, v)
-                                                  }
-                                                }}
-                                                onFocus={(e) => e.currentTarget.select()}
-                                                onBlur={() => {
-                                                  if (qtyDraft?.key === row.key) {
-                                                    const v = parseInt(qtyDraft.value, 10)
-                                                    if (!isNaN(v) && v === 0) {
-                                                      setIchibanPrizeQuantity(item.ichiban_kuji_id!, row.prizeId, 0)
-                                                    }
-                                                  }
-                                                  setQtyDraft(null)
-                                                }}
-                                                onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                                                decimal={false}
+                                                blurOnEnter
+                                                value={count}
+                                                // 打字打到 0 不即時生效，不然整列會在打字途中消失
+                                                onChange={(v) => { if (v >= 1) setIchibanPrizeQuantity(item.ichiban_kuji_id!, row.prizeId, v) }}
+                                                onCommit={(v) => { if (v === 0) setIchibanPrizeQuantity(item.ichiban_kuji_id!, row.prizeId, 0) }}
                                                 className="w-10 h-6 text-center bg-slate-600 text-white border border-slate-500 rounded focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                               />
                                               <button
@@ -2310,23 +2291,18 @@ export default function POSPage() {
                     <div className="grid grid-cols-4 gap-2">
                       <button
                         onClick={() => {
-                          // 快捷：折 30 元，再按一次取消
-                          if (discountType === 'amount' && discountValue === 30) {
-                            setDiscountType('none')
-                            setDiscountValue(0)
-                          } else {
-                            setDiscountType('amount')
-                            setDiscountValue(30)
-                          }
+                          // 每按一次多折 30；要取消把下面的份數打成 0
+                          setDiscountValue(discountType === 'amount' ? discountValue + QUICK_DISCOUNT_UNIT : QUICK_DISCOUNT_UNIT)
+                          setDiscountType('amount')
                           setShowNoteInput(false)
                         }}
                         className={`py-2 rounded-lg font-bold text-xs border-2 transition-all ${
-                          discountType === 'amount' && discountValue === 30
+                          quick30Count > 0
                             ? 'bg-emerald-600 border-emerald-600 text-white shadow-md'
                             : 'bg-slate-700 border-emerald-700 text-emerald-300 hover:bg-slate-600'
                         }`}
                       >
-                        折 $30
+                        折 $30{quick30Count > 1 ? ` ×${quick30Count}` : ''}
                       </button>
                       <button
                         onClick={() => {
@@ -2368,11 +2344,29 @@ export default function POSPage() {
                         備註
                       </button>
                     </div>
+                    {quick30Count > 0 && (
+                      <div className="flex items-center gap-2 rounded-lg border-2 border-emerald-700 bg-slate-700/60 px-2 py-1.5">
+                        <span className="text-xs font-bold text-emerald-300 shrink-0">折 $30 ×</span>
+                        <NumberInput
+                          min="0"
+                          decimal={false}
+                          blurOnEnter
+                          value={quick30Count}
+                          // 打 0 不即時生效，不然這一列會在打字途中消失
+                          onChange={(v) => { if (v >= 1) { setDiscountType('amount'); setDiscountValue(v * QUICK_DISCOUNT_UNIT) } }}
+                          onCommit={(v) => { if (v === 0 || v === null) { setDiscountType('none'); setDiscountValue(0) } }}
+                          className="w-14 h-7 text-center font-bold text-sm bg-slate-600 text-white border-2 border-slate-500 rounded focus:border-emerald-400 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                        <span className="text-xs text-slate-400 shrink-0">
+                          = {formatCurrency(quick30Count * QUICK_DISCOUNT_UNIT)}
+                        </span>
+                      </div>
+                    )}
                     {(discountType === 'percent' || discountType === 'amount') && (
-                      <input
-                        type="number"
+                      <NumberInput
                         value={discountValue}
-                        onChange={(e) => setDiscountValue(parseFloat(e.target.value) || 0)}
+                        onChange={(v) => setDiscountValue(v)}
+                        emptyValue={0}
                         min="0"
                         max={discountType === 'percent' ? 100 : subtotal}
                         step={discountType === 'percent' ? 1 : 1}
