@@ -682,26 +682,36 @@ export default function POSPage() {
         (p: any) => p.remaining === p.quantity
       ) ?? false
 
-      // 開套優先級大於組合價：若 set 未抽過且有開套優惠，只套用開套優惠（不重複觸發組合價）
-      const regularCombos = group.kuji?.combo_prices || []
-      const openingCombos = isUntouched ? (group.kuji?.opening_combo_prices || []) : []
-      const comboPrices = (openingCombos.length > 0 ? openingCombos : regularCombos)
+      // 開套優惠只在「開套的那一組」生效，整張單最多套用一次；
+      // 剩下的抽數再走一般組合價（可重複），最後才用原價。
+      const regularCombos = [...(group.kuji?.combo_prices || [])]
+        .sort((a: any, b: any) => b.draws - a.draws)
+      const openingCombos = (isUntouched ? [...(group.kuji?.opening_combo_prices || [])] : [])
         .sort((a: any, b: any) => b.draws - a.draws)
       const originalPrice = group.kuji?.price || 0
 
-      if (comboPrices.length === 0) return
+      if (openingCombos.length === 0 && regularCombos.length === 0) return
 
-      // Greedy algorithm: use largest combo first, then smaller combos, then original price
       let remaining = totalCount
       let totalComboPrice = 0
-      let comboDrawsUsed = 0
       const priceBreakdown: { count: number; pricePerItem: number }[] = []
 
-      for (const combo of comboPrices) {
+      // 開套價：取抽數最大且抽得完的一組，只套用一次
+      const openingCombo = openingCombos.find((c: any) => c.draws <= remaining)
+      if (openingCombo) {
+        totalComboPrice += openingCombo.price
+        remaining -= openingCombo.draws
+        priceBreakdown.push({
+          count: openingCombo.draws,
+          pricePerItem: openingCombo.price / openingCombo.draws
+        })
+      }
+
+      // Greedy algorithm: use largest combo first, then smaller combos, then original price
+      for (const combo of regularCombos) {
         const sets = Math.floor(remaining / combo.draws)
         if (sets > 0) {
           totalComboPrice += sets * combo.price
-          comboDrawsUsed += sets * combo.draws
           remaining -= sets * combo.draws
           // Track price per item for this combo
           priceBreakdown.push({
