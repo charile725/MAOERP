@@ -97,6 +97,9 @@ const posProductsFetcher = async (url: string) => {
 export default function POSPage() {
   const [barcode, setBarcode] = useState('')
   const [cart, setCart] = useState<CartItem[]>([])
+  // 數量輸入框編輯中的原始字串。受控 input 直接綁數字的話，清空會變 NaN 被彈回原值，
+  // 就沒辦法把 1 刪掉改打 21。編輯中先存字串，離開輸入框才收斂。
+  const [qtyDraft, setQtyDraft] = useState<{ key: string; value: string } | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pending')
   const [isPaid, setIsPaid] = useState(false) // 待定付款方式預設為未收款
 
@@ -626,10 +629,8 @@ export default function POSPage() {
 
     let target = Math.floor(Number(newQty))
     if (!Number.isFinite(target) || target < 0) return
-    if (target > max) {
-      alert(`${prize?.prize_tier || '此賞別'} 只剩 ${max} 抽`)
-      target = max
-    }
+    // 打字過程中會一直觸發，所以超過上限靜默夾住就好，不跳 alert 搶焦點
+    if (target > max) target = max
 
     setCart((prev) => {
       const matched = prev.filter(isTarget)
@@ -1859,12 +1860,27 @@ export default function POSPage() {
                                         <input
                                           type="number"
                                           min="0"
-                                          value={count}
+                                          value={qtyDraft?.key === row.key ? qtyDraft.value : count}
                                           onChange={(e) => {
-                                            const v = parseInt(e.target.value, 10)
-                                            if (!isNaN(v)) setIchibanPrizeQuantity(item.ichiban_kuji_id!, row.prizeId, v)
+                                            const raw = e.target.value
+                                            setQtyDraft({ key: row.key, value: raw })
+                                            const v = parseInt(raw, 10)
+                                            // 打到一半可能是空字串或 0，先留在草稿裡，離開輸入框才收斂
+                                            if (!isNaN(v) && v >= 1) {
+                                              setIchibanPrizeQuantity(item.ichiban_kuji_id!, row.prizeId, v)
+                                            }
                                           }}
                                           onFocus={(e) => e.currentTarget.select()}
+                                          onBlur={() => {
+                                            if (qtyDraft?.key === row.key) {
+                                              const v = parseInt(qtyDraft.value, 10)
+                                              if (!isNaN(v) && v === 0) {
+                                                setIchibanPrizeQuantity(item.ichiban_kuji_id!, row.prizeId, 0)
+                                              }
+                                            }
+                                            setQtyDraft(null)
+                                          }}
+                                          onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
                                           className="w-11 h-6 text-center font-bold bg-slate-700 text-white border border-slate-600 rounded focus:outline-none focus:border-purple-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                         />
                                         <button
@@ -1907,13 +1923,18 @@ export default function POSPage() {
                             <input
                               type="number"
                               min="1"
-                              value={item.quantity}
+                              value={qtyDraft?.key === `qty:${item.indices![0]}` ? qtyDraft.value : item.quantity}
                               onChange={(e) => {
-                                const newQty = parseInt(e.target.value) || 1
-                                if (newQty > 0) {
+                                const raw = e.target.value
+                                setQtyDraft({ key: `qty:${item.indices![0]}`, value: raw })
+                                const newQty = parseInt(raw, 10)
+                                if (!isNaN(newQty) && newQty > 0) {
                                   updateQuantity(item.indices![0], newQty)
                                 }
                               }}
+                              onFocus={(e) => e.currentTarget.select()}
+                              onBlur={() => setQtyDraft(null)}
+                              onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
                               className="w-14 h-7 text-center font-bold text-sm text-black dark:text-gray-100 bg-gray-100 dark:bg-gray-700 border-2 border-gray-300 dark:border-gray-600 rounded focus:border-blue-500 dark:focus:border-blue-400 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             />
                             <button
