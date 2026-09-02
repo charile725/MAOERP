@@ -613,6 +613,50 @@ export default function POSPage() {
     )
   }
 
+  // 一番賞：同一賞別直接改抽數，不用重複點賞項按鈕。
+  // 一番賞每一抽是獨立的購物車項目（組合價要逐抽定價），所以這裡用增減項目來達成。
+  // 複選獎每個選項是唯一的，不走這條路。
+  const setIchibanPrizeQuantity = (kujiId: string, prizeId: string, newQty: number) => {
+    const isTarget = (i: CartItem) =>
+      i.ichiban_kuji_id === kujiId && i.ichiban_kuji_prize_id === prizeId && !i.selectionOptionId
+
+    const kuji = ichibanKujis.find((k: any) => k.id === kujiId)
+    const prize = kuji?.ichiban_kuji_prizes?.find((p: any) => p.id === prizeId)
+    const max = typeof prize?.remaining === 'number' ? prize.remaining : Infinity
+
+    let target = Math.floor(Number(newQty))
+    if (!Number.isFinite(target) || target < 0) return
+    if (target > max) {
+      alert(`${prize?.prize_tier || '此賞別'} 只剩 ${max} 抽`)
+      target = max
+    }
+
+    setCart((prev) => {
+      const matched = prev.filter(isTarget)
+      const current = matched.length
+      if (target === current) return prev
+
+      if (target < current) {
+        // 從後面往前移除多餘的抽數
+        let toRemove = current - target
+        const next: CartItem[] = []
+        for (let i = prev.length - 1; i >= 0; i--) {
+          if (toRemove > 0 && isTarget(prev[i])) {
+            toRemove--
+            continue
+          }
+          next.unshift(prev[i])
+        }
+        return next
+      }
+
+      const template = matched[0]
+      if (!template) return prev
+      const added = Array.from({ length: target - current }, () => ({ ...template }))
+      return [...prev, ...added]
+    })
+  }
+
   const toggleFreeGift = (index: number) => {
     setCart((prev) =>
       prev.map((item, i) => {
@@ -796,6 +840,25 @@ export default function POSPage() {
   }
 
   const cartWithComboPrice = applyComboPrice()
+
+  // 一番賞明細：把同一賞別的抽數合併成一列（複選獎每個選項唯一，各自一列）
+  const groupIchibanIndicesByPrize = (indices: number[]) => {
+    const rows: { key: string; prizeId: string; optionId?: string; indices: number[] }[] = []
+    const seen = new Map<string, number>()
+    indices.forEach((idx) => {
+      const ci = cart[idx]
+      if (!ci) return
+      const key = ci.selectionOptionId
+        ? `opt:${ci.selectionOptionId}`
+        : `prize:${ci.ichiban_kuji_prize_id}`
+      if (!seen.has(key)) {
+        seen.set(key, rows.length)
+        rows.push({ key, prizeId: ci.ichiban_kuji_prize_id || '', optionId: ci.selectionOptionId, indices: [] })
+      }
+      rows[seen.get(key)!].indices.push(idx)
+    })
+    return rows
+  }
 
   // Group ichiban items by kuji_id for display
   const displayCart: (CartItem & { groupedCount?: number, indices?: number[] })[] = []
@@ -1763,38 +1826,74 @@ export default function POSPage() {
                         </button>
                       </div>
 
-                      {/* Show details for grouped items */}
-                      {isGrouped && item.indices && (
-                        <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600 space-y-1">
-                          {item.indices.map((idx) => {
-                            const cartItem = cart[idx]
-                            const priceItem = cartWithComboPrice[idx]
-                            return (
-                              <div key={idx} className="flex items-center justify-between text-xs">
-                                <div className="flex-1 flex items-center gap-2">
-                                  <span className="text-purple-600 dark:text-purple-400 font-bold">
-                                    {cartItem.product.name.match(/】(.+?) -/)?.[1] || '賞'}
-                                  </span>
-                                  <span className="text-gray-600 dark:text-gray-400">
-                                    {cartItem.product.name.split(' - ')[1] || cartItem.product.name}
-                                  </span>
+                      {/* 一番賞明細：同賞別彙整成一列，可直接輸入抽數 */}
+                      {item.ichiban_kuji_id && item.indices && (() => {
+                        const prizeRows = groupIchibanIndicesByPrize(item.indices!)
+                        return (
+                          <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600 space-y-1">
+                            {prizeRows.map((row) => {
+                              const first = cart[row.indices[0]]
+                              const count = row.indices.length
+                              const sum = row.indices.reduce((s, idx) => s + cartWithComboPrice[idx].price, 0)
+                              return (
+                                <div key={row.key} className="flex items-center justify-between text-xs gap-2">
+                                  <div className="flex-1 min-w-0 flex items-center gap-2">
+                                    <span className="text-purple-600 dark:text-purple-400 font-bold shrink-0">
+                                      {first.product.name.match(/】(.+?) -/)?.[1] || '賞'}
+                                    </span>
+                                    <span className="text-gray-600 dark:text-gray-400 truncate">
+                                      {first.product.name.split(' - ')[1] || first.product.name}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    {row.optionId ? (
+                                      <span className="text-gray-500 dark:text-gray-500">× {count}</span>
+                                    ) : (
+                                      <div className="flex items-center gap-1">
+                                        <button
+                                          onClick={() => setIchibanPrizeQuantity(item.ichiban_kuji_id!, row.prizeId, count - 1)}
+                                          className="w-6 h-6 bg-slate-700 hover:bg-slate-600 rounded font-bold text-white"
+                                        >
+                                          −
+                                        </button>
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          value={count}
+                                          onChange={(e) => {
+                                            const v = parseInt(e.target.value, 10)
+                                            if (!isNaN(v)) setIchibanPrizeQuantity(item.ichiban_kuji_id!, row.prizeId, v)
+                                          }}
+                                          onFocus={(e) => e.currentTarget.select()}
+                                          className="w-11 h-6 text-center font-bold bg-slate-700 text-white border border-slate-600 rounded focus:outline-none focus:border-purple-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                        />
+                                        <button
+                                          onClick={() => setIchibanPrizeQuantity(item.ichiban_kuji_id!, row.prizeId, count + 1)}
+                                          className="w-6 h-6 bg-slate-700 hover:bg-slate-600 rounded font-bold text-white"
+                                        >
+                                          +
+                                        </button>
+                                      </div>
+                                    )}
+                                    <span className="text-gray-500 dark:text-gray-500 w-16 text-right">
+                                      {formatCurrency(sum)}
+                                    </span>
+                                    <button
+                                      onClick={() => {
+                                        const sorted = [...row.indices].sort((a, b) => b - a)
+                                        sorted.forEach((idx) => removeFromCart(cart[idx].product_id, idx))
+                                      }}
+                                      className="text-red-500 hover:text-red-700 font-bold"
+                                    >
+                                      ×
+                                    </button>
+                                  </div>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-gray-500 dark:text-gray-500">
-                                    {formatCurrency(priceItem.price)}
-                                  </span>
-                                  <button
-                                    onClick={() => removeFromCart(cartItem.product_id, idx)}
-                                    className="text-red-500 hover:text-red-700 font-bold"
-                                  >
-                                    ×
-                                  </button>
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )}
+                              )
+                            })}
+                          </div>
+                        )
+                      })()}
 
                       <div className="flex items-center justify-between mt-2">
                         {!item.ichiban_kuji_id ? (
@@ -1826,7 +1925,7 @@ export default function POSPage() {
                           </div>
                         ) : (
                           <div className="text-xs text-purple-600 dark:text-purple-400 font-bold">
-                            {item.groupedCount} 個賞項
+                            共 {item.quantity} 抽
                           </div>
                         )}
                         <div className="text-base font-bold text-black dark:text-gray-100">
@@ -2001,7 +2100,25 @@ export default function POSPage() {
               {/* Discount - Button Selection */}
               <div>
                 <label className="block font-bold mb-1.5 text-sm text-black dark:text-gray-100">折扣</label>
-                <div className="grid grid-cols-3 gap-2 mb-2">
+                <div className="grid grid-cols-4 gap-2 mb-2">
+                  <button
+                    onClick={() => {
+                      // 快捷：折 30 元，再按一次取消
+                      if (discountType === 'amount' && discountValue === 30) {
+                        setDiscountType('none')
+                        setDiscountValue(0)
+                      } else {
+                        setDiscountType('amount')
+                        setDiscountValue(30)
+                      }
+                    }}
+                    className={`py-2 rounded-lg font-bold text-sm border-2 transition-all ${discountType === 'amount' && discountValue === 30
+                      ? 'bg-emerald-500 border-emerald-700 text-white shadow-md'
+                      : 'bg-white dark:bg-gray-700 border-emerald-500 dark:border-emerald-600 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-gray-600'
+                      }`}
+                  >
+                    折 $30
+                  </button>
                   <button
                     onClick={() => {
                       setDiscountType('none')
