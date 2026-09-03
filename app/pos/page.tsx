@@ -880,6 +880,21 @@ export default function POSPage() {
       ? discountValue / QUICK_DISCOUNT_UNIT
       : 0
 
+  // 整筆免單 = 百分比折扣 100%。沿用既有的折扣型別，前後端算出來都剛好等於小計，
+  // 不必動 API schema 或資料表，歷史單也還原得回來。
+  const isFullComp = discountType === 'percent' && discountValue === 100
+  const toggleFullComp = () => {
+    if (isFullComp) {
+      setDiscountType('none')
+      setDiscountValue(0)
+      return
+    }
+    // 整單歸零影響金額大，誤觸的代價高，比照購物金折抵那邊先確認
+    if (subtotal > 0 && !confirm(`整筆免單：${formatCurrency(subtotal)} 全部不收，應收金額變成 $0。\n\n確定嗎？`)) return
+    setDiscountType('percent')
+    setDiscountValue(100)
+  }
+
   // 计算购物金抵扣（预览）
   const storeCreditUsed = useStoreCredit && selectedCustomer && selectedCustomer.store_credit > 0
     ? Math.min(selectedCustomer.store_credit, total)
@@ -2344,6 +2359,16 @@ export default function POSPage() {
                         備註
                       </button>
                     </div>
+                    <button
+                      onClick={() => { toggleFullComp(); setShowNoteInput(false) }}
+                      className={`w-full py-2 rounded-lg font-bold text-xs border-2 transition-all ${
+                        isFullComp
+                          ? 'bg-rose-600 border-rose-600 text-white shadow-md'
+                          : 'bg-slate-700 border-rose-700 text-rose-300 hover:bg-slate-600'
+                      }`}
+                    >
+                      {isFullComp ? '整筆免單中 · 點此取消' : '整筆免單'}
+                    </button>
                     {quick30Count > 0 && (
                       <div className="flex items-center gap-2 rounded-lg border-2 border-emerald-700 bg-slate-700/60 px-2 py-1.5">
                         <span className="text-xs font-bold text-emerald-300 shrink-0">折 $30 ×</span>
