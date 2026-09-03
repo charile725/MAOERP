@@ -70,6 +70,7 @@ export default function IchibanKujiPage() {
   const { mutate: globalMutate } = useSWRConfig()
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [reopening, setReopening] = useState<string | null>(null)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [typeFilter, setTypeFilter] = useState<'all' | 'custom' | 'official'>('all')
   const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'inactive'>('all')
@@ -207,6 +208,73 @@ export default function IchibanKujiPage() {
       }
     } catch (err) {
       alert('操作失敗')
+    }
+  }
+
+  // 開新套：以本套為範本建立一套全新的（賞項全滿），舊套與其銷售紀錄原封不動
+  const handleReopen = async (kuji: IchibanKuji) => {
+    const drawn = (kuji.ichiban_kuji_prizes || []).reduce(
+      (sum, p) => sum + (p.quantity - p.remaining), 0
+    )
+    const warnActive = kuji.is_active
+      ? `
+
+注意：「${kuji.name}」目前仍在啟用中，開完後收銀台會同時看到兩套（掃條碼會抓到新的這套）。`
+      : ''
+    const defaultName = await fetchNextSetName(kuji)
+    const name = prompt(
+      `以「${kuji.name}」為範本開一套全新的。
+
+`
+      + `新套所有賞項都是全新未抽（舊套已抽 ${drawn} 抽的紀錄不會被動到）。
+`
+      + `成本會依「目前的商品成本」重新計算。${warnActive}
+
+`
+      + `新套名稱：`,
+      defaultName
+    )
+    if (name === null) return
+    if (!name.trim()) { alert('名稱不能空白'); return }
+
+    setReopening(kuji.id)
+    try {
+      const res = await fetch(`/api/ichiban-kuji/${kuji.id}/reopen`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim() }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        alert(`已開新套：「${data.data.new_name}」，共 ${data.data.total_draws} 抽`)
+        mutate()
+      } else {
+        alert(data.error || '開新套失敗')
+      }
+    } catch {
+      alert('開新套失敗')
+    } finally {
+      setReopening(null)
+    }
+  }
+
+  // 預設名稱交給後端算（要看全部套組才知道現在到第幾套），拿不到就本地退而求其次
+  const fetchNextSetName = async (kuji: IchibanKuji) => {
+    const base = kuji.name.replace(/\s*[（(]\s*第\s*\d+\s*套\s*[)）]\s*$/, '').trim()
+    try {
+      const res = await fetch('/api/ichiban-kuji?all=true')
+      const data = await res.json()
+      const names: string[] = (data?.data || []).map((k: any) => k.name)
+      let maxSet = 0
+      for (const n of names) {
+        const t = (n || '').trim()
+        const m = t.match(/\s*[（(]\s*第\s*(\d+)\s*套\s*[)）]\s*$/)
+        if (t.replace(/\s*[（(]\s*第\s*\d+\s*套\s*[)）]\s*$/, '').trim() !== base) continue
+        maxSet = Math.max(maxSet, m ? parseInt(m[1], 10) : 1)
+      }
+      return `${base} (第${maxSet + 1}套)`
+    } catch {
+      return `${base} (第2套)`
     }
   }
 
@@ -518,6 +586,20 @@ export default function IchibanKujiPage() {
                                       className="block w-full text-left px-4 py-2 text-sm text-orange-600 dark:text-orange-400 hover:bg-gray-100 dark:hover:bg-gray-600"
                                     >
                                       廢套結算
+                                    </button>
+                                  )}
+                                  {/* 開新套（僅自製套）：以本套為範本開一套全新的 */}
+                                  {kuji.set_type === 'custom' && userRole === 'admin' && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        setOpenMenuId(null)
+                                        handleReopen(kuji)
+                                      }}
+                                      disabled={reopening === kuji.id}
+                                      className="block w-full text-left px-4 py-2 text-sm text-blue-600 dark:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-600 disabled:text-gray-400 disabled:cursor-not-allowed"
+                                    >
+                                      {reopening === kuji.id ? '開新套中…' : '開新套'}
                                     </button>
                                   )}
                                   {/* 復活（僅自製套 + 已停用） */}
