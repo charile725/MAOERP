@@ -217,17 +217,29 @@ export async function POST(request: NextRequest) {
         }
 
         // 寫入庫存日誌（批次 insert 優化，trigger 會自動扣除庫存）
-        const inventoryLogs = items.map((item: any) => ({
-          product_id: item.product_id,
-          ref_type: 'delivery',
-          ref_id: delivery.id,
-          qty_change: -item.requestedQty,
-          memo: `批量出貨 - ${delivery.delivery_no} (${item.snapshot_name} x${item.requestedQty})`
-        }))
+        // 官方套一番賞賞品沒有對應商品（product_id 為 null），必須先濾掉：
+        // 批次 insert 只要有一筆違反 NOT NULL，整批都會被退，
+        // 那張出貨單裡其他商品的庫存就全部不會扣。
+        const inventoryLogs = items
+          .filter((item: any) => !!item.product_id)
+          .map((item: any) => ({
+            product_id: item.product_id,
+            ref_type: 'delivery',
+            ref_id: delivery.id,
+            qty_change: -item.requestedQty,
+            memo: `批量出貨 - ${delivery.delivery_no} (${item.snapshot_name} x${item.requestedQty})`
+          }))
 
-        await (supabaseServer
-          .from('inventory_logs') as any)
-          .insert(inventoryLogs)
+        if (inventoryLogs.length > 0) {
+          const { error: invLogError } = await (supabaseServer
+            .from('inventory_logs') as any)
+            .insert(inventoryLogs)
+
+          if (invLogError) {
+            console.error(`[Batch Deliver] Failed to write inventory logs for delivery ${delivery.id}:`, invLogError)
+            deliveryErrors.push(`出貨單 ${delivery.delivery_no} 庫存扣除失敗: ${invLogError.message}`)
+          }
+        }
 
         // 更新 sale 的 fulfillment_status（考慮出貨和購物金轉換）
         const { data: allSaleItems } = await (supabaseServer

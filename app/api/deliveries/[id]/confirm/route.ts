@@ -62,8 +62,11 @@ export async function PATCH(
       )
     }
 
+    // 官方套一番賞的賞品沒有對應商品（product_id 為 null），不進庫存流程
+    const stockItems = delivery.delivery_items.filter((item: any) => !!item.product_id)
+
     // 檢查庫存是否足夠（批次查詢優化）
-    const productIds = delivery.delivery_items.map((item: any) => item.product_id)
+    const productIds = stockItems.map((item: any) => item.product_id)
     const { data: products } = await (supabaseServer
       .from('products') as any)
       .select('id, stock, allow_negative, name')
@@ -71,7 +74,7 @@ export async function PATCH(
 
     const productMap = new Map((products || []).map((p: any) => [p.id, p]))
 
-    for (const item of delivery.delivery_items) {
+    for (const item of stockItems) {
       const product = productMap.get(item.product_id)
 
       if (!product) {
@@ -86,7 +89,7 @@ export async function PATCH(
     }
 
     // 扣庫存：批次寫入 inventory_logs（trigger 會自動更新 products.stock）
-    const inventoryLogs = delivery.delivery_items.map((item: any) => ({
+    const inventoryLogs = stockItems.map((item: any) => ({
       product_id: item.product_id,
       ref_type: 'delivery',
       ref_id: id,
@@ -94,9 +97,11 @@ export async function PATCH(
       memo: `出貨扣庫存 - ${delivery.delivery_no}`,
     }))
 
-    await (supabaseServer
-      .from('inventory_logs') as any)
-      .insert(inventoryLogs)
+    if (inventoryLogs.length > 0) {
+      await (supabaseServer
+        .from('inventory_logs') as any)
+        .insert(inventoryLogs)
+    }
 
     // 更新出貨單狀態
     const { data: confirmedDelivery, error: updateError } = await (supabaseServer

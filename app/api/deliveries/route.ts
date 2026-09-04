@@ -175,7 +175,9 @@ export async function POST(request: NextRequest) {
 
       if (!existingLogs || existingLogs.length === 0) {
         // 寫入庫存日誌（trigger 會自動更新 products.stock）
+        // 官方套一番賞賞品沒有對應商品（product_id 為 null），跳過
         for (const item of items) {
+          if (!item.product_id) continue
           await (supabaseServer
             .from('inventory_logs') as any)
             .insert({

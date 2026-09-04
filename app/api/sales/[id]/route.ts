@@ -546,22 +546,33 @@ export async function DELETE(
     for (const delivery of deliveries || []) {
       // 只有 confirmed 的 delivery 才有扣庫存，才需要回補
       if (delivery.status === 'confirmed' && !skipInventoryRestore) {
-        // 獲取該出貨單的所有庫存扣除記錄
+        // 獲取該出貨單的所有庫存異動記錄
+        // delivery_return 是撤銷出貨時已經回補過的正數日誌，必須一起算淨額，
+        // 否則那些數量會被回補第二次。
         const { data: inventoryLogs } = await (supabaseServer
           .from('inventory_logs') as any)
           .select('product_id, qty_change')
-          .eq('ref_type', 'delivery')
+          .in('ref_type', ['delivery', 'delivery_return'])
           .eq('ref_id', delivery.id.toString())
 
-        // 反向插入庫存日誌來回補庫存（trigger 會自動處理）
+        const netByProduct = new Map<string, number>()
         for (const log of inventoryLogs || []) {
+          netByProduct.set(
+            log.product_id,
+            (netByProduct.get(log.product_id) || 0) + log.qty_change
+          )
+        }
+
+        // 反向插入庫存日誌來回補庫存（trigger 會自動處理）
+        for (const [productId, netChange] of netByProduct) {
+          if (netChange === 0) continue
           await (supabaseServer
             .from('inventory_logs') as any)
             .insert({
-              product_id: log.product_id,
+              product_id: productId,
               ref_type: 'sale_delete',
               ref_id: id.toString(),
-              qty_change: -log.qty_change, // 反向數量（原本是負數，現在變正數）
+              qty_change: -netChange, // 反向數量（原本是負數，現在變正數）
               memo: `刪除銷售單 ${sale.sale_no}，回補庫存（原出貨單：${delivery.delivery_no}）`,
             })
         }
@@ -570,7 +581,7 @@ export async function DELETE(
         await (supabaseServer
           .from('inventory_logs') as any)
           .delete()
-          .eq('ref_type', 'delivery')
+          .in('ref_type', ['delivery', 'delivery_return'])
           .eq('ref_id', delivery.id.toString())
       }
 

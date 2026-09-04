@@ -131,7 +131,31 @@ export async function POST(
                 .eq('status', 'confirmed')
 
             if (deliveries && deliveries.length > 0) {
+                // 只回補「實際已出貨」的數量。部分出貨的訂單裡未出貨的品項從來沒扣過庫存，
+                // 照 sale_items.quantity 全部回補會憑空生出庫存。
+                const { data: confirmedDeliveryItems } = await (supabaseServer
+                    .from('delivery_items') as any)
+                    .select('sale_item_id, quantity')
+                    .in('delivery_id', deliveries.map((d: any) => d.id))
+
+                const deliveredQtyByItem = new Map<string, number>()
+                for (const di of confirmedDeliveryItems || []) {
+                    deliveredQtyByItem.set(
+                        di.sale_item_id,
+                        (deliveredQtyByItem.get(di.sale_item_id) || 0) + di.quantity
+                    )
+                }
+
                 for (const item of sale.sale_items) {
+                    // 官方套一番賞賞品沒有對應商品，不進庫存
+                    if (!item.product_id) continue
+
+                    const restoreQty = Math.min(
+                        item.quantity,
+                        deliveredQtyByItem.get(item.id) || 0
+                    )
+                    if (restoreQty <= 0) continue
+
                     // 回補庫存
                     const { error: logError } = await (supabaseServer
                         .from('inventory_logs') as any)
@@ -139,14 +163,15 @@ export async function POST(
                             product_id: item.product_id,
                             ref_type: 'adjustment',
                             ref_id: id,
-                            qty_change: item.quantity,
-                            memo: `銷貨轉購物金回補 - ${sale.sale_no}（${item.snapshot_name} x${item.quantity}）`,
+                            qty_change: restoreQty,
+                            memo: `銷貨轉購物金回補 - ${sale.sale_no}（${item.snapshot_name} x${restoreQty}）`,
                         })
 
                     if (logError) {
                         console.error('[To Store Credit] Failed to insert inventory_log:', logError)
+                        continue
                     }
-                    inventoryRestored += item.quantity
+                    inventoryRestored += restoreQty
                 }
             }
         }

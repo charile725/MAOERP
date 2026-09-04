@@ -1138,21 +1138,6 @@ export async function POST(request: NextRequest) {
           { status: 500 }
         )
       }
-
-      // 扣庫存（只扣已出貨的品項）
-      for (const { saleItem, draftItem } of deliveredItems) {
-        if (!draftItem.ichiban_kuji_prize_id) {
-          await (supabaseServer
-            .from('inventory_logs') as any)
-            .insert({
-              product_id: draftItem.product_id,
-              ref_type: 'delivery',
-              ref_id: delivery.id,
-              qty_change: -draftItem.quantity,
-              memo: `出貨扣庫存 - ${delivery.delivery_no}`,
-            })
-        }
-      }
     }
 
     // 8b. 創建未出貨的出貨單（如果有未出貨品項）
@@ -1200,6 +1185,33 @@ export async function POST(request: NextRequest) {
           { ok: false, error: deliveryItemsError.message },
           { status: 500 }
         )
+      }
+    }
+
+    // 扣庫存（只扣已出貨的品項）
+    // 自製一番賞的賞品（含複選獎）有對應的實體商品，一樣要扣庫存；
+    // 只有官方套賞品沒有商品（product_id 為 null）才跳過。
+    // 放在兩張出貨單都建好之後才寫：中途失敗回滾時只刪 sale/delivery，
+    // 若庫存日誌已寫入就會變成庫存白扣。
+    if (confirmedDelivery) {
+      const stockLogs = deliveredItems
+        .filter(({ saleItem }) => !!saleItem.product_id)
+        .map(({ saleItem }) => ({
+          product_id: saleItem.product_id,
+          ref_type: 'delivery',
+          ref_id: confirmedDelivery.id,
+          qty_change: -saleItem.quantity,
+          memo: `出貨扣庫存 - ${confirmedDelivery.delivery_no}`,
+        }))
+
+      if (stockLogs.length > 0) {
+        const { error: stockLogError } = await (supabaseServer
+          .from('inventory_logs') as any)
+          .insert(stockLogs)
+
+        if (stockLogError) {
+          console.error(`[Sales API] Failed to write inventory logs for delivery ${confirmedDelivery.id}:`, stockLogError)
+        }
       }
     }
 

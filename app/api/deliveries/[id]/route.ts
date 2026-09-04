@@ -68,7 +68,7 @@ export async function DELETE(
     // 獲取出貨單資訊
     const { data: delivery, error: fetchError } = await (supabaseServer
       .from('deliveries') as any)
-      .select('status, sale_id, delivery_items(product_id, quantity)')
+      .select('status, sale_id, delivery_no, delivery_items(product_id, quantity)')
       .eq('id', id)
       .single()
 
@@ -82,26 +82,45 @@ export async function DELETE(
     // 如果已確認，需要回補庫存
     if (delivery.status === 'confirmed') {
       // 檢查是否有庫存記錄
+      // delivery_return 是撤銷出貨時已經回補過的正數日誌，要一起算淨額，
+      // 否則那些數量會被回補第二次。
       const { data: logs } = await (supabaseServer
         .from('inventory_logs') as any)
         .select('product_id, qty_change')
-        .eq('ref_type', 'delivery')
+        .in('ref_type', ['delivery', 'delivery_return'])
         .eq('ref_id', id)
 
       if (logs && logs.length > 0) {
-        // 回補庫存
+        const netByProduct = new Map<string, number>()
         for (const log of logs) {
-          const { data: product } = await (supabaseServer
-            .from('products') as any)
-            .select('stock')
-            .eq('id', log.product_id)
-            .single()
+          netByProduct.set(
+            log.product_id,
+            (netByProduct.get(log.product_id) || 0) + log.qty_change
+          )
+        }
 
-          if (product) {
-            await (supabaseServer
-              .from('products') as any)
-              .update({ stock: product.stock - log.qty_change }) // qty_change 是負數，所以用減法
-              .eq('id', log.product_id)
+        // 回補庫存：寫反向日誌讓 trigger 更新 products.stock，
+        // 不直接寫 products.stock（那會繞過稽核軌跡，也跟 trigger 搶同一個欄位）
+        const restoreLogs = [...netByProduct]
+          .filter(([, netChange]) => netChange !== 0)
+          .map(([productId, netChange]) => ({
+            product_id: productId,
+            ref_type: 'delivery_delete',
+            ref_id: id,
+            qty_change: -netChange, // qty_change 是負數，反向後為正
+            memo: `刪除出貨單回補庫存 - ${delivery.delivery_no || id}`,
+          }))
+
+        if (restoreLogs.length > 0) {
+          const { error: restoreError } = await (supabaseServer
+            .from('inventory_logs') as any)
+            .insert(restoreLogs)
+
+          if (restoreError) {
+            return NextResponse.json(
+              { ok: false, error: `回補庫存失敗：${restoreError.message}` },
+              { status: 500 }
+            )
           }
         }
 
@@ -109,7 +128,7 @@ export async function DELETE(
         await (supabaseServer
           .from('inventory_logs') as any)
           .delete()
-          .eq('ref_type', 'delivery')
+          .in('ref_type', ['delivery', 'delivery_return'])
           .eq('ref_id', id)
       }
 

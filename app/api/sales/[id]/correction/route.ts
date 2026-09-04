@@ -70,11 +70,20 @@ export async function POST(
 
         const originalTotal = sale.total
         const originalItems = sale.sale_items || []
+        const originalItemSubtotal = originalItems.reduce(
+            (sum: number, item: { quantity: number; price: number }) => sum + ((item.quantity * item.price) || 0),
+            0
+        )
+        // 新版訂單把整筆加價併入 sales.subtotal；sale_items 仍只有商品金額，
+        // 因此兩者差額就是需在更正後保留的加價。舊訂單的差額自然為 0。
+        const existingSurcharge = Math.max(0, (sale.subtotal || 0) - originalItemSubtotal)
 
         // 2. 處理每個更正項目
         const adjustedItems: any[] = []
-        let inventoryChanges: { product_id: string; qty_change: number; product_name: string }[] = []
-        let newSubtotal = 0
+        // 實際回補多少要等查到「每個品項已出貨多少」才能算，這裡先記下候選品項
+        let inventoryChanges: { sale_item_id: string; product_id: string; new_quantity: number; product_name: string }[] = []
+        let inventoryRestoredTotal = 0
+        let newItemSubtotal = 0
 
         for (const adjustment of items) {
             const originalItem = originalItems.find((item: any) => item.id === adjustment.sale_item_id)
@@ -101,17 +110,20 @@ export async function POST(
                 qty_change: qtyDiff,
             })
 
-            if (qtyDiff !== 0) {
+            // 數量增加不動庫存（新增的量等實際出貨時才扣）
+            // 官方套一番賞賞品沒有 product_id，不進庫存回補
+            if (qtyDiff > 0 && originalItem.product_id) {
                 inventoryChanges.push({
+                    sale_item_id: adjustment.sale_item_id,
                     product_id: originalItem.product_id,
-                    qty_change: qtyDiff, // 正數 = 回補庫存
+                    new_quantity: newQty,
                     product_name: originalItem.snapshot_name,
                 })
             }
 
             // 計算新小計
             if (newQty > 0) {
-                newSubtotal += newQty * newPrice
+                newItemSubtotal += newQty * newPrice
             }
         }
 
@@ -119,23 +131,34 @@ export async function POST(
         for (const item of originalItems) {
             const wasAdjusted = items.some(adj => adj.sale_item_id === item.id)
             if (!wasAdjusted) {
-                newSubtotal += (item.quantity * item.price) || 0  // Fix: 使用 quantity * price 而非 item.subtotal
+                newItemSubtotal += (item.quantity * item.price) || 0  // Fix: 使用 quantity * price 而非 item.subtotal
             }
         }
 
-        // 重新計算折扣和購物金（Bug fix: 原本直接用 newSubtotal 當 total，漏扣購物金/折扣）
+        const hasRemainingItems = originalItems.some((item: any) => {
+            const adjustment = items.find(adj => adj.sale_item_id === item.id)
+            return (adjustment?.new_quantity ?? item.quantity) > 0
+        })
+        // 商品全數移除代表整筆訂單已取消，訂單層級加價也一併取消；
+        // 否則未付款訂單會留下金額，卻沒有任何品項可掛應收帳款。
+        const retainedSurcharge = hasRemainingItems ? existingSurcharge : 0
+
+        // 折扣只套用商品；既有整筆加價不參與折扣，並在更正後原額保留。
         let newDiscountAmount = 0
         if (sale.discount_type === 'percent') {
-            newDiscountAmount = Math.round((newSubtotal * (sale.discount_value || 0)) / 100)
+            newDiscountAmount = Math.round((newItemSubtotal * (sale.discount_value || 0)) / 100)
         } else if (sale.discount_type === 'amount') {
-            newDiscountAmount = Math.min(sale.discount_amount || 0, newSubtotal)
+            newDiscountAmount = Math.min(sale.discount_amount || 0, newItemSubtotal)
         }
+        newDiscountAmount = Math.min(newItemSubtotal, Math.max(0, newDiscountAmount))
 
+        const newSubtotal = newItemSubtotal + retainedSurcharge
+        const newChargeableTotal = Math.max(0, newItemSubtotal - newDiscountAmount) + retainedSurcharge
         const newStoreCreditUsed = Math.min(
             sale.store_credit_used || 0,
-            Math.max(0, newSubtotal - newDiscountAmount)
+            newChargeableTotal
         )
-        const newFinalTotal = Math.max(0, newSubtotal - newDiscountAmount - newStoreCreditUsed)
+        const newFinalTotal = Math.max(0, newChargeableTotal - newStoreCreditUsed)
         const adjustmentAmount = originalTotal - newFinalTotal // 正數 = 退款
 
         // 3. 獲取相關的出貨單（用於確認是否已出貨）
@@ -153,28 +176,48 @@ export async function POST(
         console.log('[Sale Correction] inventoryChanges:', inventoryChanges)
 
         if (hasConfirmedDelivery && inventoryChanges.length > 0) {
+            // 回補量必須以「實際已出貨數量」為準，跟下面 5.5 調整 delivery_items 的量一致。
+            // 部分出貨的品項，未出貨的那部分從來沒扣過庫存，照 quantity 差額回補會多生庫存。
+            const { data: confirmedDeliveryItems } = await (supabaseServer
+                .from('delivery_items') as any)
+                .select('sale_item_id, quantity, deliveries!inner(status)')
+                .in('sale_item_id', inventoryChanges.map(c => c.sale_item_id))
+                .eq('deliveries.status', 'confirmed')
+
+            const deliveredQtyByItem = new Map<string, number>()
+            for (const di of confirmedDeliveryItems || []) {
+                deliveredQtyByItem.set(
+                    di.sale_item_id,
+                    (deliveredQtyByItem.get(di.sale_item_id) || 0) + di.quantity
+                )
+            }
+
             for (const change of inventoryChanges) {
                 console.log('[Sale Correction] Processing inventory change:', change)
-                if (change.qty_change > 0) {
-                    // 數量減少 → 回補庫存
-                    const { error: logError } = await (supabaseServer
-                        .from('inventory_logs') as any)
-                        .insert({
-                            product_id: change.product_id,
-                            ref_type: 'adjustment',
-                            ref_id: id,
-                            qty_change: change.qty_change,
-                            memo: `銷貨更正回補 - ${sale.sale_no}（${change.product_name} x${change.qty_change}）`,
-                        })
 
-                    if (logError) {
-                        console.error('[Sale Correction] Failed to insert inventory_log:', logError)
-                    } else {
-                        console.log('[Sale Correction] Successfully inserted inventory_log for', change.product_name)
-                    }
+                const delivered = deliveredQtyByItem.get(change.sale_item_id) || 0
+                const restoreQty = delivered - Math.min(delivered, change.new_quantity)
+                if (restoreQty <= 0) {
+                    console.log('[Sale Correction] Nothing delivered to restore for', change.product_name)
+                    continue
                 }
-                // 數量增加 (qty_change < 0) 時不做任何庫存操作
-                // 新增的數量會顯示為「未出貨」，等實際出貨時才會扣庫存
+
+                const { error: logError } = await (supabaseServer
+                    .from('inventory_logs') as any)
+                    .insert({
+                        product_id: change.product_id,
+                        ref_type: 'adjustment',
+                        ref_id: id,
+                        qty_change: restoreQty,
+                        memo: `銷貨更正回補 - ${sale.sale_no}（${change.product_name} x${restoreQty}）`,
+                    })
+
+                if (logError) {
+                    console.error('[Sale Correction] Failed to insert inventory_log:', logError)
+                } else {
+                    inventoryRestoredTotal += restoreQty
+                    console.log('[Sale Correction] Successfully inserted inventory_log for', change.product_name)
+                }
             }
         } else {
             console.log('[Sale Correction] Skipping inventory restoration - hasConfirmedDelivery:', hasConfirmedDelivery, 'inventoryChanges.length:', inventoryChanges.length)
@@ -367,7 +410,9 @@ export async function POST(
         }
 
         // 7. 調整應收帳款（如果未付款）
-        if (!sale.is_paid && sale.customer_code && adjustmentAmount !== 0) {
+        // 即使應收總額沒變（例如 100% 免單只收固定加價），品項更正也可能
+        // 讓原本掛載 AR 的 sale_item 被刪除，因此未付款單一律重新對齊 AR。
+        if (!sale.is_paid && sale.customer_code) {
             // 獲取相關 AR 記錄
             const { data: arRecords } = await (supabaseServer
                 .from('partner_accounts') as any)
@@ -386,10 +431,21 @@ export async function POST(
                     (sum: number, item: any) => sum + ((item.quantity * item.price) || 0), 0  // Fix: 使用 quantity * price
                 )
 
-                // 刪除已被移除品項的 AR
                 const currentItemIds = new Set((currentItems || []).map((item: any) => item.id))
+                const remainingARs = arRecords.filter(
+                    (ar: any) => !ar.sale_item_id || currentItemIds.has(ar.sale_item_id)
+                )
+
+                // 若原本唯一有金額的 AR 剛好掛在被刪品項，但訂單仍有其他品項與加價，
+                // 保留一筆並改掛到目前第一個品項，避免應收憑空消失。
+                const fallbackItemId = (currentItems || [])[0]?.id
+                const fallbackAR = remainingARs.length === 0 && newFinalTotal > 0 && fallbackItemId
+                    ? { ...arRecords[0], sale_item_id: fallbackItemId }
+                    : null
+
+                // 刪除已被移除品項的 AR（被選作 fallback 的那筆除外）
                 for (const ar of arRecords) {
-                    if (ar.sale_item_id && !currentItemIds.has(ar.sale_item_id)) {
+                    if (ar.id !== fallbackAR?.id && ar.sale_item_id && !currentItemIds.has(ar.sale_item_id)) {
                         await (supabaseServer
                             .from('partner_accounts') as any)
                             .delete()
@@ -398,18 +454,16 @@ export async function POST(
                 }
 
                 // 按比例重算剩餘的 AR（用 newFinalTotal 分配，而非全額）
-                const remainingARs = arRecords.filter(
-                    (ar: any) => !ar.sale_item_id || currentItemIds.has(ar.sale_item_id)
-                )
+                const targetARs = fallbackAR ? [fallbackAR] : remainingARs
                 let arRemainingAmount = newFinalTotal
 
-                for (let i = 0; i < remainingARs.length; i++) {
-                    const ar = remainingARs[i]
+                for (let i = 0; i < targetARs.length; i++) {
+                    const ar = targetARs[i]
                     const item = (currentItems || []).find((item: any) => item.id === ar.sale_item_id)
                     const itemSubtotal = item ? (item.quantity * item.price) || 0 : 0  // Fix: 使用 quantity * price
 
                     let newAmount: number
-                    if (i === remainingARs.length - 1) {
+                    if (i === targetARs.length - 1) {
                         newAmount = Math.max(0, arRemainingAmount)
                     } else {
                         newAmount = currentTotalSubtotal > 0
@@ -431,6 +485,7 @@ export async function POST(
                             .from('partner_accounts') as any)
                             .update({
                                 amount: newAmount,
+                                sale_item_id: ar.sale_item_id || null,
                                 status: newStatus,
                                 note: `銷貨更正調整 - 原 ${sale.sale_no}`,
                             })
@@ -530,7 +585,7 @@ export async function POST(
                 corrected_total: newFinalTotal,
                 adjustment_amount: adjustmentAmount,
                 items_adjusted: adjustedItems.length,
-                inventory_restored: inventoryChanges.filter(c => c.qty_change > 0).reduce((sum, c) => sum + c.qty_change, 0),
+                inventory_restored: inventoryRestoredTotal,
             }
         })
     } catch (error) {
