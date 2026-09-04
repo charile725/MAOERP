@@ -118,6 +118,19 @@ type Sale = {
   } | null
 }
 
+// 整筆加價不另存 DB 欄位：新版 sales.subtotal = 商品明細合計 + 加價。
+// 舊訂單的兩者相等，因此同一套推導會自然得到 0。
+const getSalePricingBreakdown = (sale: Sale) => {
+  const itemSubtotal = (sale.sale_items || []).reduce(
+    (sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0),
+    0
+  )
+  const recordedSubtotal = sale.subtotal == null ? itemSubtotal : Number(sale.subtotal)
+  const surchargeAmount = Math.max(0, recordedSubtotal - itemSubtotal)
+
+  return { itemSubtotal, surchargeAmount }
+}
+
 type CustomerGroup = {
   customer_code: string | null
   customer_name: string
@@ -1427,8 +1440,11 @@ export default function SalesPage() {
                       // 數據已經是服務器端分頁過的，直接使用
                       const paginatedSales = customerGroups[0]?.sales || []
 
-                      return paginatedSales.map((sale) => (
-                        <React.Fragment key={sale.id}>
+                      return paginatedSales.map((sale) => {
+                        const pricing = getSalePricingBreakdown(sale)
+
+                        return (
+                          <React.Fragment key={sale.id}>
                           <tr
                             className="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
                             onClick={() => toggleSale(sale.id)}
@@ -1462,6 +1478,11 @@ export default function SalesPage() {
                               {(sale.discount_amount || 0) > 0 && (
                                 <div className="text-xs text-orange-600 dark:text-orange-400">
                                   折扣 -{formatCurrency(sale.discount_amount || 0)}
+                                </div>
+                              )}
+                              {pricing.surchargeAmount > 0 && (
+                                <div className="text-xs text-indigo-600 dark:text-indigo-400">
+                                  加價 +{formatCurrency(pricing.surchargeAmount)}
                                 </div>
                               )}
                             </td>
@@ -1556,6 +1577,8 @@ export default function SalesPage() {
                                         is_paid: sale.is_paid,
                                         total: sale.total,
                                         discount_amount: sale.discount_amount || 0,
+                                        surcharge_amount: pricing.surchargeAmount,
+                                        store_credit_used: sale.store_credit_used || 0,
                                         items,
                                       }),
                                     })
@@ -1714,17 +1737,23 @@ export default function SalesPage() {
                                   </table>
 
                                   {/* 合計摘要 */}
-                                  {((sale.store_credit_used || 0) > 0 || (sale.discount_amount || 0) > 0) && (
+                                  {((sale.store_credit_used || 0) > 0 || (sale.discount_amount || 0) > 0 || pricing.surchargeAmount > 0) && (
                                     <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
                                       <div className="flex flex-col items-end gap-1 text-sm">
                                         <div className="flex justify-between w-48">
                                           <span className="text-gray-500 dark:text-gray-400">商品小計</span>
-                                          <span className="text-gray-900 dark:text-gray-100">{formatCurrency(sale.subtotal || sale.sale_items?.reduce((sum, item) => sum + item.price * item.quantity, 0) || 0)}</span>
+                                          <span className="text-gray-900 dark:text-gray-100">{formatCurrency(pricing.itemSubtotal)}</span>
                                         </div>
                                         {(sale.discount_amount || 0) > 0 && (
                                           <div className="flex justify-between w-48">
                                             <span className="text-orange-600 dark:text-orange-400">折扣</span>
                                             <span className="text-orange-600 dark:text-orange-400">-{formatCurrency(sale.discount_amount || 0)}</span>
+                                          </div>
+                                        )}
+                                        {pricing.surchargeAmount > 0 && (
+                                          <div className="flex justify-between w-48">
+                                            <span className="text-indigo-600 dark:text-indigo-400">加價</span>
+                                            <span className="text-indigo-600 dark:text-indigo-400">+{formatCurrency(pricing.surchargeAmount)}</span>
                                           </div>
                                         )}
                                         {(sale.store_credit_used || 0) > 0 && (
@@ -1744,8 +1773,9 @@ export default function SalesPage() {
                               </td>
                             </tr>
                           )}
-                        </React.Fragment>
-                      ))
+                          </React.Fragment>
+                        )
+                      })
                     })()}
                   </tbody>
                 </table>

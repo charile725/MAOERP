@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     // Fetch sale
     const { data: sale, error: saleError } = await (supabaseServer
       .from('sales') as any)
-      .select('id, sale_no, created_at, payment_method, is_paid, total, discount_amount')
+      .select('id, sale_no, created_at, payment_method, is_paid, subtotal, total, discount_amount, store_credit_used')
       .eq('id', sale_id)
       .single()
 
@@ -57,6 +57,22 @@ export async function POST(request: NextRequest) {
     if (itemsError) {
       return NextResponse.json({ ok: false, error: itemsError.message }, { status: 500 })
     }
+
+    // 新版訂單把整筆加價併入 sales.subtotal，但 sale_items 仍只記商品金額。
+    // 兩者差額就是加價；舊訂單兩者相等，所以自然會得到 0。
+    const itemSubtotal = (items || []).reduce(
+      (sum: number, item: { price: number | null; quantity: number | null }) =>
+        sum + Number(item.price || 0) * Number(item.quantity || 0),
+      0
+    )
+    const recordedSubtotal = sale.subtotal == null ? itemSubtotal : Number(sale.subtotal)
+    const surchargeAmount = Math.max(0, recordedSubtotal - itemSubtotal)
+    const storeCreditUsed = Math.max(0, Number(sale.store_credit_used) || 0)
+    const impliedDiscount = Math.max(
+      0,
+      itemSubtotal + surchargeAmount - storeCreditUsed - (Number(sale.total) || 0)
+    )
+    const discountAmount = Math.max(0, Number(sale.discount_amount) || 0, impliedDiscount)
 
     // Resolve payment label (try accounts table first, fall back to mapping)
     let paymentLabel = PAYMENT_LABELS[sale.payment_method] || sale.payment_method
@@ -77,7 +93,9 @@ export async function POST(request: NextRequest) {
       payment_label: paymentLabel,
       is_paid: sale.is_paid,
       total: sale.total,
-      discount_amount: sale.discount_amount || 0,
+      discount_amount: discountAmount,
+      surcharge_amount: surchargeAmount,
+      store_credit_used: storeCreditUsed,
       items: items || [],
     })
 

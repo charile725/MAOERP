@@ -30,6 +30,7 @@ type CartItem = SaleItem & {
   selectionOptionId?: string  // 複選獎：選中的選項ID
   isFreeGift?: boolean
   isNotDelivered?: boolean
+  orderSurchargeAmount?: number // 暫存單 JSON 第一筆用來保存整單加價
 }
 
 type Customer = {
@@ -109,6 +110,7 @@ export default function POSPage() {
   const [showQuickAdd, setShowQuickAdd] = useState(false)
   const [discountType, setDiscountType] = useState<'none' | 'percent' | 'amount'>('none')
   const [discountValue, setDiscountValue] = useState(0)
+  const [surchargeAmount, setSurchargeAmount] = useState(0)
   const [receivedAmount, setReceivedAmount] = useState('')
   const barcodeInputRef = useRef<HTMLInputElement>(null)
 
@@ -869,8 +871,11 @@ export default function POSPage() {
   } else if (discountType === 'amount') {
     discountAmount = discountValue
   }
+  discountAmount = Math.min(subtotal, Math.max(0, discountAmount))
 
-  const total = Math.max(0, subtotal - discountAmount)
+  // 加價是整筆訂單層級的額外收費，不參與折扣計算。
+  // 因此即使整筆免單，仍可只收這筆加價。
+  const total = Math.max(0, subtotal - discountAmount) + surchargeAmount
 
   // 折 $30 快捷鍵目前折了幾份。直接從折扣金額推導，不另外開 state，
   // 這樣結帳後 / 切成百分比折扣時就會自動歸零，不用到處補重置。
@@ -890,7 +895,10 @@ export default function POSPage() {
       return
     }
     // 整單歸零影響金額大，誤觸的代價高，比照購物金折抵那邊先確認
-    if (subtotal > 0 && !confirm(`整筆免單：${formatCurrency(subtotal)} 全部不收，應收金額變成 $0。\n\n確定嗎？`)) return
+    const resultText = surchargeAmount > 0
+      ? `商品金額全部不收，但加價 ${formatCurrency(surchargeAmount)} 仍會計入應收。`
+      : '商品金額全部不收，應收金額變成 $0。'
+    if (subtotal > 0 && !confirm(`整筆免單：${formatCurrency(subtotal)}。${resultText}\n\n確定嗎？`)) return
     setDiscountType('percent')
     setDiscountValue(100)
   }
@@ -998,6 +1006,7 @@ export default function POSPage() {
           note: note || undefined,
           discount_type: discountType,
           discount_value: discountValue,
+          surcharge_amount: surchargeAmount,
           // 多元付款：傳送 payments 陣列
           payments: isMultiPayment && isPaid
             ? multiPayments
@@ -1029,6 +1038,7 @@ export default function POSPage() {
         setNote('')
         setDiscountType('none')
         setDiscountValue(0)
+        setSurchargeAmount(0)
         setReceivedAmount('')
         setUseStoreCredit(true)
         // 重置多元付款
@@ -1067,6 +1077,8 @@ export default function POSPage() {
                 is_paid: isPaid,
                 total: finalTotal,
                 discount_amount: discountAmount,
+                surcharge_amount: surchargeAmount,
+                store_credit_used: storeCreditUsed,
                 received: paymentMethod === 'cash' ? received : finalTotal,
                 change: paymentMethod === 'cash' ? change : 0,
                 items: checkoutCart.map(item => ({
@@ -1122,7 +1134,7 @@ export default function POSPage() {
           note: note || null,
           discount_type: discountType,
           discount_value: discountValue,
-          items: draftCart.map((item) => ({
+          items: draftCart.map((item, index) => ({
             product_id: item.ichiban_kuji_prize_id ? (item.realProductId ?? null) : item.product_id,
             quantity: item.quantity,
             price: item.price,
@@ -1132,6 +1144,7 @@ export default function POSPage() {
             selectionOptionId: item.selectionOptionId,
             isFreeGift: item.isFreeGift || false,
             isNotDelivered: item.isNotDelivered || false,
+            orderSurchargeAmount: index === 0 && surchargeAmount > 0 ? surchargeAmount : undefined,
           })),
         }),
       })
@@ -1147,6 +1160,7 @@ export default function POSPage() {
         setNote('')
         setDiscountType('none')
         setDiscountValue(0)
+        setSurchargeAmount(0)
         setUseStoreCredit(true)
         mutateDrafts()
         alert('訂單已暫存')
@@ -1208,6 +1222,7 @@ export default function POSPage() {
       setNote(draft.note || '')
       setDiscountType(draft.discount_type)
       setDiscountValue(draft.discount_value)
+      setSurchargeAmount(Math.max(0, Number(draft.items[0]?.orderSurchargeAmount) || 0))
       setShowDrafts(false)
 
       // Delete the draft
@@ -1437,6 +1452,7 @@ export default function POSPage() {
         error={error}
         finalTotal={finalTotal}
         discountAmount={discountAmount}
+        surchargeAmount={surchargeAmount}
         storeCreditUsed={storeCreditUsed}
         useStoreCredit={useStoreCredit}
         setUseStoreCredit={setUseStoreCredit}
@@ -2294,6 +2310,12 @@ export default function POSPage() {
                           <span>-{formatCurrency(discountAmount)}</span>
                         </div>
                       )}
+                      {surchargeAmount > 0 && (
+                        <div className="flex justify-between text-xs text-amber-400">
+                          <span>加價</span>
+                          <span>+{formatCurrency(surchargeAmount)}</span>
+                        </div>
+                      )}
                       <div className="border-t border-slate-600 pt-2 flex justify-between text-sm font-bold">
                         <span className="text-slate-300">應收</span>
                         <span className="text-white">{formatCurrency(finalTotal)}</span>
@@ -2369,6 +2391,31 @@ export default function POSPage() {
                     >
                       {isFullComp ? '整筆免單中 · 點此取消' : '整筆免單'}
                     </button>
+                    <div className="flex items-center gap-2 rounded-lg border-2 border-amber-700 bg-slate-700/60 px-2 py-1.5">
+                      <label htmlFor="order-surcharge" className="text-xs font-bold text-amber-300 shrink-0">
+                        加價 $
+                      </label>
+                      <NumberInput
+                        id="order-surcharge"
+                        min="0"
+                        decimal={false}
+                        blurOnEnter
+                        value={surchargeAmount}
+                        onChange={(value) => setSurchargeAmount(Math.max(0, value))}
+                        emptyValue={0}
+                        className="min-w-0 flex-1 h-7 text-right font-bold text-sm bg-slate-600 text-white border-2 border-slate-500 rounded px-2 focus:border-amber-400 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        placeholder="輸入加價金額"
+                      />
+                      {surchargeAmount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setSurchargeAmount(0)}
+                          className="text-xs text-slate-400 hover:text-white shrink-0"
+                        >
+                          清除
+                        </button>
+                      )}
+                    </div>
                     {quick30Count > 0 && (
                       <div className="flex items-center gap-2 rounded-lg border-2 border-emerald-700 bg-slate-700/60 px-2 py-1.5">
                         <span className="text-xs font-bold text-emerald-300 shrink-0">折 $30 ×</span>
@@ -2506,7 +2553,8 @@ export default function POSPage() {
                       } else if (draft.discount_type === 'amount') {
                         draftDiscountAmount = draft.discount_value
                       }
-                      const draftTotal = Math.max(0, draftSubtotal - draftDiscountAmount)
+                      const draftSurchargeAmount = Math.max(0, Number(draft.items[0]?.orderSurchargeAmount) || 0)
+                      const draftTotal = Math.max(0, draftSubtotal - draftDiscountAmount) + draftSurchargeAmount
 
                       return (
                         <div key={draft.id} className="border-2 border-gray-300 dark:border-gray-600 rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-gray-700">

@@ -29,6 +29,7 @@ type CartItem = SaleItem & {
   selectionOptionId?: string  // 複選獎：選中的選項ID
   isFreeGift?: boolean
   isNotDelivered?: boolean
+  orderSurchargeAmount?: number
   isPointsRedemption?: boolean  // 積分兌換
   pointsUsed?: number           // 本次對此商品使用的積分數（手動輸入）
 }
@@ -1115,6 +1116,12 @@ export default function POSPage() {
   }
 
   const handleLoadDraft = async (draft: SaleDraft) => {
+    const draftSurchargeAmount = Math.max(0, Number(draft.items[0]?.orderSurchargeAmount) || 0)
+    if (draftSurchargeAmount > 0) {
+      setError('這筆暫存訂單含有加價，請到「店裡收銀」載入')
+      return
+    }
+
     setLoading(true)
     try {
       // 用已載入的 products 比對，不再重新 fetch

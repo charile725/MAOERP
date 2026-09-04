@@ -725,17 +725,21 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 4. Calculate total with discount
-    const subtotal = draft.items.reduce((sum, item) => sum + (item.quantity * item.price), 0)
+    // 4. Calculate the merchandise discount first, then add the order-level surcharge.
+    // sales.subtotal intentionally stores both merchandise and surcharge so this works
+    // without adding a database column; sale_items still preserve the merchandise total.
+    const itemSubtotal = draft.items.reduce((sum, item) => sum + (item.quantity * item.price), 0)
 
     let discountAmount = 0
     if (draft.discount_type === 'percent') {
-      discountAmount = (subtotal * (draft.discount_value || 0)) / 100
+      discountAmount = (itemSubtotal * (draft.discount_value || 0)) / 100
     } else if (draft.discount_type === 'amount') {
       discountAmount = draft.discount_value || 0
     }
+    discountAmount = Math.min(itemSubtotal, Math.max(0, discountAmount))
 
-    const total = Math.max(0, subtotal - discountAmount)
+    const surchargeAmount = draft.surcharge_amount || 0
+    const total = Math.max(0, itemSubtotal - discountAmount) + surchargeAmount
 
     // 4.5. 自动使用购物金抵扣（如果有客户且购物金余额 > 0）
     let storeCreditUsed = 0
@@ -905,10 +909,10 @@ export async function POST(request: NextRequest) {
     const { data: confirmedSale, error: confirmError } = await (supabaseServer
       .from('sales') as any)
       .update({
-        subtotal: subtotal,  // 原始銷售額 (Gross Sales)
+        subtotal: itemSubtotal + surchargeAmount,  // 商品小計 + 整筆加價（不新增 DB 欄位）
         discount_amount: discountAmount,  // 折扣金額
         store_credit_used: storeCreditUsed,  // 使用的購物金
-        total: finalTotal,  // 實收金額 (Net Collected) = subtotal - discount - store_credit
+        total: finalTotal,  // 實收金額 = max(0, 商品小計 - 折扣) + 加價 - 購物金
         status: 'confirmed',
         updated_at: getTaiwanWallClock(),
       })
@@ -1235,8 +1239,11 @@ export async function POST(request: NextRequest) {
           // 最後一筆用剩餘金額，避免四捨五入誤差
           itemAmount = remainingAmount
         } else {
-          // 按比例分配
-          itemAmount = Math.round(finalTotal * (saleItem.subtotal / totalSubtotal))
+          // 按比例分配。若商品全為 $0、訂單只有加價，先把前面的品項分成 0，
+          // 最後一筆會承接完整應收，避免 0 / 0 產生 NaN 而漏建 AR。
+          itemAmount = totalSubtotal > 0
+            ? Math.round(finalTotal * (saleItem.subtotal / totalSubtotal))
+            : 0
           remainingAmount -= itemAmount
         }
 

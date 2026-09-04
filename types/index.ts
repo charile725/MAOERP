@@ -80,6 +80,7 @@ export type SaleDraft = {
   note?: string
   discount_type?: 'none' | 'percent' | 'amount'
   discount_value?: number
+  surcharge_amount?: number
 }
 
 export type PurchaseItem = {

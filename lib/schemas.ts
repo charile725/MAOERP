@@ -60,6 +60,7 @@ export const saleDraftSchema = z.object({
   note: z.string().optional(),
   discount_type: z.enum(['none', 'percent', 'amount']).default('none'),
   discount_value: z.number().min(0, 'Discount must be positive').default(0),
+  surcharge_amount: z.number().min(0, 'Surcharge must be positive').default(0),
   // Multi-payment support
   payments: z.array(
     z.object({
@@ -210,4 +211,3 @@ export const saleToStoreCreditSchema = z.object({
   refund_inventory: z.boolean().default(true), // 是否回補庫存
   note: z.string().optional(),
 })
-

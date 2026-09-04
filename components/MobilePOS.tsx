@@ -21,6 +21,7 @@ type CartItem = {
     isFreeGift?: boolean
     isNotDelivered?: boolean
     pointsUsed?: number
+    orderSurchargeAmount?: number
 }
 
 type Customer = {
@@ -93,6 +94,7 @@ type MobilePOSProps = {
     error: string
     finalTotal: number
     discountAmount: number
+    surchargeAmount?: number
     storeCreditUsed: number
     useStoreCredit: boolean
     setUseStoreCredit: (v: boolean) => void
@@ -152,6 +154,7 @@ export default function MobilePOS({
     error,
     finalTotal,
     discountAmount,
+    surchargeAmount = 0,
     storeCreditUsed,
     useStoreCredit,
     setUseStoreCredit,
@@ -1054,6 +1057,12 @@ export default function MobilePOS({
                                     <span>-{formatCurrency(discountAmount)}</span>
                                 </div>
                             )}
+                            {surchargeAmount > 0 && (
+                                <div className="flex justify-between text-amber-400">
+                                    <span>加價</span>
+                                    <span>+{formatCurrency(surchargeAmount)}</span>
+                                </div>
+                            )}
                             {storeCreditUsed > 0 && (
                                 <div className="flex justify-between text-emerald-400">
                                     <span>購物金</span>
@@ -1149,7 +1158,10 @@ export default function MobilePOS({
                                     } else if (draft.discount_type === 'amount') {
                                         draftDiscountAmount = draft.discount_value
                                     }
-                                    const draftTotal = Math.max(0, draftSubtotal - draftDiscountAmount)
+                                    const draftSurchargeAmount = simpleMode
+                                        ? 0
+                                        : Math.max(0, Number(draft.items[0]?.orderSurchargeAmount) || 0)
+                                    const draftTotal = Math.max(0, draftSubtotal - draftDiscountAmount) + draftSurchargeAmount
 
                                     return (
                                         <div key={draft.id} className="bg-slate-700 rounded-lg p-3">
