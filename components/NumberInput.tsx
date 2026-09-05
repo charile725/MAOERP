@@ -6,7 +6,8 @@ type NumberInputProps = Omit<
   InputHTMLAttributes<HTMLInputElement>,
   'value' | 'onChange' | 'type'
 > & {
-  value: number
+  /** null 代表沒有值，輸入框會是空的（顯示 placeholder） */
+  value: number | null
   /** 使用者打字期間，只要解析得出數字就會呼叫 */
   onChange: (value: number) => void
   /** 離開輸入框時呼叫，帶入使用者最後打的值（清空或無效時為 null）。只有實際編輯過才會觸發 */
@@ -65,7 +66,7 @@ export default function NumberInput({
     <input
       {...rest}
       type="number"
-      value={draft ?? value}
+      value={draft ?? (value ?? '')}
       onChange={(e) => {
         const raw = e.target.value
         setDraft(raw)

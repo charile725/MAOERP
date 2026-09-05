@@ -1118,7 +1118,7 @@ export default function POSPage() {
   const handleLoadDraft = async (draft: SaleDraft) => {
     const draftSurchargeAmount = Math.max(0, Number(draft.items[0]?.orderSurchargeAmount) || 0)
     if (draftSurchargeAmount > 0) {
-      setError('這筆暫存訂單含有加價，請到「店裡收銀」載入')
+      setError('這筆暫存訂單有設定新售價，請到「店裡收銀」載入')
       return
     }
 
