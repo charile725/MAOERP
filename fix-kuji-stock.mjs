@@ -12,7 +12,6 @@
  * 用法：
  *   node fix-kuji-stock.mjs                    # dry-run，只列出要寫什麼
  *   node fix-kuji-stock.mjs --apply            # 實際寫入 .env.local
- *   node fix-kuji-stock.mjs .env.old.local --apply
  */
 
 import { readFileSync } from 'node:fs'

@@ -7,8 +7,7 @@
  * ⚠️ 這支腳本只做 .select()，不會寫入任何資料。
  *
  * 用法：
- *   node audit-kuji-stock.mjs                 # 讀 .env.local
- *   node audit-kuji-stock.mjs .env.old.local  # 指定其他環境檔
+ *   node audit-kuji-stock.mjs                 # 讀 .env.local（本專案唯一的環境檔）
  */
 
 import { readFileSync } from 'node:fs'

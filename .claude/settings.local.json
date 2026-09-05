@@ -50,7 +50,6 @@
       "Bash(cp \"C:/Users/linei/AppData/Local/Temp/claude/C--Users-linei-Desktop-coding-toyflow-erp---ERP/10c72e34-d2d3-4e85-99c0-a8c03f4a17a7/scratchpad/latency.mjs\" ./.latency-probe.mjs)",
       "Bash(node ./.latency-probe.mjs)",
       "Bash(git stash *)",
-      "Bash(nslookup db.pzqeixevnhseajrqwkdk.supabase.co)",
       "Bash(nslookup aws-0-ap-northeast-1.pooler.supabase.com)",
       "Read(//c/Users/linei/Desktop/coding/**)",
       "Read(//c/Users/linei/Desktop/**)",
