@@ -974,6 +974,16 @@ export async function POST(request: NextRequest) {
           }
         }
       }
+      // 釋放複選獎已消耗的選項（前面 8 已經標記過 is_consumed，
+      // consumed_sale_item_id 的 FK 不解除就刪不掉 sale_items，會留下孤兒銷售單）
+      const rollbackItemIds = (insertedSaleItems || []).map((i: any) => i.id)
+      if (rollbackItemIds.length > 0) {
+        await (supabaseServer
+          .from('ichiban_kuji_prize_options') as any)
+          .update({ is_consumed: false, consumed_sale_item_id: null })
+          .in('consumed_sale_item_id', rollbackItemIds)
+      }
+
       // Delete items and sale
       await (supabaseServer.from('sale_items') as any).delete().eq('sale_id', sale.id)
       await (supabaseServer.from('sales') as any).delete().eq('id', sale.id)

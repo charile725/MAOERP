@@ -4,6 +4,7 @@ import { saleUpdateSchema } from '@/lib/schemas'
 import { fromZodError } from 'zod-validation-error'
 import { getTaiwanTime } from '@/lib/timezone'
 import { getTaiwanWallClock } from '@/lib/timezone'
+import { updateAccountBalance } from '@/lib/account-service'
 
 type RouteContext = {
   params: Promise<{ id: string }>
@@ -91,7 +92,7 @@ export async function PATCH(
     // 1. 讀取舊的 sale 記錄
     const { data: oldSale, error: fetchError } = await (supabaseServer
       .from('sales') as any)
-      .select('account_id, total, payment_method, is_paid')
+      .select('account_id, total, payment_method, is_paid, status, sale_no')
       .eq('id', id)
       .single()
 
@@ -120,16 +121,17 @@ export async function PATCH(
     // - 未付款的銷售單不會有帳戶交易，不需要轉移
     // - 付款方式為 pending 的銷售單不會有帳戶交易（account-service 會跳過）
     // - 透過 AR 收款的銷售單，帳戶交易 ref_type='settlement'，不屬於 sale 類型
+    // 先檢查是否有實際的 sale 類型帳戶交易存在
+    // （帳戶沒變也要查：沒有交易的已收款單要在下面補記首次入帳）
+    const { data: existingSaleTransactions } = await (supabaseServer
+      .from('account_transactions') as any)
+      .select('id, account_id, amount')
+      .eq('ref_type', 'sale')
+      .eq('ref_id', id.toString())
+
+    const hasSaleTransactions = !!(existingSaleTransactions && existingSaleTransactions.length > 0)
+
     if (oldAccountId && oldAccountId !== newAccountId) {
-      // 先檢查是否有實際的 sale 類型帳戶交易存在
-      const { data: existingSaleTransactions } = await (supabaseServer
-        .from('account_transactions') as any)
-        .select('id, account_id, amount')
-        .eq('ref_type', 'sale')
-        .eq('ref_id', id.toString())
-
-      const hasSaleTransactions = existingSaleTransactions && existingSaleTransactions.length > 0
-
       if (hasSaleTransactions) {
         // 3.1 還原舊帳戶餘額（只在確實有 sale 交易記錄時）
         // 計算實際需要還原的金額（從交易記錄中取得，而非用 saleTotal）
@@ -204,6 +206,43 @@ export async function PATCH(
         }
       } else {
         console.log(`[Sale PATCH ${id}] 無 sale 類型帳戶交易，跳過餘額轉移（可能是未付款或 AR 收款的銷售單）`)
+      }
+    }
+
+    // 4. 補記「首次入帳」
+    // 結帳時 payment_method='pending' 的單不會寫 account_transactions（account-service 會直接跳過），
+    // 之後在銷貨紀錄改成現金／LINE Pay 時，上面的轉移分支因為找不到舊交易而整段跳過，
+    // 結果 sales 寫了 payment_method / account_id，錢卻從來沒有進帳戶。這裡補上。
+    //
+    // 只在確定是「結帳時就收到錢、但沒記到任何帳戶」的情況才補：
+    //   - is_paid=true（未收款的單由 AR 收款走 settlement，ref_type 不是 sale）
+    //   - status 不是 store_credit（轉購物金的單 is_paid 也是 true，但沒有現金流）
+    //   - 新付款方式不是 pending，且找得到對應帳戶
+    // updateAccountBalance 內建 (ref_type, ref_id, transaction_type) 冪等檢查，重複呼叫不會重複入帳。
+    if (
+      !hasSaleTransactions &&
+      oldSale.is_paid &&
+      oldSale.status !== 'store_credit' &&
+      payment_method !== 'pending' &&
+      newAccountId &&
+      Number(saleTotal) > 0
+    ) {
+      const backfill = await updateAccountBalance({
+        supabase: supabaseServer as any,
+        accountId: newAccountId,
+        paymentMethod: payment_method,
+        amount: Number(saleTotal),
+        direction: 'increase',
+        transactionType: 'sale',
+        referenceId: id.toString(),
+        referenceNo: oldSale.sale_no,
+        note: `銷售單 ${oldSale.sale_no} - 付款方式由 ${oldSale.payment_method} 改為 ${payment_method}，補記入帳`,
+      })
+
+      if (backfill.success) {
+        console.log(`[Sale PATCH ${id}] 補記首次入帳 ${newAccountId}: +${saleTotal}`, backfill.warning || '')
+      } else {
+        console.error(`[Sale PATCH ${id}] 補記首次入帳失敗:`, backfill.error)
       }
     }
 
@@ -842,7 +881,32 @@ export async function DELETE(
       .eq('ref_type', 'sale')
       .eq('ref_id', id.toString())
 
-    // 5. Delete sale items
+    // 5. 釋放複選獎已消耗的選項
+    // ichiban_kuji_prize_options.consumed_sale_item_id 有 FK 指向 sale_items，
+    // 不先解除就會刪不掉明細（違反 ichiban_kuji_prize_options_consumed_sale_item_id_fkey）。
+    // 銷售單整張作廢＝這些選項沒被抽走，要還原成可選。
+    const { data: saleItemIdRows } = await (supabaseServer
+      .from('sale_items') as any)
+      .select('id')
+      .eq('sale_id', id)
+
+    const saleItemIds = (saleItemIdRows || []).map((r: any) => r.id)
+
+    if (saleItemIds.length > 0) {
+      const { error: releaseOptionError } = await (supabaseServer
+        .from('ichiban_kuji_prize_options') as any)
+        .update({ is_consumed: false, consumed_sale_item_id: null })
+        .in('consumed_sale_item_id', saleItemIds)
+
+      if (releaseOptionError) {
+        return NextResponse.json(
+          { ok: false, error: `釋放一番賞複選獎選項失敗：${releaseOptionError.message}` },
+          { status: 500 }
+        )
+      }
+    }
+
+    // 6. Delete sale items
     const { error: itemsDeleteError } = await (supabaseServer
       .from('sale_items') as any)
       .delete()
@@ -855,7 +919,20 @@ export async function DELETE(
       )
     }
 
-    // 6. Delete sale
+    // 7. 刪除銷貨更正紀錄（sale_corrections.sale_id 有 FK 指向 sales，不刪就刪不掉銷售單）
+    const { error: correctionDeleteError } = await (supabaseServer
+      .from('sale_corrections') as any)
+      .delete()
+      .eq('sale_id', id)
+
+    if (correctionDeleteError) {
+      return NextResponse.json(
+        { ok: false, error: `刪除銷貨更正紀錄失敗：${correctionDeleteError.message}` },
+        { status: 500 }
+      )
+    }
+
+    // 8. Delete sale
     const { error: deleteError } = await (supabaseServer
       .from('sales') as any)
       .delete()
@@ -863,7 +940,7 @@ export async function DELETE(
 
     if (deleteError) {
       return NextResponse.json(
-        { ok: false, error: deleteError.message },
+        { ok: false, error: `刪除銷售單失敗：${deleteError.message}` },
         { status: 500 }
       )
     }
