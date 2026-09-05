@@ -617,17 +617,22 @@ export async function DELETE(
       for (const item of items || []) {
         // 如果是從一番賞售出的，恢復一番賞庫存
         if (item.ichiban_kuji_prize_id) {
+          // 賞品可能已經被刪掉（整套一番賞刪除、或「開新套」換掉舊套組），
+          // 這種情況沒有 remaining 可以回補，直接跳過即可。
+          // 這裡不能因為找不到就中斷：前面已經把出貨單刪掉了，一中斷就會留下
+          // 「有銷售單、沒出貨單」的半刪除孤兒單，之後怎麼點刪除都會再失敗。
           const { data: prize, error: fetchPrizeError } = await (supabaseServer
             .from('ichiban_kuji_prizes') as any)
             .select('remaining')
             .eq('id', item.ichiban_kuji_prize_id)
-            .single()
+            .maybeSingle()
 
-          if (fetchPrizeError) {
-            return NextResponse.json(
-              { ok: false, error: `Failed to fetch prize: ${fetchPrizeError.message}` },
-              { status: 500 }
+          if (fetchPrizeError || !prize) {
+            console.warn(
+              `[Delete Sale ${id}] 一番賞賞品 ${item.ichiban_kuji_prize_id} 已不存在，跳過回補` +
+              (fetchPrizeError ? `：${fetchPrizeError.message}` : '')
             )
+            continue
           }
 
           // 恢復一番賞庫的 remaining
@@ -637,9 +642,8 @@ export async function DELETE(
             .eq('id', item.ichiban_kuji_prize_id)
 
           if (updatePrizeError) {
-            return NextResponse.json(
-              { ok: false, error: `Failed to restore prize inventory: ${updatePrizeError.message}` },
-              { status: 500 }
+            console.error(
+              `[Delete Sale ${id}] 回補一番賞賞品 ${item.ichiban_kuji_prize_id} 失敗：${updatePrizeError.message}`
             )
           }
         }
@@ -839,7 +843,17 @@ export async function DELETE(
       .eq('ref_id', id.toString())
 
     // 5. Delete sale items
-    await (supabaseServer.from('sale_items') as any).delete().eq('sale_id', id)
+    const { error: itemsDeleteError } = await (supabaseServer
+      .from('sale_items') as any)
+      .delete()
+      .eq('sale_id', id)
+
+    if (itemsDeleteError) {
+      return NextResponse.json(
+        { ok: false, error: `刪除銷售明細失敗：${itemsDeleteError.message}` },
+        { status: 500 }
+      )
+    }
 
     // 6. Delete sale
     const { error: deleteError } = await (supabaseServer
