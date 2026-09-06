@@ -72,6 +72,8 @@ export default function IchibanKujiPage() {
   const [deleting, setDeleting] = useState<string | null>(null)
   const [reopening, setReopening] = useState<string | null>(null)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  const [keyword, setKeyword] = useState('')
+  const [searchKeyword, setSearchKeyword] = useState('')
   const [typeFilter, setTypeFilter] = useState<'all' | 'custom' | 'official'>('all')
   const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'inactive'>('all')
   // 廢套結算
@@ -98,6 +100,7 @@ export default function IchibanKujiPage() {
   const kujiParams: Record<string, string> = { page: String(page) }
   if (typeFilter !== 'all') kujiParams.set_type = typeFilter
   if (activeFilter !== 'all') kujiParams.active = activeFilter === 'active' ? 'true' : 'false'
+  if (searchKeyword) kujiParams.keyword = searchKeyword
 
   const { data: kujiResult, isLoading: loading, mutate } = useSWR<{ data: IchibanKuji[]; pagination: any }>(
     ichibanKujiKey(kujiParams),
@@ -106,7 +109,19 @@ export default function IchibanKujiPage() {
   const kujis = kujiResult?.data ?? []
   const pagination = kujiResult?.pagination ?? { page: 1, pageSize: 20, total: 0, totalPages: 0 }
 
-  useEffect(() => { setPage(1) }, [typeFilter, activeFilter])
+  useEffect(() => { setPage(1) }, [typeFilter, activeFilter, searchKeyword])
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault()
+    setSearchKeyword(keyword.trim())
+    setExpandedRows(new Set())
+  }
+
+  const clearSearch = () => {
+    setKeyword('')
+    setSearchKeyword('')
+    setExpandedRows(new Set())
+  }
 
   const handlePageChange = (newPage: number) => {
     setPage(newPage)
@@ -380,6 +395,32 @@ export default function IchibanKujiPage() {
           </div>
         </div>
 
+        {/* 搜尋 */}
+        <form onSubmit={handleSearch} className="mb-3 flex gap-2">
+          <input
+            type="text"
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            placeholder="搜尋套組名稱、廠商、條碼，或裡面的賞品／商品名稱、貨號"
+            className="flex-1 rounded border border-gray-300 dark:border-gray-600 px-4 py-2 text-gray-900 dark:text-gray-100 dark:bg-gray-700 placeholder:text-gray-500 dark:placeholder:text-gray-400"
+          />
+          {searchKeyword && (
+            <button
+              type="button"
+              onClick={clearSearch}
+              className="rounded bg-gray-200 dark:bg-gray-700 px-4 py-2 font-medium text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600"
+            >
+              清除
+            </button>
+          )}
+          <button
+            type="submit"
+            className="rounded bg-blue-600 px-6 py-2 font-medium text-white hover:bg-blue-700"
+          >
+            搜尋
+          </button>
+        </form>
+
         {/* 篩選列 */}
         <div className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2">
           <div className="flex items-center gap-2">
@@ -434,13 +475,27 @@ export default function IchibanKujiPage() {
             <div className="p-8 text-center text-gray-900 dark:text-gray-100">載入中...</div>
           ) : kujis.length === 0 ? (
             <div className="p-8 text-center text-gray-900 dark:text-gray-100">
-              <p className="mb-4">尚未建立任何一番賞</p>
-              <button
-                onClick={() => router.push('/ichiban-kuji/new')}
-                className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
-              >
-                建立第一個一番賞
-              </button>
+              {searchKeyword ? (
+                <>
+                  <p className="mb-4">找不到符合「{searchKeyword}」的一番賞</p>
+                  <button
+                    onClick={clearSearch}
+                    className="rounded bg-gray-200 dark:bg-gray-700 px-4 py-2 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600"
+                  >
+                    清除搜尋
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="mb-4">尚未建立任何一番賞</p>
+                  <button
+                    onClick={() => router.push('/ichiban-kuji/new')}
+                    className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+                  >
+                    建立第一個一番賞
+                  </button>
+                </>
+              )}
             </div>
           ) : (
             <div className="overflow-visible">

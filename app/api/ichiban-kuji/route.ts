@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase/server'
 import { ichibanKujiDraftSchema } from '@/lib/schemas'
 import { createIchibanKuji } from '@/lib/ichiban-kuji-service'
+import { ilikeAny } from '@/lib/postgrest'
 import { fromZodError } from 'zod-validation-error'
 
 // GET /api/ichiban-kuji - List all ichiban kuji
@@ -55,6 +56,46 @@ export async function GET(request: NextRequest) {
     const setType = searchParams.get('set_type')
     if (setType) {
       query = query.eq('set_type', setType)
+    }
+
+    // 關鍵字搜尋：套組名稱／條碼／廠商，加上「這套裡面有什麼」——
+    // 賞品名稱、賞品對應的商品、以及複選獎的選項商品（名稱／貨號／條碼都比對）。
+    // 後三者沒辦法在同一個 PostgREST 查詢裡跨表過濾，所以先反查出 kuji_id 再併進 or 條件。
+    const keyword = (searchParams.get('keyword') || '').trim()
+    if (keyword) {
+      const kujiIds = new Set<string>()
+
+      const { data: matchedProducts } = await (supabaseServer
+        .from('products') as any)
+        .select('id')
+        .or(ilikeAny(['name', 'item_code', 'barcode'], keyword))
+        .limit(500)
+
+      const productIds = (matchedProducts as any[] | null)?.map((p: any) => p.id) ?? []
+
+      const [prizeByProduct, prizeByName, optionByProduct] = await Promise.all([
+        productIds.length > 0
+          ? (supabaseServer.from('ichiban_kuji_prizes') as any)
+              .select('kuji_id').in('product_id', productIds).limit(2000)
+          : Promise.resolve({ data: [] }),
+        (supabaseServer.from('ichiban_kuji_prizes') as any)
+          .select('kuji_id').ilike('prize_name', `%${keyword}%`).limit(2000),
+        productIds.length > 0
+          ? (supabaseServer.from('ichiban_kuji_prize_options') as any)
+              .select('ichiban_kuji_prizes!inner(kuji_id)').in('product_id', productIds).limit(2000)
+          : Promise.resolve({ data: [] }),
+      ])
+
+      for (const row of (prizeByProduct.data as any[] | null) ?? []) if (row.kuji_id) kujiIds.add(row.kuji_id)
+      for (const row of (prizeByName.data as any[] | null) ?? []) if (row.kuji_id) kujiIds.add(row.kuji_id)
+      for (const row of (optionByProduct.data as any[] | null) ?? []) {
+        const id = row.ichiban_kuji_prizes?.kuji_id
+        if (id) kujiIds.add(id)
+      }
+
+      const orParts = [ilikeAny(['name', 'barcode', 'vendor_code'], keyword)]
+      if (kujiIds.size > 0) orParts.push(`id.in.(${[...kujiIds].join(',')})`)
+      query = query.or(orParts.join(','))
     }
 
     // Apply pagination (unless all=true)
