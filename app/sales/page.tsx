@@ -113,6 +113,8 @@ type Sale = {
   profit?: number
   total_cost?: number
   sale_items?: SaleItem[]
+  // 實際分帳（多元付款時會有多筆）。來源是 account_transactions，不是 sales.payment_method
+  payment_breakdown?: { account_id: string; account_name: string; amount: number }[]
   customers?: {
     customer_name: string
   } | null
@@ -1490,7 +1492,18 @@ export default function SalesPage() {
                               {sale.item_count || 0} 項 / {sale.total_quantity || 0} 件
                             </td>
                             <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
-                              {formatPaymentMethod(sale.payment_method)}
+                              {(sale.payment_breakdown?.length || 0) > 1 ? (
+                                <div>
+                                  <div className="font-medium">多元付款</div>
+                                  {sale.payment_breakdown!.map((p) => (
+                                    <div key={p.account_id} className="text-xs text-gray-600 dark:text-gray-400">
+                                      {p.account_name} {formatCurrency(p.amount)}
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                formatPaymentMethod(sale.payment_method)
+                              )}
                             </td>
                             <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{formatDateTime(sale.created_at)}</td>
                             <td className="px-6 py-4 text-center text-sm">
@@ -1573,7 +1586,10 @@ export default function SalesPage() {
                                       headers: { 'Content-Type': 'application/json' },
                                       body: JSON.stringify({
                                         sale_no: sale.sale_no,
-                                        payment_label: formatPaymentMethod(sale.payment_method),
+                                        // 多元付款補印時把分帳列出來，只印一種付款方式會跟收的錢對不起來
+                                        payment_label: (sale.payment_breakdown?.length || 0) > 1
+                                          ? sale.payment_breakdown!.map((p) => `${p.account_name} ${formatCurrency(p.amount)}`).join(' + ')
+                                          : formatPaymentMethod(sale.payment_method),
                                         is_paid: sale.is_paid,
                                         total: sale.total,
                                         discount_amount: sale.discount_amount || 0,

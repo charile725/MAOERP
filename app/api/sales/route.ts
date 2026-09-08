@@ -208,6 +208,31 @@ export async function GET(request: NextRequest) {
       console.log('[Sales API] deliveryQuantityMap entries:', Object.keys(deliveryQuantityMap).length)
     }
 
+    // 多元付款明細：一張銷售單可能分帳到多個帳戶，
+    // sales.payment_method 只存得下一種，所以從 account_transactions 撈回真正的分帳。
+    const paymentBreakdownMap: { [saleId: string]: { account_id: string; account_name: string; amount: number }[] } = {}
+    const listedSaleIds = (filteredData || []).map((s: any) => s.id)
+    if (listedSaleIds.length > 0) {
+      const BREAKDOWN_BATCH = 50
+      const allTxns: any[] = []
+      for (let i = 0; i < listedSaleIds.length; i += BREAKDOWN_BATCH) {
+        const { data: txns } = await (supabaseServer
+          .from('account_transactions') as any)
+          .select('ref_id, account_id, amount, accounts (account_name)')
+          .eq('ref_type', 'sale')
+          .eq('transaction_type', 'sale')
+          .in('ref_id', listedSaleIds.slice(i, i + BREAKDOWN_BATCH))
+        if (txns) allTxns.push(...txns)
+      }
+      for (const t of allTxns) {
+        if (!t.ref_id || !t.account_id) continue
+        const list = paymentBreakdownMap[t.ref_id] || (paymentBreakdownMap[t.ref_id] = [])
+        const existing = list.find((x) => x.account_id === t.account_id)
+        if (existing) existing.amount += Number(t.amount) || 0
+        else list.push({ account_id: t.account_id, account_name: t.accounts?.account_name || '', amount: Number(t.amount) || 0 })
+      }
+    }
+
     // Calculate summary for each sale and add delivery status to items
     const salesWithSummary = filteredData?.map((sale: any) => {
       const items = sale.sale_items || []
@@ -231,7 +256,8 @@ export async function GET(request: NextRequest) {
         item_count: items.length,
         total_quantity: totalQuantity,
         avg_price: avgPrice,
-        sale_items: itemsWithDeliveryStatus
+        sale_items: itemsWithDeliveryStatus,
+        payment_breakdown: paymentBreakdownMap[sale.id] || []
       }
     })
 
@@ -360,7 +386,9 @@ export async function POST(request: NextRequest) {
           customer_code: draft.customer_code || null,
           sale_date: saleDate, // 設定台灣時間的日期
           source: draft.source,
-          payment_method: draft.payment_method,
+          // 多元付款時存金額最大的那個方式，跟下面的 account_id 對齊。
+          // 兩者不一致的話，銷貨紀錄顯示 A、日結卻把錢算進 B 的帳上。
+          payment_method: primaryPaymentMethod,
           account_id: accountId,
           is_paid: draft.is_paid,
           note: draft.note || null,
@@ -996,9 +1024,16 @@ export async function POST(request: NextRequest) {
     // 6.5. 更新帳戶餘額（僅當已付款時）— 直播模式不進金流
     if (!isLive && effectiveIsPaid) {
       // Determine payments to process
-      const paymentsToProcess = draft.payments && draft.payments.length > 0
+      // 同一種付款方式如果被拆成好幾列，先加總成一筆：
+      // 同一個帳戶寫兩筆 sale 交易，冪等檢查會擋掉第二筆，錢就少了。
+      const rawPayments = draft.payments && draft.payments.length > 0
         ? draft.payments
         : [{ method: draft.payment_method, amount: finalTotal }]
+      const mergedByMethod = new Map<string, number>()
+      for (const p of rawPayments) {
+        mergedByMethod.set(p.method, (mergedByMethod.get(p.method) || 0) + p.amount)
+      }
+      const paymentsToProcess = [...mergedByMethod].map(([method, amount]) => ({ method, amount }))
 
       // Process each payment
       for (const payment of paymentsToProcess) {

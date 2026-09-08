@@ -1078,7 +1078,14 @@ export default function POSPage() {
         if (receiptType === 'receipt') {
           if (printerStatus === 'connected') {
             // 從 server 取得 GB2312 bytes，再透過 Web Serial 送出
-            const paymentLabel = paymentAccounts.find(a => a.payment_method_code === paymentMethod)?.account_name || paymentMethod
+            // 多元付款要把分帳印出來，只印主要付款方式會跟實際收的錢對不起來
+            const methodLabel = (m: string) => paymentAccounts.find(a => a.payment_method_code === m)?.account_name || m
+            const paymentLabel = isMultiPayment && isPaid
+              ? multiPayments
+                .filter(p => parseFloat(p.amount) > 0)
+                .map(p => `${methodLabel(p.method)} ${formatCurrency(parseFloat(p.amount))}`)
+                .join(' + ')
+              : methodLabel(paymentMethod)
             const received = parseFloat(receivedAmount) || finalTotal
             const change = paymentMethod === 'cash' ? Math.max(0, received - finalTotal) : 0
             fetch('/api/print/receipt-bytes', {

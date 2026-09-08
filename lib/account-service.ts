@@ -107,6 +107,10 @@ export async function updateAccountBalance(
 
   try {
     // 🔒 冪等性檢查：防止同一筆交易重複記帳
+    // 一定要連 account_id 一起比對：多元付款是同一張銷售單分帳到多個帳戶，
+    // 只比對 (ref_type, ref_id, transaction_type) 的話，第一筆寫進去之後
+    // 後面每一筆都會被當成「已記帳」跳過，錢就只進了一個帳戶。
+    // 重試同一筆付款時帳戶相同，仍然會被擋下來。
     const { data: existingLog, error: logCheckError } = await (supabase
       .from('account_transactions') as any)
       .select('id')
@@ -115,6 +119,7 @@ export async function updateAccountBalance(
         : transactionType)
       .eq('ref_id', referenceId)
       .eq('transaction_type', transactionType)
+      .eq('account_id', accountId)
       .limit(1)
       .maybeSingle()
 
