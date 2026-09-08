@@ -176,7 +176,10 @@ export async function updateAccountBalance(
     const transactionLog = {
       account_id: accountId,
       transaction_type: transactionType, // 使用資料庫的欄位名稱
-      amount,
+      // amount 存帶正負號的金額：流出記負數、流入記正數。
+      // 資料庫端寫進來的費用交易就是這個慣例，這裡不跟著簽號的話，
+      // 同一種交易會出現一正一負兩種寫法，任何加總 amount 的報表都會算錯。
+      amount: direction === 'increase' ? amount : -amount,
       balance_before: previousBalance,
       balance_after: newBalance,
       ref_type: transactionType === 'purchase_payment' || transactionType === 'customer_payment'
