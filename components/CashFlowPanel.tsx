@@ -29,6 +29,8 @@ type FinanceData = {
     netCashFlow: number
     expensesByAccount: { [key: string]: number }
     salesByAccount: { [key: string]: number }
+    /** 沒有指定帳戶、不影響現金的費用（一番賞廢套結算等成本調整） */
+    nonCashExpenses?: number
   }
 }
 
@@ -132,16 +134,19 @@ export default function CashFlowPanel({ collapsible = false }: Props) {
     const totalExpense = isAdmin ? data.today.expenses : rows.reduce((sum, r) => sum + r.expense, 0)
     const net = totalIncome - totalExpense
 
+    // 收款方式還是「待定」的單就會落在這裡：錢收了但還沒指定進哪個帳戶。
+    // 支出這邊不會有殘差了 —— 沒指定帳戶的費用不影響現金，已經不算進支出。
     const unassignedIncome = totalIncome - rows.reduce((sum, r) => sum + r.income, 0)
-    const unassignedExpense = totalExpense - rows.reduce((sum, r) => sum + r.expense, 0)
-    if (unassignedIncome > 0 || unassignedExpense > 0) {
+    if (unassignedIncome > 0) {
       rows.push({
         id: '__unassigned__',
         name: '未指定帳戶',
-        income: Math.max(unassignedIncome, 0),
-        expense: Math.max(unassignedExpense, 0),
+        income: unassignedIncome,
+        expense: 0,
       })
     }
+
+    const nonCashExpenses = data.today.nonCashExpenses || 0
 
     body = (
       <>
@@ -161,6 +166,12 @@ export default function CashFlowPanel({ collapsible = false }: Props) {
             </div>
           </div>
         </div>
+
+        {isAdmin && nonCashExpenses > 0 && (
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+            另有未指定帳戶的費用 {formatCurrency(nonCashExpenses)}（一番賞廢套結算等成本調整），沒有實際現金流出，不計入上面的支出。
+          </div>
+        )}
 
         <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
           <table className="w-full">

@@ -50,17 +50,18 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const todayExpensesTotal = todayExpenses?.reduce(
-      (sum: number, exp: any) => sum + exp.amount,
-      0
-    ) || 0
+    // 只有指定帳戶的費用才是真的現金流出。一番賞廢套結算那種成本調整沒有帳戶、
+    // 也沒有寫 account_transactions，算進「支出」會讓淨額憑空短少。
+    const cashExpenses = (todayExpenses || []).filter((exp: any) => !!exp.account_id)
+    const nonCashExpenses = (todayExpenses || []).filter((exp: any) => !exp.account_id)
+    const todayExpensesTotal = cashExpenses.reduce((sum: number, exp: any) => sum + exp.amount, 0)
+    const todayNonCashExpensesTotal = nonCashExpenses.reduce((sum: number, exp: any) => sum + exp.amount, 0)
 
     // 3. 計算指定日期的銷售收入
     const { data: todaySales, error: salesError } = await (supabaseServer
       .from('sales') as any)
-      .select('total, payment_method, account_id, is_paid')
-      .gte('sale_date', targetDate)
-      .lte('sale_date', targetDate + 'T23:59:59')
+      .select('id, total, payment_method, account_id, is_paid')
+      .eq('sale_date', targetDate)
       .eq('is_paid', true)
 
     const todaySalesTotal = salesError ? 0 : (todaySales?.reduce(
@@ -87,20 +88,39 @@ export async function GET(request: NextRequest) {
     const todayNetCashFlow = todaySalesTotal - todayExpensesTotal
 
     // 7. 當日各帳戶支出統計
-    const todayExpensesByAccount = todayExpenses?.reduce((acc: any, exp: any) => {
-      if (exp.account_id) {
-        acc[exp.account_id] = (acc[exp.account_id] || 0) + exp.amount
-      }
+    const todayExpensesByAccount = cashExpenses.reduce((acc: any, exp: any) => {
+      acc[exp.account_id] = (acc[exp.account_id] || 0) + exp.amount
       return acc
-    }, {}) || {}
+    }, {} as Record<string, number>)
 
     // 8. 當日各帳戶收入統計
-    const todaySalesByAccount = todaySales?.reduce((acc: any, sale: any) => {
-      if (sale.account_id) {
-        acc[sale.account_id] = (acc[sale.account_id] || 0) + sale.total
+    // 來源必須跟日結一致：先讀 account_transactions（多元付款會有多筆，每個帳戶各一筆），
+    // 沒有交易紀錄的已收款單才 fallback 回 sales.account_id。
+    // 直接用 sales.account_id 加總的話，多元付款會整筆算到單一帳戶，跟日結對不起來。
+    const todaySalesByAccount: Record<string, number> = {}
+    const coveredSaleIds = new Set<string>()
+    const todaySaleIds = (todaySales || []).map((s: any) => s.id)
+    if (todaySaleIds.length > 0) {
+      const BATCH = 50
+      for (let i = 0; i < todaySaleIds.length; i += BATCH) {
+        const { data: txns } = await (supabaseServer
+          .from('account_transactions') as any)
+          .select('account_id, amount, ref_id')
+          .eq('ref_type', 'sale')
+          .eq('transaction_type', 'sale')
+          .in('ref_id', todaySaleIds.slice(i, i + BATCH))
+        for (const t of (txns || []) as any[]) {
+          if (!t.account_id || !t.ref_id) continue
+          todaySalesByAccount[t.account_id] = (todaySalesByAccount[t.account_id] || 0) + Number(t.amount)
+          coveredSaleIds.add(t.ref_id)
+        }
       }
-      return acc
-    }, {}) || {}
+    }
+    for (const sale of (todaySales || []) as any[]) {
+      if (sale.account_id && !coveredSaleIds.has(sale.id)) {
+        todaySalesByAccount[sale.account_id] = (todaySalesByAccount[sale.account_id] || 0) + sale.total
+      }
+    }
 
     // ========== 新增：AR 帳齡分析 ==========
     const { data: arAccounts } = await supabaseServer
@@ -233,6 +253,8 @@ export async function GET(request: NextRequest) {
           netCashFlow: todayNetCashFlow,
           expensesByAccount: todayExpensesByAccount,
           salesByAccount: todaySalesByAccount,
+          // 沒有指定帳戶、不影響現金的費用（一番賞廢套結算等），單獨列出來不混進支出
+          nonCashExpenses: todayNonCashExpensesTotal,
         },
         // 新增數據
         arAging,
