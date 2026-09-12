@@ -400,6 +400,17 @@ export async function POST(
             })
 
         // 9. 更新品項的購物金轉換狀態
+        //
+        // ⚠️ 資料庫有觸發器：只要動到 sale_items 就會重算 sales.subtotal / sales.total，
+        //    而且重算時不扣 discount_amount 也不扣 store_credit_used —— 有折扣的單
+        //    total 會被寫成未折扣的金額（實收金額憑空變大）。
+        //    這條流程只改品項的轉換狀態，訂單金額本來就不該變，所以先記下來、改完再寫回去。
+        const { data: saleAmountsBefore } = await (supabaseServer
+            .from('sales') as any)
+            .select('subtotal, total')
+            .eq('id', sale.id)
+            .single()
+
         await (supabaseServer
             .from('sale_items') as any)
             .update({
@@ -407,6 +418,30 @@ export async function POST(
                 store_credit_amount: (saleItem.store_credit_amount || 0) + conversionAmount,
             })
             .eq('id', saleItemId)
+
+        if (saleAmountsBefore) {
+            const { data: saleAmountsAfter } = await (supabaseServer
+                .from('sales') as any)
+                .select('subtotal, total')
+                .eq('id', sale.id)
+                .single()
+
+            if (
+                saleAmountsAfter &&
+                (Number(saleAmountsAfter.subtotal) !== Number(saleAmountsBefore.subtotal) ||
+                    Number(saleAmountsAfter.total) !== Number(saleAmountsBefore.total))
+            ) {
+                console.warn(
+                    `[Item To Store Credit ${saleItemId}] 訂單金額被資料庫觸發器改掉了，還原：` +
+                    `subtotal ${saleAmountsAfter.subtotal} → ${saleAmountsBefore.subtotal}、` +
+                    `total ${saleAmountsAfter.total} → ${saleAmountsBefore.total}`
+                )
+                await (supabaseServer
+                    .from('sales') as any)
+                    .update({ subtotal: saleAmountsBefore.subtotal, total: saleAmountsBefore.total })
+                    .eq('id', sale.id)
+            }
+        }
 
         // 10. 更新 sale 的 fulfillment_status（考慮出貨和購物金轉換）
         const { data: allSaleItems } = await (supabaseServer

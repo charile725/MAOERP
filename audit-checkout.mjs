@@ -58,26 +58,48 @@ console.log(`\n銷售單 ${sales.length} 張、明細 ${saleItems.length} 筆`)
 // ---------- 1. 金額組成 ----------
 section('1. 金額組成：明細小計 - 折扣 + 加價 - 購物金 == total')
 // sales.subtotal 存的是「商品明細合計 + 整筆加價」，所以加價 = subtotal - 明細合計
-const amountBad = []
+// sales.subtotal 存的是「商品明細合計 + 整筆加價」，所以差額就是加價。
+// 差到「分」等級的是組合價分攤除不盡（bug）；差到「元」等級的是真的有加價／新售價（正常）。
+const amountBad = []   // total 算不出來 → 真的有問題
+const centGap = []     // 分攤尾差 → bug
+const surcharged = []  // 整筆加價 → 只列出來對照
 for (const s of sales) {
   const items = itemsBySale.get(s.id) || []
   if (items.length === 0) continue
   const itemSum = items.reduce((a, i) => a + Number(i.subtotal ?? i.price * i.quantity), 0)
   const recorded = Number(s.subtotal ?? itemSum)
-  const surcharge = Math.max(0, money(recorded - itemSum))
+  const gap = money(recorded - itemSum)
+  if (gap !== 0) {
+    if (Math.abs(gap) < 1) centGap.push({ s, itemSum, recorded, gap })
+    else surcharged.push({ s, itemSum, gap })
+  }
+  const surcharge = Math.max(0, gap)
   const expected = Math.max(0, itemSum - Number(s.discount_amount || 0)) + surcharge - Number(s.store_credit_used || 0)
-  if (!eq(expected, s.total)) {
-    amountBad.push({ s, itemSum, surcharge, expected })
+  if (!eq(expected, s.total)) amountBad.push({ s, itemSum, surcharge, expected })
+}
+if (amountBad.length === 0 && centGap.length === 0) console.log('  ✅ 全部吻合')
+if (centGap.length > 0) {
+  issues += centGap.length
+  console.log(`  ⚠️  ${centGap.length} 張單有「分」等級的分攤尾差（組合價除不盡，實收金額沒錯，但明細加總對不上小計）`)
+  for (const { s, itemSum, recorded, gap } of centGap.slice(0, 10)) {
+    console.log(`      ${s.sale_no} ${s.sale_date}  明細加總 ${money(itemSum)} vs 記錄小計 ${money(recorded)}（差 ${gap}）`)
+  }
+  if (centGap.length > 10) console.log(`      ...另外 ${centGap.length - 10} 張`)
+}
+if (amountBad.length > 0) {
+  issues += amountBad.length
+  console.log(`  ⚠️  ${amountBad.length} 張單的 total 算不出來：`)
+  for (const { s, itemSum, surcharge, expected } of amountBad.slice(0, 15)) {
+    console.log(`      ${s.sale_no} ${s.sale_date} ${s.source}  明細${money(itemSum)} 折扣${money(s.discount_amount)} 加價${surcharge} 購物金${money(s.store_credit_used)}` +
+      ` → 應為 ${money(expected)}，實際 ${money(s.total)}（差 ${money(s.total - expected)}）`)
   }
 }
-if (amountBad.length === 0) console.log('  ✅ 全部吻合')
-else {
-  issues += amountBad.length
-  for (const { s, itemSum, surcharge, expected } of amountBad.slice(0, 15)) {
-    console.log(`  ⚠️  ${s.sale_no} ${s.sale_date} ${s.source}  明細${money(itemSum)} 折扣${money(s.discount_amount)} 加價${surcharge} 購物金${money(s.store_credit_used)}` +
-      ` → 應為 ${expected}，實際 total=${money(s.total)}（差 ${money(s.total - expected)}）`)
+if (surcharged.length > 0) {
+  console.log(`  ℹ️  ${surcharged.length} 張單有整筆加價／新售價（正常，列出來對照）：`)
+  for (const { s, itemSum, gap } of surcharged.slice(0, 10)) {
+    console.log(`      ${s.sale_no} ${s.sale_date}  商品 ${money(itemSum)} + 加價 ${gap} = ${money(s.subtotal)}`)
   }
-  if (amountBad.length > 15) console.log(`  ...另外 ${amountBad.length - 15} 筆`)
+  if (surcharged.length > 10) console.log(`      ...另外 ${surcharged.length - 10} 張`)
 }
 
 // ---------- 2. 未收款單的應收帳款 ----------
