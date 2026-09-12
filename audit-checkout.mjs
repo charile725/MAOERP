@@ -10,6 +10,7 @@
  *   5. 出貨數量：已確認出貨量 + 轉購物金量 <= sale_items.quantity（不可超出）
  *   6. 庫存：products.stock == inventory_logs 累計
  *   7. 孤兒資料：sale_items / delivery_items / AR 指向不存在的母單
+ *   8. 一番賞：同一套不該有重複賞項，total_draws 要等於賞項數量加總
  *
  * ⚠️ 只做 .select()，不會寫入任何資料。
  *
@@ -229,6 +230,55 @@ if (orphanDeliveries.length > 0) {
 }
 if (orphanAr.length > 0) {
   for (const a of orphanAr.slice(0, 10)) console.log(`      AR ${a.partner_code} $${a.amount} ref_id=${a.ref_id}`)
+}
+
+// ---------- 8. 一番賞賞項重複 ----------
+section('8. 一番賞：同一套裡不該出現重複的賞項')
+const kujiPrizes = await all(() => db.from('ichiban_kuji_prizes').select('id, kuji_id, prize_tier, prize_name, product_id, quantity, remaining'))
+const kujiOptions = await all(() => db.from('ichiban_kuji_prize_options').select('prize_id, product_id'))
+const kujiList = await all(() => db.from('ichiban_kuji').select('id, name, total_draws'))
+const kujiById = new Map(kujiList.map((k) => [k.id, k]))
+const optsByPrize = new Map()
+for (const o of kujiOptions) {
+  if (!optsByPrize.has(o.prize_id)) optsByPrize.set(o.prize_id, [])
+  optsByPrize.get(o.prize_id).push(o.product_id)
+}
+const prizesByKuji = new Map()
+for (const p of kujiPrizes) {
+  if (!prizesByKuji.has(p.kuji_id)) prizesByKuji.set(p.kuji_id, [])
+  prizesByKuji.get(p.kuji_id).push(p)
+}
+const dupKuji = []
+const drawsMismatch = []
+for (const [kujiId, list] of prizesByKuji) {
+  const k = kujiById.get(kujiId)
+  const seen = new Map()
+  for (const p of list) {
+    const opts = (optsByPrize.get(p.id) || []).slice().sort()
+    const sig = opts.length > 0
+      ? `${p.prize_tier}|selection:${opts.join(',')}`
+      : `${p.prize_tier}|${p.product_id || ''}|${p.prize_name || ''}`
+    seen.set(sig, (seen.get(sig) || 0) + 1)
+  }
+  const dups = [...seen.values()].filter((n) => n > 1).length
+  if (dups > 0) dupKuji.push({ k, dups, total: list.length })
+  const qty = list.reduce((a, p) => a + Number(p.quantity), 0)
+  if (k && Number(k.total_draws) !== qty) drawsMismatch.push({ k, qty })
+}
+if (dupKuji.length === 0) console.log(`  ✅ ${prizesByKuji.size} 套一番賞都沒有重複賞項`)
+else {
+  issues += dupKuji.length
+  for (const { k, dups, total } of dupKuji) {
+    console.log(`  ⚠️  【${k?.name || '?'}】${total} 筆賞項中有 ${dups} 組重複`)
+  }
+}
+if (drawsMismatch.length > 0) {
+  issues += drawsMismatch.length
+  console.log(`  ⚠️  ${drawsMismatch.length} 套的 total_draws 與賞項數量加總不符：`)
+  for (const { k, qty } of drawsMismatch.slice(0, 10)) {
+    console.log(`      【${k.name}】total_draws=${k.total_draws} 賞項加總=${qty}`)
+  }
+  if (drawsMismatch.length > 10) console.log(`      ...另外 ${drawsMismatch.length - 10} 套`)
 }
 
 console.log('\n' + '='.repeat(64))

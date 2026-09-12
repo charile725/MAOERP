@@ -180,47 +180,70 @@ export async function PUT(
     }
 
     // 讀取舊的 prizes（包含 ID，用於 UPDATE）
-    const { data: oldPrizes } = await (supabaseServer
+    //
+    // ⚠️ 這次讀取一定要檢查錯誤。讀失敗時 data 是 null，下面的比對表就會是空的，
+    //    於是每一個賞項都被判定成「新的」而整批 INSERT —— 整套賞項瞬間變兩份。
+    //    2026-09-12 就這樣讓「寶可夢鑑定卡牌大賞(大套)」多出 17 筆重複賞項。
+    //    讀不到舊資料時寧可整個失敗，也不能當成「本來就沒有」。
+    const { data: oldPrizes, error: oldPrizesError } = await (supabaseServer
       .from('ichiban_kuji_prizes') as any)
       .select('id, prize_tier, prize_name, product_id, quantity, remaining')
       .eq('kuji_id', id)
 
+    if (oldPrizesError || !oldPrizes) {
+      console.error(`[Ichiban Kuji PUT ${id}] 讀取現有賞項失敗:`, oldPrizesError)
+      return NextResponse.json(
+        { ok: false, error: `讀取現有賞項失敗，為避免賞項重複已中止更新：${oldPrizesError?.message || '沒有回傳資料'}` },
+        { status: 500 }
+      )
+    }
+
     // 讀取舊的 prize options
-    const oldPrizeIds = oldPrizes?.map((p: any) => p.id) || []
+    const oldPrizeIds = oldPrizes.map((p: any) => p.id)
     let oldOptionsMap = new Map<string, any[]>()
     if (oldPrizeIds.length > 0) {
-      const { data: oldOptions } = await (supabaseServer
+      const { data: oldOptions, error: oldOptionsError } = await (supabaseServer
         .from('ichiban_kuji_prize_options') as any)
         .select('id, prize_id, product_id, is_consumed')
         .in('prize_id', oldPrizeIds)
 
-      if (oldOptions) {
-        for (const opt of oldOptions) {
-          const list = oldOptionsMap.get(opt.prize_id) || []
-          list.push(opt)
-          oldOptionsMap.set(opt.prize_id, list)
-        }
+      // 同理：讀不到選項會讓複選獎的 key 算錯，一樣會變成重複插入
+      if (oldOptionsError || !oldOptions) {
+        console.error(`[Ichiban Kuji PUT ${id}] 讀取複選獎選項失敗:`, oldOptionsError)
+        return NextResponse.json(
+          { ok: false, error: `讀取複選獎選項失敗，為避免賞項重複已中止更新：${oldOptionsError?.message || '沒有回傳資料'}` },
+          { status: 500 }
+        )
+      }
+
+      for (const opt of oldOptions) {
+        const list = oldOptionsMap.get(opt.prize_id) || []
+        list.push(opt)
+        oldOptionsMap.set(opt.prize_id, list)
       }
     }
 
-    console.log(`[Ichiban Kuji PUT ${id}] Found ${oldPrizes?.length || 0} old prizes`)
+    console.log(`[Ichiban Kuji PUT ${id}] Found ${oldPrizes.length} old prizes`)
 
     // 建立舊 prizes 的 Map
     // 複選獎使用 `${prize_tier}_selection` 作為 key
-    const oldPrizesMap = new Map<string, any>()
-    if (oldPrizes && oldPrizes.length > 0) {
-      for (const prize of oldPrizes) {
-        const hasOptions = (oldOptionsMap.get(prize.id) || []).length > 0
-        const key = isOfficial
-          ? prize.prize_tier
-          : hasOptions
-            ? `${prize.prize_tier}_selection`
-            : `${prize.prize_tier}_${prize.product_id}`
-        if (oldPrizesMap.has(key)) {
-          console.warn(`[Ichiban Kuji PUT ${id}] Duplicate prize found: ${key}`)
-        }
-        oldPrizesMap.set(key, prize)
+    //
+    // 同一個 key 可能對到多筆（歷史上被重複插入過），所以存成陣列：
+    // 第一筆拿來更新，多出來的在下面順手清掉，讓這條路徑自己把舊的重複收拾乾淨。
+    const oldPrizesMap = new Map<string, any[]>()
+    for (const prize of oldPrizes) {
+      const hasOptions = (oldOptionsMap.get(prize.id) || []).length > 0
+      const key = isOfficial
+        ? prize.prize_tier
+        : hasOptions
+          ? `${prize.prize_tier}_selection`
+          : `${prize.prize_tier}_${prize.product_id}`
+      const list = oldPrizesMap.get(key) || []
+      if (list.length > 0) {
+        console.warn(`[Ichiban Kuji PUT ${id}] Duplicate prize found: ${key}`)
       }
+      list.push(prize)
+      oldPrizesMap.set(key, list)
     }
 
     // 建立新 prizes 的 Map
@@ -241,7 +264,35 @@ export async function PUT(
 
     // 1. UPDATE 或 INSERT 新的 prizes
     for (const [key, newPrize] of newPrizesMap) {
-      const oldPrize = oldPrizesMap.get(key)
+      const oldGroup = oldPrizesMap.get(key) || []
+      const oldPrize = oldGroup[0]
+
+      // 同一個 key 有多筆＝歷史上被重複插入過。留第一筆繼續用，
+      // 其餘沒有銷售紀錄的就地清掉（有銷售紀錄的不動，留給人工判斷）。
+      for (const surplus of oldGroup.slice(1)) {
+        const { data: surplusSales } = await (supabaseServer
+          .from('sale_items') as any)
+          .select('id')
+          .eq('ichiban_kuji_prize_id', surplus.id)
+          .limit(1)
+
+        if (surplusSales && surplusSales.length > 0) {
+          console.warn(`[Ichiban Kuji PUT ${id}] 重複賞項 ${key} 有銷售紀錄，保留不刪：${surplus.id}`)
+          continue
+        }
+
+        const { error: surplusError } = await (supabaseServer
+          .from('ichiban_kuji_prizes') as any)
+          .delete()
+          .eq('id', surplus.id)
+
+        if (surplusError) {
+          console.error(`[Ichiban Kuji PUT ${id}] 清除重複賞項 ${key} 失敗:`, surplusError)
+        } else {
+          deletedCount++
+          console.log(`[Ichiban Kuji PUT ${id}] 清除重複賞項 ${key}：${surplus.id}`)
+        }
+      }
 
       if (oldPrize) {
         // 已存在，UPDATE（保留已售出數量）
@@ -345,8 +396,9 @@ export async function PUT(
     }
 
     // 2. DELETE 被移除的 prizes（檢查是否有銷售記錄）
-    for (const [key, oldPrize] of oldPrizesMap) {
-      if (!newPrizesMap.has(key)) {
+    for (const [key, oldGroup] of oldPrizesMap) {
+      if (newPrizesMap.has(key)) continue
+      for (const oldPrize of oldGroup) {
         // 檢查是否有銷售記錄
         const { data: saleItems } = await (supabaseServer
           .from('sale_items') as any)
