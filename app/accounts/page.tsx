@@ -24,6 +24,7 @@ type Account = {
   display_name: string | null
   balance: number
   is_active: boolean
+  auto_mark_paid: boolean
   created_at: string
   updated_at: string
 }
@@ -45,6 +46,7 @@ export default function AccountsPage() {
     account_type: 'cash' as 'cash' | 'bank' | 'petty_cash',
     balance: 0,
     is_active: true,
+    auto_mark_paid: true,
   })
 
   // Transfer State
@@ -156,7 +158,13 @@ export default function AccountsPage() {
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        // balance 不送：餘額要靠調整／轉帳產生交易紀錄，直接改會跟明細對不起來
+        body: JSON.stringify({
+          account_name: formData.account_name,
+          account_type: formData.account_type,
+          is_active: formData.is_active,
+          auto_mark_paid: formData.auto_mark_paid,
+        }),
       })
 
       const data = await res.json()
@@ -185,6 +193,7 @@ export default function AccountsPage() {
       account_type: account.account_type,
       balance: 0, // Not used for edit anymore
       is_active: account.is_active,
+      auto_mark_paid: account.auto_mark_paid ?? true,
     })
     setShowAddForm(true)
   }
@@ -219,6 +228,7 @@ export default function AccountsPage() {
       account_type: 'cash',
       balance: 0,
       is_active: true,
+      auto_mark_paid: true,
     })
   }
 
@@ -500,6 +510,24 @@ export default function AccountsPage() {
                 </div>
 
                 {/* Balance input removed - Use Adjustment instead */}
+
+                <div>
+                  <label className="flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-gray-100">
+                    <input
+                      type="checkbox"
+                      checked={formData.auto_mark_paid}
+                      onChange={(e) =>
+                        setFormData({ ...formData, auto_mark_paid: e.target.checked })
+                      }
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                    結帳時自動標記為已收款
+                  </label>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    勾選＝在 POS 選這個付款方式就算收到錢，金額直接進這個帳戶的餘額。
+                    取消勾選＝結帳時預設未收款（手機版 POS 會照這個設定），錢之後收款才入帳。
+                  </p>
+                </div>
 
                 <div className="flex items-center">
                   <label className="flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-gray-100">

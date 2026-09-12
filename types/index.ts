@@ -68,6 +68,8 @@ export type PaymentMethod =
   | 'transfer_post'
   | 'transfer_sunny'
   | 'transfer_ctbc'
+  | 'line_oa_ledger'
+  | 'ig_ledger'
   | 'cod'
   | 'pending'
 

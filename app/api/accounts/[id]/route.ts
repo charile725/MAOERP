@@ -50,7 +50,11 @@ export async function PATCH(
       )
     }
 
-    const updates = validation.data
+    // balance 一律不從這裡改。餘額只能靠 account_transactions 產生
+    // （銷售收款、費用、手動調整 /accounts/adjust、帳戶轉帳 /accounts/transfer），
+    // 否則餘額會跟交易明細對不起來。
+    // 編輯帳戶的表單會連 balance 一起送上來（值是 0），沒擋掉的話一按更新餘額就歸零。
+    const { balance: _ignoredBalance, ...updates } = validation.data
 
     // 如果更新帳戶名稱，檢查是否重複
     if (updates.account_name) {

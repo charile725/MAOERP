@@ -74,6 +74,8 @@ export function formatPaymentMethod(method: string): string {
     'transfer_post': '轉帳 - 郵局',
     'transfer_sunny': '轉帳 - 陽信',
     'transfer_ctbc': '轉帳 - 中國信託',
+    'line_oa_ledger': '官方賴記帳',
+    'ig_ledger': 'IG記帳',
     'cod': '貨到付款',
     'pending': '待確定',
     'store_credit': '購物金',

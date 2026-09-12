@@ -2,6 +2,24 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase/server'
 import { getTaiwanDateString, getTaiwanTime } from '@/lib/timezone'
 
+/**
+ * 把付款方式歸到日結的四個統計桶。
+ *
+ * 現金／刷卡／貨到付款以外的收款方式一律算「非現金」（transfer 桶），
+ * 這樣 cash + card + cod + transfer 永遠等於 total_sales。
+ * 原本是寫死 `startsWith('transfer_')`，新增的帳戶（例如官方賴記帳、IG記帳）
+ * 會四個桶都不進，統計無聲少一塊。
+ *
+ * `pending`（待確定）是還沒決定收款方式，不屬於任何一種，維持不歸桶。
+ */
+function paymentBucket(method: string): 'cash' | 'card' | 'cod' | 'transfer' | null {
+  if (method === 'cash') return 'cash'
+  if (method === 'card') return 'card'
+  if (method === 'cod') return 'cod'
+  if (!method || method === 'pending') return null
+  return 'transfer'
+}
+
 // GET /api/business-day-closing - 獲取指定營業日統計，或列出所有日結記錄
 export async function GET(request: NextRequest) {
   try {
@@ -162,42 +180,21 @@ export async function GET(request: NextRequest) {
       stats.total_sales += sale.total
       stats.store_credit_used += sale.store_credit_used || 0
 
-      if (sale.payment_method === 'cash') {
-        stats.total_cash += sale.total
-      } else if (sale.payment_method === 'card') {
-        stats.total_card += sale.total
-      } else if (sale.payment_method === 'cod') {
-        stats.total_cod += sale.total
-      } else if (sale.payment_method.startsWith('transfer_')) {
-        stats.total_transfer += sale.total
-      }
+      const totalBucket = paymentBucket(sale.payment_method)
+      if (totalBucket) stats[`total_${totalBucket}`] += sale.total
 
       if (sale.is_paid) {
         stats.paid_count += 1
         stats.paid_sales += sale.total
 
-        if (sale.payment_method === 'cash') {
-          stats.paid_cash += sale.total
-        } else if (sale.payment_method === 'card') {
-          stats.paid_card += sale.total
-        } else if (sale.payment_method === 'cod') {
-          stats.paid_cod += sale.total
-        } else if (sale.payment_method.startsWith('transfer_')) {
-          stats.paid_transfer += sale.total
-        }
+        const paidBucket = paymentBucket(sale.payment_method)
+        if (paidBucket) stats[`paid_${paidBucket}`] += sale.total
       } else {
         stats.unpaid_count += 1
         stats.unpaid_sales += sale.total
 
-        if (sale.payment_method === 'cash') {
-          stats.unpaid_cash += sale.total
-        } else if (sale.payment_method === 'card') {
-          stats.unpaid_card += sale.total
-        } else if (sale.payment_method === 'cod') {
-          stats.unpaid_cod += sale.total
-        } else if (sale.payment_method.startsWith('transfer_')) {
-          stats.unpaid_transfer += sale.total
-        }
+        const unpaidBucket = paymentBucket(sale.payment_method)
+        if (unpaidBucket) stats[`unpaid_${unpaidBucket}`] += sale.total
       }
     })
 
@@ -454,42 +451,21 @@ export async function POST(request: NextRequest) {
     sales?.forEach((sale: any) => {
       stats.total_sales += sale.total
 
-      if (sale.payment_method === 'cash') {
-        stats.total_cash += sale.total
-      } else if (sale.payment_method === 'card') {
-        stats.total_card += sale.total
-      } else if (sale.payment_method === 'cod') {
-        stats.total_cod += sale.total
-      } else if (sale.payment_method.startsWith('transfer_')) {
-        stats.total_transfer += sale.total
-      }
+      const totalBucket = paymentBucket(sale.payment_method)
+      if (totalBucket) stats[`total_${totalBucket}`] += sale.total
 
       if (sale.is_paid) {
         stats.paid_count += 1
         stats.paid_sales += sale.total
 
-        if (sale.payment_method === 'cash') {
-          stats.paid_cash += sale.total
-        } else if (sale.payment_method === 'card') {
-          stats.paid_card += sale.total
-        } else if (sale.payment_method === 'cod') {
-          stats.paid_cod += sale.total
-        } else if (sale.payment_method.startsWith('transfer_')) {
-          stats.paid_transfer += sale.total
-        }
+        const paidBucket = paymentBucket(sale.payment_method)
+        if (paidBucket) stats[`paid_${paidBucket}`] += sale.total
       } else {
         stats.unpaid_count += 1
         stats.unpaid_sales += sale.total
 
-        if (sale.payment_method === 'cash') {
-          stats.unpaid_cash += sale.total
-        } else if (sale.payment_method === 'card') {
-          stats.unpaid_card += sale.total
-        } else if (sale.payment_method === 'cod') {
-          stats.unpaid_cod += sale.total
-        } else if (sale.payment_method.startsWith('transfer_')) {
-          stats.unpaid_transfer += sale.total
-        }
+        const unpaidBucket = paymentBucket(sale.payment_method)
+        if (unpaidBucket) stats[`unpaid_${unpaidBucket}`] += sale.total
       }
     })
 
