@@ -740,7 +740,8 @@ export default function POSPage() {
 
       let remaining = totalCount
       let totalComboPrice = 0
-      const priceBreakdown: { count: number; pricePerItem: number }[] = []
+      // total 是這個區間「應該收的總額」，用來做無條件精確分攤（見下面 unitPrices）
+      const priceBreakdown: { count: number; pricePerItem: number; total: number }[] = []
 
       // 開套價：取抽數最大且抽得完的一組，只套用一次
       const openingCombo = openingCombos.find((c: any) => c.draws <= remaining)
@@ -749,7 +750,8 @@ export default function POSPage() {
         remaining -= openingCombo.draws
         priceBreakdown.push({
           count: openingCombo.draws,
-          pricePerItem: openingCombo.price / openingCombo.draws
+          pricePerItem: openingCombo.price / openingCombo.draws,
+          total: openingCombo.price
         })
       }
 
@@ -762,7 +764,8 @@ export default function POSPage() {
           // Track price per item for this combo
           priceBreakdown.push({
             count: sets * combo.draws,
-            pricePerItem: combo.price / combo.draws
+            pricePerItem: combo.price / combo.draws,
+            total: sets * combo.price
           })
         }
       }
@@ -771,27 +774,43 @@ export default function POSPage() {
       if (remaining > 0) {
         priceBreakdown.push({
           count: remaining,
-          pricePerItem: originalPrice
+          pricePerItem: originalPrice,
+          total: remaining * originalPrice
         })
+      }
+
+      // 逐抽算出單價，以「分」為單位精確分攤。
+      //
+      // 原本是每抽都給 combo.price / combo.draws，例如 6 抽 1000 元 → 166.6666...，
+      // 存進 sale_items.price（小數兩位）變成 166.67，六抽加起來是 1000.02，
+      // 跟實際收的 1000 差 2 分。sales.total 是對的，但每筆明細的小計加總永遠對不上，
+      // 毛利報表就會固定偏差這幾分錢。
+      //
+      // 改成把區間總價的「分」平均分給每一抽，除不盡的餘數分給前面幾抽，
+      // 這樣每抽都是乾淨的兩位數，加起來又剛好等於組合價。
+      const unitPrices: number[] = []
+      for (const bracket of priceBreakdown) {
+        if (bracket.count <= 0) continue
+        const totalCents = Math.round(bracket.total * 100)
+        const baseCents = Math.floor(totalCents / bracket.count)
+        const leftover = totalCents - baseCents * bracket.count
+        for (let i = 0; i < bracket.count; i++) {
+          unitPrices.push((baseCents + (i < leftover ? 1 : 0)) / 100)
+        }
       }
 
       // Apply prices to items based on their position
       let itemIndex = 0
       adjustedCart = adjustedCart.map(item => {
         if (item.ichiban_kuji_id === kuji_id) {
-          // Find which price bracket this item falls into
-          let accumulatedCount = 0
-          let itemPrice = originalPrice
+          const qty = item.quantity || 1
+          const slice = unitPrices.slice(itemIndex, itemIndex + qty)
+          // 落在分攤表之外（理論上不會發生）就退回原價，不要讓價格變成 NaN
+          const itemPrice = slice.length === qty
+            ? Math.round((slice.reduce((sum, v) => sum + v, 0) / qty) * 100) / 100
+            : originalPrice
 
-          for (const bracket of priceBreakdown) {
-            if (itemIndex < accumulatedCount + bracket.count) {
-              itemPrice = bracket.pricePerItem
-              break
-            }
-            accumulatedCount += bracket.count
-          }
-
-          itemIndex += item.quantity
+          itemIndex += qty
           return { ...item, price: itemPrice }
         }
         return item

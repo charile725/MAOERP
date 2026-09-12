@@ -1035,8 +1035,35 @@ export async function POST(request: NextRequest) {
       }
       const paymentsToProcess = [...mergedByMethod].map(([method, amount]) => ({ method, amount }))
 
-      // Process each payment
-      for (const payment of paymentsToProcess) {
+      // 分帳合計一定要等於應收金額。不相等的話帳戶交易的總和會對不上 sales.total，
+      // 日結就會把差額丟進「其他未入帳」，而且畫面上完全看不出哪裡少了。
+      // 前端有擋，但這裡是最後一道：不相等就照比例校正，尾差由最後一筆吸收，
+      // 保證「這張單的帳戶交易合計 == sales.total」這個前提永遠成立。
+      const paidSum = paymentsToProcess.reduce((sum, p) => sum + p.amount, 0)
+      if (Math.abs(paidSum - finalTotal) > 0.01) {
+        console.error(
+          `[Sales API] ${saleNo} 分帳合計 ${paidSum} 與應收 ${finalTotal} 不符，已照比例校正`,
+          paymentsToProcess
+        )
+        if (paidSum <= 0) {
+          // 金額全是 0 或負的，沒有比例可言，整筆記到主要付款方式
+          paymentsToProcess.length = 0
+          paymentsToProcess.push({ method: primaryPaymentMethod, amount: finalTotal })
+        } else {
+          let allocated = 0
+          paymentsToProcess.forEach((p, index) => {
+            if (index === paymentsToProcess.length - 1) {
+              p.amount = Math.round((finalTotal - allocated) * 100) / 100
+            } else {
+              p.amount = Math.round((finalTotal * p.amount / paidSum) * 100) / 100
+              allocated += p.amount
+            }
+          })
+        }
+      }
+
+      // Process each payment（金額 0 的不用記帳，updateAccountBalance 也會拒收）
+      for (const payment of paymentsToProcess.filter((p) => p.amount > 0)) {
         // 單一付款時就是開頭查過的 primary account，直接沿用省一次 round-trip
         let paymentAccount: { id: string } | null =
           payment.method === primaryPaymentMethod && accountId ? { id: accountId } : null
