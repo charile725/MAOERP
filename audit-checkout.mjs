@@ -10,7 +10,8 @@
  *   5. 出貨數量：已確認出貨量 + 轉購物金量 <= sale_items.quantity（不可超出）
  *   6. 庫存：products.stock == inventory_logs 累計
  *   7. 孤兒資料：sale_items / delivery_items / AR 指向不存在的母單
- *   8. 一番賞：同一套不該有重複賞項，total_draws 要等於賞項數量加總
+ *   8. 一番賞：同一套不該有重複賞項，total_draws 要等於賞項數量加總，
+ *      剩餘抽數要等於「總數 − 實際賣出」，總數不可小於實際賣出
  *
  * ⚠️ 只做 .select()，不會寫入任何資料。
  *
@@ -265,12 +266,39 @@ for (const [kujiId, list] of prizesByKuji) {
   const qty = list.reduce((a, p) => a + Number(p.quantity), 0)
   if (k && Number(k.total_draws) !== qty) drawsMismatch.push({ k, qty })
 }
+// 剩餘抽數必須等於「總數 − 實際賣出」，而且總數不可小於實際賣出
+const kujiSold = await all(() => db.from('sale_items').select('ichiban_kuji_prize_id, quantity').not('ichiban_kuji_prize_id', 'is', null))
+const soldByKujiPrize = new Map()
+for (const s of kujiSold) soldByKujiPrize.set(s.ichiban_kuji_prize_id, (soldByKujiPrize.get(s.ichiban_kuji_prize_id) || 0) + Number(s.quantity))
+const oversoldPrizes = []
+const remainingDrift = []
+for (const p of kujiPrizes) {
+  const sold = soldByKujiPrize.get(p.id) || 0
+  if (sold > Number(p.quantity)) oversoldPrizes.push({ p, sold })
+  else if (Number(p.remaining) !== Number(p.quantity) - sold) remainingDrift.push({ p, sold })
+}
+
 if (dupKuji.length === 0) console.log(`  ✅ ${prizesByKuji.size} 套一番賞都沒有重複賞項`)
 else {
   issues += dupKuji.length
   for (const { k, dups, total } of dupKuji) {
     console.log(`  ⚠️  【${k?.name || '?'}】${total} 筆賞項中有 ${dups} 組重複`)
   }
+}
+if (oversoldPrizes.length > 0) {
+  issues += oversoldPrizes.length
+  console.log(`  ⚠️  ${oversoldPrizes.length} 個賞項賣出的抽數超過總數（總數被改到比已賣出還少）：`)
+  for (const { p, sold } of oversoldPrizes.slice(0, 10)) {
+    console.log(`      【${kujiById.get(p.kuji_id)?.name}】[${p.prize_tier}] 總數 ${p.quantity}、已賣 ${sold}`)
+  }
+}
+if (remainingDrift.length > 0) {
+  issues += remainingDrift.length
+  console.log(`  ⚠️  ${remainingDrift.length} 個賞項的剩餘抽數 ≠ 總數 − 已賣出：`)
+  for (const { p, sold } of remainingDrift.slice(0, 10)) {
+    console.log(`      【${kujiById.get(p.kuji_id)?.name}】[${p.prize_tier}] 總數 ${p.quantity}、已賣 ${sold}、剩餘 ${p.remaining}（應為 ${Number(p.quantity) - sold}）`)
+  }
+  if (remainingDrift.length > 10) console.log(`      ...另外 ${remainingDrift.length - 10} 個`)
 }
 if (drawsMismatch.length > 0) {
   issues += drawsMismatch.length

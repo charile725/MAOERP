@@ -637,9 +637,16 @@ export async function DELETE(
         .eq('id', delivery.id)
     }
 
-    // 4. If confirmed, need to restore ONLY ichiban kuji remaining
+    // 4. 讀出一番賞品項，先記下要回補多少抽，**等銷售單真的刪掉之後才回補**
+    //
+    // 原本在這裡就直接 remaining += quantity，但後面刪 sale_items / sales 還可能失敗
+    // （例如複選獎選項的 FK、銷貨更正紀錄的 FK）。一失敗就回傳錯誤，使用者重按一次，
+    // 這一步又加一次 —— 重按幾次就多還幾倍。實際災情：S0107 被重按 5 次，
+    // 「卡西法任選」的剩餘抽數從 40 變成 105。
+    // 其他步驟（出貨單、帳戶、積分）重跑時都查得到「已經處理過」而不會重複，
+    // 只有這個是無記錄的純加法，所以挪到最後、確定刪除成功才做。
+    const kujiRestoreByPrize = new Map<string, number>()
     if (sale.status === 'confirmed') {
-      // Get all sale items (including ichiban kuji info)
       const { data: items, error: itemsError } = await (supabaseServer
         .from('sale_items') as any)
         .select('product_id, quantity, ichiban_kuji_prize_id, ichiban_kuji_id')
@@ -652,40 +659,12 @@ export async function DELETE(
         )
       }
 
-      // Restore ONLY ichiban kuji remaining
       for (const item of items || []) {
-        // 如果是從一番賞售出的，恢復一番賞庫存
-        if (item.ichiban_kuji_prize_id) {
-          // 賞品可能已經被刪掉（整套一番賞刪除、或「開新套」換掉舊套組），
-          // 這種情況沒有 remaining 可以回補，直接跳過即可。
-          // 這裡不能因為找不到就中斷：前面已經把出貨單刪掉了，一中斷就會留下
-          // 「有銷售單、沒出貨單」的半刪除孤兒單，之後怎麼點刪除都會再失敗。
-          const { data: prize, error: fetchPrizeError } = await (supabaseServer
-            .from('ichiban_kuji_prizes') as any)
-            .select('remaining')
-            .eq('id', item.ichiban_kuji_prize_id)
-            .maybeSingle()
-
-          if (fetchPrizeError || !prize) {
-            console.warn(
-              `[Delete Sale ${id}] 一番賞賞品 ${item.ichiban_kuji_prize_id} 已不存在，跳過回補` +
-              (fetchPrizeError ? `：${fetchPrizeError.message}` : '')
-            )
-            continue
-          }
-
-          // 恢復一番賞庫的 remaining
-          const { error: updatePrizeError } = await (supabaseServer
-            .from('ichiban_kuji_prizes') as any)
-            .update({ remaining: prize.remaining + item.quantity })
-            .eq('id', item.ichiban_kuji_prize_id)
-
-          if (updatePrizeError) {
-            console.error(
-              `[Delete Sale ${id}] 回補一番賞賞品 ${item.ichiban_kuji_prize_id} 失敗：${updatePrizeError.message}`
-            )
-          }
-        }
+        if (!item.ichiban_kuji_prize_id) continue
+        kujiRestoreByPrize.set(
+          item.ichiban_kuji_prize_id,
+          (kujiRestoreByPrize.get(item.ichiban_kuji_prize_id) || 0) + Number(item.quantity || 0)
+        )
       }
     }
 
@@ -945,7 +924,38 @@ export async function DELETE(
       )
     }
 
-    return NextResponse.json({ ok: true })
+    // 9. 銷售單已經刪掉了，這時才回補一番賞的剩餘抽數（見第 4 步的說明）
+    //    回補不會超過賞項的總數量，避免任何歷史殘留讓剩餘抽數比建立時還多。
+    const kujiRestoreWarnings: string[] = []
+    for (const [prizeId, qty] of kujiRestoreByPrize) {
+      const { data: prize, error: fetchPrizeError } = await (supabaseServer
+        .from('ichiban_kuji_prizes') as any)
+        .select('remaining, quantity')
+        .eq('id', prizeId)
+        .maybeSingle()
+
+      if (fetchPrizeError || !prize) {
+        // 賞品已經不存在（整套刪除等），沒有 remaining 可以回補
+        console.warn(`[Delete Sale ${id}] 一番賞賞品 ${prizeId} 已不存在，跳過回補`)
+        continue
+      }
+
+      const restored = Math.min(Number(prize.quantity), Number(prize.remaining) + qty)
+      const { error: updatePrizeError } = await (supabaseServer
+        .from('ichiban_kuji_prizes') as any)
+        .update({ remaining: restored })
+        .eq('id', prizeId)
+
+      if (updatePrizeError) {
+        console.error(`[Delete Sale ${id}] 回補一番賞賞品 ${prizeId} 失敗：${updatePrizeError.message}`)
+        kujiRestoreWarnings.push(`一番賞抽數回補失敗（${prizeId}）：${updatePrizeError.message}`)
+      }
+    }
+
+    return NextResponse.json({
+      ok: true,
+      ...(kujiRestoreWarnings.length > 0 ? { warnings: kujiRestoreWarnings } : {}),
+    })
   } catch (error) {
     return NextResponse.json(
       { ok: false, error: '系統錯誤' },

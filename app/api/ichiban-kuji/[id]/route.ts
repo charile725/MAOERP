@@ -258,6 +258,35 @@ export async function PUT(
       newPrizesMap.set(key, prize)
     }
 
+    // 每個舊賞項實際賣出幾抽，一律以 sale_items 為準。
+    // 不能用 quantity - remaining 推算：remaining 被重複加回過（刪除銷售單重試）的話，
+    // 推出來的已賣數量會變成負數，錯誤就被這次編輯原封不動保留下來。
+    const soldByPrizeId = new Map<string, number>()
+    if (oldPrizeIds.length > 0) {
+      const { data: soldRows, error: soldError } = await (supabaseServer
+        .from('sale_items') as any)
+        .select('ichiban_kuji_prize_id, quantity')
+        .in('ichiban_kuji_prize_id', oldPrizeIds)
+
+      if (soldError || !soldRows) {
+        console.error(`[Ichiban Kuji PUT ${id}] 讀取已售抽數失敗:`, soldError)
+        return NextResponse.json(
+          { ok: false, error: `讀取已售抽數失敗，已中止更新：${soldError?.message || '沒有回傳資料'}` },
+          { status: 500 }
+        )
+      }
+
+      for (const row of soldRows) {
+        soldByPrizeId.set(
+          row.ichiban_kuji_prize_id,
+          (soldByPrizeId.get(row.ichiban_kuji_prize_id) || 0) + Number(row.quantity || 0)
+        )
+      }
+    }
+
+    // 數量被調到比已賣出還少的賞項（會自動拉回已賣出的數量），回傳給前端提示
+    const clampedPrizes: { prize_tier: string; requested: number; sold: number }[] = []
+
     let updatedCount = 0
     let insertedCount = 0
     let deletedCount = 0
@@ -296,14 +325,24 @@ export async function PUT(
 
       if (oldPrize) {
         // 已存在，UPDATE（保留已售出數量）
-        const sold = oldPrize.quantity - oldPrize.remaining
-        const newRemaining = Math.max(0, newPrize.quantity - sold)
+        //
+        // 數量不能改到比「已經賣出的抽數」還少。紙籤已經被抽走了，
+        // 總數 1、已賣 59 這種資料會讓 total_draws 少算、每抽成本被灌大。
+        // 常見情境：換掉沒中獎的商品時，舊賞項有銷售紀錄刪不掉，就把數量改成 0 或 1 —
+        // 這時自動拉回已賣出的數量，等於「這個賞項售完、不再出」，正是使用者要的效果。
+        const sold = soldByPrizeId.get(oldPrize.id) || 0
+        const effectiveQuantity = Math.max(Number(newPrize.quantity), sold)
+        const newRemaining = effectiveQuantity - sold
+
+        if (effectiveQuantity !== Number(newPrize.quantity)) {
+          clampedPrizes.push({ prize_tier: newPrize.prize_tier, requested: Number(newPrize.quantity), sold })
+        }
 
         const { error: updateError } = await (supabaseServer
           .from('ichiban_kuji_prizes') as any)
           .update({
             prize_name: newPrize.prize_name || null,
-            quantity: newPrize.quantity,
+            quantity: effectiveQuantity,
             remaining: newRemaining,
           })
           .eq('id', oldPrize.id)
@@ -317,7 +356,7 @@ export async function PUT(
         }
 
         updatedCount++
-        console.log(`[Ichiban Kuji PUT ${id}] Updated prize ${key}: quantity ${oldPrize.quantity} -> ${newPrize.quantity}, remaining ${oldPrize.remaining} -> ${newRemaining}`)
+        console.log(`[Ichiban Kuji PUT ${id}] Updated prize ${key}: quantity ${oldPrize.quantity} -> ${effectiveQuantity}, remaining ${oldPrize.remaining} -> ${newRemaining}（已賣 ${sold}）`)
       } else {
         // 不存在，INSERT
         const isSelection = !isOfficial && newPrize.selection_product_ids && newPrize.selection_product_ids.length > 0
@@ -409,7 +448,7 @@ export async function PUT(
         if (saleItems && saleItems.length > 0) {
           console.warn(`[Ichiban Kuji PUT ${id}] Cannot delete prize ${key} - has sale records`)
           return NextResponse.json(
-            { ok: false, error: `賞項 ${oldPrize.prize_tier} 已有銷售記錄，無法刪除。請保留此賞項或將數量設為 0。` },
+            { ok: false, error: `賞項 ${oldPrize.prize_tier} 已有銷售記錄，無法刪除。請保留此賞項，把數量設成 0 即可（系統會自動保留已賣出的 ${soldByPrizeId.get(oldPrize.id) || 0} 抽並視為售完）。` },
             { status: 400 }
           )
         }
@@ -433,6 +472,65 @@ export async function PUT(
       }
     }
 
+    // 依照實際寫進去的賞項重算抽數與成本。
+    // 最上面是照使用者送來的數量算的，但數量可能被拉回已賣出的數量，那個值已經不對了。
+    const { data: finalPrizes, error: finalPrizesError } = await (supabaseServer
+      .from('ichiban_kuji_prizes') as any)
+      .select('id, product_id, quantity')
+      .eq('kuji_id', id)
+
+    if (!finalPrizesError && finalPrizes) {
+      const finalDraws = finalPrizes.reduce((sum: number, p: any) => sum + Number(p.quantity || 0), 0)
+      let finalCost = totalCost
+
+      if (!isOfficial) {
+        const finalIds = finalPrizes.map((p: any) => p.id)
+        const { data: finalOptions } = finalIds.length > 0
+          ? await (supabaseServer.from('ichiban_kuji_prize_options') as any)
+              .select('prize_id, product_id')
+              .in('prize_id', finalIds)
+          : { data: [] }
+
+        const optionsByPrize = new Map<string, string[]>()
+        for (const o of (finalOptions || []) as any[]) {
+          const list = optionsByPrize.get(o.prize_id) || []
+          list.push(o.product_id)
+          optionsByPrize.set(o.prize_id, list)
+        }
+
+        const costIds = [
+          ...finalPrizes.map((p: any) => p.product_id).filter(Boolean),
+          ...((finalOptions || []) as any[]).map((o: any) => o.product_id),
+          ...(draft.last_prize_product_id ? [draft.last_prize_product_id] : []),
+        ]
+        const { data: costRows } = costIds.length > 0
+          ? await (supabaseServer.from('products') as any).select('id, cost').in('id', [...new Set(costIds)])
+          : { data: [] }
+        const costOf = new Map<string, number>(((costRows || []) as any[]).map((r: any) => [r.id, Number(r.cost) || 0]))
+
+        finalCost = 0
+        for (const p of finalPrizes as any[]) {
+          const opts = optionsByPrize.get(p.id) || []
+          const unitCost = opts.length > 0
+            ? opts.reduce((sum, pid) => sum + (costOf.get(pid) || 0), 0) / opts.length
+            : (costOf.get(p.product_id) || 0)
+          finalCost += unitCost * Number(p.quantity || 0)
+        }
+        if (draft.last_prize_product_id) finalCost += costOf.get(draft.last_prize_product_id) || 0
+      }
+
+      if (finalDraws !== totalDraws || Math.abs(finalCost - totalCost) > 0.005) {
+        await (supabaseServer
+          .from('ichiban_kuji') as any)
+          .update({
+            total_draws: finalDraws,
+            total_cost: finalCost,
+            avg_cost: finalDraws > 0 ? finalCost / finalDraws : 0,
+          })
+          .eq('id', id)
+      }
+    }
+
     console.log(`[Ichiban Kuji PUT ${id}] Summary: updated ${updatedCount}, inserted ${insertedCount}, deleted ${deletedCount}`)
 
     return NextResponse.json({
@@ -440,7 +538,9 @@ export async function PUT(
       data: {
         prizes_updated: updatedCount,
         prizes_inserted: insertedCount,
-        prizes_deleted: deletedCount
+        prizes_deleted: deletedCount,
+        // 數量被自動拉回已賣出抽數的賞項（前端可提示「已視為售完」）
+        clamped_prizes: clampedPrizes,
       }
     })
   } catch (error) {
