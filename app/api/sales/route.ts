@@ -430,22 +430,36 @@ export async function POST(request: NextRequest) {
     // 分離一般商品和一番賞
     // 一番賞若有 realProductId 也要一起撈：組 sale_items 時需要它的 cost / name。
     // 下面用到 productMap 的地方都各自有 ichiban_kuji_prize_id 的守衛，放寬不影響庫存檢查。
-    const productIds = draft.items
+    // 去重：一次抽 50 抽沒中獎，50 筆明細都是同一個商品，不需要送 50 個一樣的 id
+    const productIds = [...new Set(draft.items
       .map(i => i.product_id)
-      .filter((id): id is string => !!id)
-    const prizeIds = draft.items.filter(i => i.ichiban_kuji_prize_id).map(i => i.ichiban_kuji_prize_id).filter((id): id is string => !!id)
+      .filter((id): id is string => !!id))]
+    const prizeIds = [...new Set(draft.items
+      .map(i => i.ichiban_kuji_prize_id)
+      .filter((id): id is string => !!id))]
 
     // 批次查詢商品（含積分欄位）
     // cost / avg_cost 一併撈出來，下面組 sale_items 時就不必每筆商品各查一次
     let productMap = new Map<string, { stock: number; allow_negative: boolean; name: string; is_points_base: boolean; points_cost: number | null; cost: number | null; avg_cost: number | null }>()
     if (productIds.length > 0) {
-      const { data: products } = await (supabaseServer
+      const { data: products, error: productsError } = await (supabaseServer
         .from('products') as any)
         .select('id, stock, allow_negative, name, is_points_base, points_cost, cost, avg_cost')
         .in('id', productIds)
-      if (products) {
-        productMap = new Map(products.map((p: any) => [p.id, p]))
+
+      // 這次查詢一定要檢查錯誤。查失敗時 data 是 null，productMap 就是空的，
+      // 一番賞明細又不會走下面「商品不存在」的檢查 —— 結果照樣結帳，
+      // 但每一筆明細的品名寫成 null、成本寫成 0。
+      // 2026-09-14 的 S0340 就這樣 52 筆明細有 50 筆沒有品名。
+      if (productsError || !products) {
+        console.error('[Sales API] 查詢商品失敗:', productsError)
+        await (supabaseServer.from('sales') as any).delete().eq('id', sale.id)
+        return NextResponse.json(
+          { ok: false, error: `查詢商品資料失敗，請重新結帳：${productsError?.message || '沒有回傳資料'}` },
+          { status: 500 }
+        )
       }
+      productMap = new Map(products.map((p: any) => [p.id, p]))
     }
 
     mark('products batch')
@@ -502,13 +516,19 @@ export async function POST(request: NextRequest) {
     // prize_name / kuji_id 一併撈出來，下面組 sale_items 時就不必每個賞品各查一次
     let prizeMap = new Map<string, { remaining: number; prize_tier: string; prize_name: string | null; kuji_id: string | null }>()
     if (prizeIds.length > 0) {
-      const { data: prizes } = await (supabaseServer
+      const { data: prizes, error: prizesError } = await (supabaseServer
         .from('ichiban_kuji_prizes') as any)
         .select('id, remaining, prize_tier, prize_name, kuji_id')
         .in('id', prizeIds)
-      if (prizes) {
-        prizeMap = new Map(prizes.map((p: any) => [p.id, p]))
+      if (prizesError || !prizes) {
+        console.error('[Sales API] 查詢一番賞賞項失敗:', prizesError)
+        await (supabaseServer.from('sales') as any).delete().eq('id', sale.id)
+        return NextResponse.json(
+          { ok: false, error: `查詢一番賞資料失敗，請重新結帳：${prizesError?.message || '沒有回傳資料'}` },
+          { status: 500 }
+        )
       }
+      prizeMap = new Map(prizes.map((p: any) => [p.id, p]))
     }
 
     // 批次查詢一番賞主檔（avg_cost / name），同樣避免每個賞品各查一次
@@ -519,13 +539,19 @@ export async function POST(request: NextRequest) {
 
     let kujiMap = new Map<string, { avg_cost: number | null; name: string | null }>()
     if (kujiIds.length > 0) {
-      const { data: kujis } = await (supabaseServer
+      const { data: kujis, error: kujisError } = await (supabaseServer
         .from('ichiban_kuji') as any)
         .select('id, avg_cost, name')
         .in('id', kujiIds)
-      if (kujis) {
-        kujiMap = new Map(kujis.map((k: any) => [k.id, k]))
+      if (kujisError || !kujis) {
+        console.error('[Sales API] 查詢一番賞套組失敗:', kujisError)
+        await (supabaseServer.from('sales') as any).delete().eq('id', sale.id)
+        return NextResponse.json(
+          { ok: false, error: `查詢一番賞資料失敗，請重新結帳：${kujisError?.message || '沒有回傳資料'}` },
+          { status: 500 }
+        )
       }
+      kujiMap = new Map(kujis.map((k: any) => [k.id, k]))
     }
 
     // 驗證庫存
@@ -537,6 +563,15 @@ export async function POST(request: NextRequest) {
           await (supabaseServer.from('sales') as any).delete().eq('id', sale.id)
           return NextResponse.json(
             { ok: false, error: `Prize not found: ${item.ichiban_kuji_prize_id}` },
+            { status: 400 }
+          )
+        }
+
+        // 自製套一番賞的明細也帶著實體商品 id（品名、成本都靠它），查不到一樣不能結帳
+        if (item.product_id && !item.selection_option_id && !productMap.has(item.product_id)) {
+          await (supabaseServer.from('sales') as any).delete().eq('id', sale.id)
+          return NextResponse.json(
+            { ok: false, error: `一番賞對應的商品不存在：${item.product_id}` },
             { status: 400 }
           )
         }
@@ -570,15 +605,24 @@ export async function POST(request: NextRequest) {
     // 3. 複選獎：驗證 selection_option_id 並取得 product 資訊
     // 建立 optionMap 以便後續使用（批次查詢：逐筆查的話每個複選獎都要多一次 round-trip）
     const optionMap = new Map<string, any>()
-    const optionIds = draft.items
+    const optionIds = [...new Set(draft.items
       .map(i => i.selection_option_id)
-      .filter((id): id is string => !!id)
+      .filter((id): id is string => !!id))]
 
     if (optionIds.length > 0) {
-      const { data: options } = await (supabaseServer
+      const { data: options, error: optionsError } = await (supabaseServer
         .from('ichiban_kuji_prize_options') as any)
         .select('id, prize_id, product_id, is_consumed, products(id, name, item_code, cost)')
         .in('id', optionIds)
+
+      if (optionsError || !options) {
+        console.error('[Sales API] 查詢複選獎選項失敗:', optionsError)
+        await (supabaseServer.from('sales') as any).delete().eq('id', sale.id)
+        return NextResponse.json(
+          { ok: false, error: `查詢複選獎資料失敗，請重新結帳：${optionsError?.message || '沒有回傳資料'}` },
+          { status: 500 }
+        )
+      }
 
       for (const option of options || []) {
         optionMap.set(option.id, option)
@@ -644,7 +688,7 @@ export async function POST(request: NextRequest) {
             quantity: item.quantity,
             price: item.price,
             cost: kuji?.avg_cost || 0,
-            snapshot_name: displayName ? `${kuji?.name || ''} ${displayName}` : null,
+            snapshot_name: displayName ? `${kuji?.name || ''} ${displayName}`.trim() : (kuji?.name || '（未知賞項）'),
             ichiban_kuji_prize_id: item.ichiban_kuji_prize_id,
             ichiban_kuji_id: item.ichiban_kuji_id || prize?.kuji_id || null,
             is_points_redemption: false,
@@ -665,7 +709,16 @@ export async function POST(request: NextRequest) {
           quantity: item.quantity,
           price: item.price,
           cost: product?.avg_cost || product?.cost || 0,  // 優先使用加權平均成本
-          snapshot_name: product?.name || null,
+          // 品名一定要有值：銷貨紀錄、收據、搜尋都靠它，而且結帳後就不會再更新
+          snapshot_name: product?.name
+            || (item.ichiban_kuji_prize_id
+              ? (() => {
+                  const prize = prizeMap.get(item.ichiban_kuji_prize_id!)
+                  const kuji = kujiMap.get(item.ichiban_kuji_id || prize?.kuji_id || '')
+                  return [kuji?.name, prize?.prize_name || prize?.prize_tier].filter(Boolean).join(' ') || null
+                })()
+              : null)
+            || '（未知商品）',
           ichiban_kuji_prize_id: item.ichiban_kuji_prize_id || null,
           ichiban_kuji_id: item.ichiban_kuji_id || null,
           is_points_redemption: isPointsRedemption,

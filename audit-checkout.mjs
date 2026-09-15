@@ -9,7 +9,7 @@
  *   4. 積分餘額：customers.loyalty_points == customer_points_logs 累計
  *   5. 出貨數量：已確認出貨量 + 轉購物金量 <= sale_items.quantity（不可超出）
  *   6. 庫存：products.stock == inventory_logs 累計
- *   7. 孤兒資料：sale_items / delivery_items / AR 指向不存在的母單
+ *   7. 孤兒資料：sale_items / delivery_items / AR 指向不存在的母單；明細都要有品名
  *   8. 一番賞：同一套不該有重複賞項，total_draws 要等於賞項數量加總，
  *      剩餘抽數要等於「總數 − 實際賣出」，總數不可小於實際賣出
  *
@@ -231,6 +231,17 @@ if (orphanDeliveries.length > 0) {
 }
 if (orphanAr.length > 0) {
   for (const a of orphanAr.slice(0, 10)) console.log(`      AR ${a.partner_code} $${a.amount} ref_id=${a.ref_id}`)
+}
+
+// ---------- 7b. 明細品名 ----------
+section('7b. 銷售明細都要有品名')
+const noName = saleItems.filter((i) => !i.snapshot_name || !String(i.snapshot_name).trim())
+if (noName.length === 0) console.log(`  ✅ ${saleItems.length} 筆明細都有品名`)
+else {
+  issues += noName.length
+  const bySaleNo = {}
+  for (const i of noName) { const no = saleById.get(i.sale_id)?.sale_no || i.sale_id; bySaleNo[no] = (bySaleNo[no] || 0) + 1 }
+  console.log(`  ⚠️  ${noName.length} 筆明細沒有品名：${Object.entries(bySaleNo).map(([n, c]) => `${n}×${c}`).join('、')}`)
 }
 
 // ---------- 8. 一番賞賞項重複 ----------
