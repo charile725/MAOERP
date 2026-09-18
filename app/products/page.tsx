@@ -10,6 +10,7 @@ import { formatCurrency } from '@/lib/utils'
 import type { Product } from '@/types'
 import ProductImportModal from '@/components/ProductImportModal'
 import CameraScanner from '@/components/CameraScanner'
+import InventoryLogModal from '@/components/InventoryLogModal'
 
 type SortField = 'item_code' | 'name' | 'price' | 'avg_cost' | 'stock' | 'updated_at'
 type SortOrder = 'asc' | 'desc'
@@ -20,6 +21,7 @@ export default function ProductsPage() {
   const [activeFilter, setActiveFilter] = useState<boolean | null>(null)
   const [page, setPage] = useState(1)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  const [inventoryLogProductId, setInventoryLogProductId] = useState<string | null>(null)
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null)
   const menuButtonRefs = useRef<{ [key: string]: HTMLButtonElement | null }>({})
   const [sortBy, setSortBy] = useState<SortField>('updated_at')
@@ -457,6 +459,16 @@ export default function ProductsPage() {
             </Link>
             <button
               onClick={() => {
+                setInventoryLogProductId(openMenuId)
+                setOpenMenuId(null)
+                setMenuPosition(null)
+              }}
+              className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
+            >
+              庫存異動
+            </button>
+            <button
+              onClick={() => {
                 const product = products.find(p => p.id === openMenuId)
                 if (product) {
                   toggleActive(product.id, product.is_active)
@@ -485,6 +497,11 @@ export default function ProductsPage() {
         </>,
         document.body
       )}
+
+      <InventoryLogModal
+        productId={inventoryLogProductId}
+        onClose={() => setInventoryLogProductId(null)}
+      />
 
       {/* Camera Scanner */}
       <CameraScanner

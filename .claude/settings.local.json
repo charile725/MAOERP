@@ -56,5 +56,6 @@
       "Bash(git checkout *)",
       "Bash(nslookup db.rrznbzamoyicgqzwnlxz.supabase.co)"
     ]
-  }
+  },
+  "spinnerTipsEnabled": true
 }

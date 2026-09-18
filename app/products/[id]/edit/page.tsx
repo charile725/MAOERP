@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { formatDate } from '@/lib/utils'
 import type { Product } from '@/types'
+import InventoryLogModal from '@/components/InventoryLogModal'
 
 type UserRole = 'admin' | 'staff'
 
@@ -34,6 +35,7 @@ export default function EditProductPage() {
 
   // Stock adjustment states
   const [adjustments, setAdjustments] = useState<StockAdjustment[]>([])
+  const [showInventoryLogs, setShowInventoryLogs] = useState(false)
   const [showAdjustForm, setShowAdjustForm] = useState(false)
   const [adjustedStock, setAdjustedStock] = useState('')
   const [adjustNote, setAdjustNote] = useState('')
@@ -241,19 +243,33 @@ export default function EditProductPage() {
           </div>
         </div>
 
+        <InventoryLogModal
+          productId={showInventoryLogs ? productId : null}
+          onClose={() => setShowInventoryLogs(false)}
+        />
+
         {/* Stock Adjustment Section */}
         <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-4 shadow dark:border-blue-800 dark:bg-blue-950/30 md:p-6">
           <div className="mb-3 flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">庫存盤點</h3>
-            {!showAdjustForm && (
+            <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => setShowAdjustForm(true)}
-                className="rounded bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
+                onClick={() => setShowInventoryLogs(true)}
+                className="rounded border border-blue-300 px-4 py-2 text-sm text-blue-700 hover:bg-blue-100 dark:border-blue-700 dark:text-blue-300 dark:hover:bg-blue-900/40"
               >
-                開始盤點
+                庫存異動紀錄
               </button>
-            )}
+              {!showAdjustForm && (
+                <button
+                  type="button"
+                  onClick={() => setShowAdjustForm(true)}
+                  className="rounded bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
+                >
+                  開始盤點
+                </button>
+              )}
+            </div>
           </div>
 
           {showAdjustForm && (
