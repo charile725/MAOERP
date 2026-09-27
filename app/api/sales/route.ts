@@ -101,6 +101,30 @@ export async function GET(request: NextRequest) {
       matchingCustomerCodes = matchingCustomers?.map((c: any) => c.customer_code) || []
     }
 
+    // 條碼搜尋：主條碼（products.barcode）或多條碼（product_barcodes）完全相符。
+    // 用完全相符而不是部分比對，否則輸入一段單號數字也會撈到一堆條碼剛好含那段數字的商品。
+    // 查詢一定要檢查錯誤，查失敗就當沒命中會讓人以為「沒賣過這個商品」。
+    let barcodeProductIds = new Set<string>()
+    if (keyword?.trim()) {
+      const barcode = keyword.trim()
+      const [mainResult, extraResult] = await Promise.all([
+        (supabaseServer.from('products') as any).select('id').eq('barcode', barcode),
+        (supabaseServer.from('product_barcodes') as any).select('product_id').eq('barcode', barcode),
+      ])
+      if (mainResult.error || extraResult.error) {
+        const barcodeError = mainResult.error || extraResult.error
+        console.error('[Sales API] 條碼查詢失敗:', barcodeError)
+        return NextResponse.json(
+          { ok: false, error: `條碼查詢失敗：${barcodeError.message}` },
+          { status: 500 }
+        )
+      }
+      barcodeProductIds = new Set([
+        ...(mainResult.data || []).map((p: any) => p.id),
+        ...(extraResult.data || []).map((b: any) => b.product_id),
+      ])
+    }
+
     // 有關鍵字、按客戶分組、查詢特定營業日、日期範圍查詢、或未出貨篩選時不使用服務器端分頁
     const noPagination = keyword || groupByCustomer || businessDate || (dateFrom && dateTo) || undeliveredOnly
     if (!noPagination) {
@@ -189,9 +213,10 @@ export async function GET(request: NextRequest) {
         if (sale.sale_no?.toLowerCase().includes(kw)) return true
         // 匹配客戶
         if (matchingCustomerCodes.includes(sale.customer_code)) return true
-        // 匹配商品名稱、品號、或一番賞套組名稱
+        // 匹配商品名稱、品號、條碼、或一番賞套組名稱
         const items = sale.sale_items || []
         return items.some((item: any) =>
+          (item.product_id && barcodeProductIds.has(item.product_id)) ||
           item.snapshot_name?.toLowerCase().includes(kw) ||
           item.products?.item_code?.toLowerCase().includes(kw) ||
           item.ichiban_kuji_name?.toLowerCase().includes(kw)

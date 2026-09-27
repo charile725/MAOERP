@@ -979,7 +979,7 @@ export default function SalesPage() {
                 type="text"
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
-                placeholder="搜尋單號、客戶名稱、商品名稱或品號"
+                placeholder="搜尋單號、客戶名稱、商品名稱、品號或條碼"
                 className="flex-1 rounded border border-gray-300 dark:border-gray-600 px-4 py-2 text-gray-900 dark:text-gray-100 dark:bg-gray-700 placeholder:text-gray-900 dark:placeholder:text-gray-400"
               />
               <button
