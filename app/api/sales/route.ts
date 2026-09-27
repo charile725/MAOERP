@@ -42,6 +42,7 @@ export async function GET(request: NextRequest) {
           price,
           snapshot_name,
           product_id,
+          ichiban_kuji_id,
           cost,
           store_credit_qty,
           store_credit_amount,
@@ -150,7 +151,36 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // 統一關鍵字過濾：單號、客戶名稱、商品名稱、品號
+    // 補上一番賞套組名稱。
+    // 自製套非複選的賞項（沒中獎、指定商品的中獎）結帳時只存商品名，
+    // 紀錄裡看不出是哪一套抽的，搜套組名稱也搜不到 —— 例如「UX-04戰鬥盤組」
+    // 的 8 抽全部叫「一番賞沒中獎無情小賞」。這裡把套組名補回去，
+    // 讓畫面顯示得出來、關鍵字也搜得到（歷史資料不用改寫）。
+    const kujiIdsInList = [...new Set((data || []).flatMap((sale: any) =>
+      (sale.sale_items || []).map((i: any) => i.ichiban_kuji_id).filter(Boolean)
+    ))] as string[]
+
+    const kujiNameById = new Map<string, string>()
+    if (kujiIdsInList.length > 0) {
+      const KUJI_BATCH = 100
+      for (let i = 0; i < kujiIdsInList.length; i += KUJI_BATCH) {
+        const { data: kujiRows } = await (supabaseServer
+          .from('ichiban_kuji') as any)
+          .select('id, name')
+          .in('id', kujiIdsInList.slice(i, i + KUJI_BATCH))
+        for (const k of (kujiRows || []) as any[]) kujiNameById.set(k.id, k.name)
+      }
+    }
+
+    for (const sale of (data || []) as any[]) {
+      for (const item of sale.sale_items || []) {
+        item.ichiban_kuji_name = item.ichiban_kuji_id
+          ? kujiNameById.get(item.ichiban_kuji_id) || null
+          : null
+      }
+    }
+
+    // 統一關鍵字過濾：單號、客戶名稱、商品名稱、品號、一番賞套組名稱
     let filteredData = data
     if (keyword) {
       const kw = keyword.toLowerCase()
@@ -159,11 +189,12 @@ export async function GET(request: NextRequest) {
         if (sale.sale_no?.toLowerCase().includes(kw)) return true
         // 匹配客戶
         if (matchingCustomerCodes.includes(sale.customer_code)) return true
-        // 匹配商品名稱或品號
+        // 匹配商品名稱、品號、或一番賞套組名稱
         const items = sale.sale_items || []
         return items.some((item: any) =>
           item.snapshot_name?.toLowerCase().includes(kw) ||
-          item.products?.item_code?.toLowerCase().includes(kw)
+          item.products?.item_code?.toLowerCase().includes(kw) ||
+          item.ichiban_kuji_name?.toLowerCase().includes(kw)
         )
       })
     }
@@ -709,8 +740,18 @@ export async function POST(request: NextRequest) {
           quantity: item.quantity,
           price: item.price,
           cost: product?.avg_cost || product?.cost || 0,  // 優先使用加權平均成本
-          // 品名一定要有值：銷貨紀錄、收據、搜尋都靠它，而且結帳後就不會再更新
-          snapshot_name: product?.name
+          // 品名一定要有值：銷貨紀錄、收據、搜尋都靠它，而且結帳後就不會再更新。
+          // 一番賞的賞項要冠上套組名與賞別，否則紀錄上只看到商品名，
+          // 看不出是哪一套抽的（複選獎與官方套本來就有冠，這裡補齊自製套）。
+          snapshot_name: (item.ichiban_kuji_prize_id && product?.name
+            ? (() => {
+                const prize = prizeMap.get(item.ichiban_kuji_prize_id)
+                const kuji = kujiMap.get(item.ichiban_kuji_id || prize?.kuji_id || '')
+                const tier = prize?.prize_name || prize?.prize_tier
+                return [kuji?.name, tier].filter(Boolean).join(' ') + ` - ${product.name}`
+              })()
+            : null)
+            || product?.name
             || (item.ichiban_kuji_prize_id
               ? (() => {
                   const prize = prizeMap.get(item.ichiban_kuji_prize_id!)
