@@ -1,19 +1,19 @@
 /**
- * 新增「官方賴記帳」「IG記帳」兩個收款帳戶
+ * 確保這些收款帳戶存在（POS 的付款方式就是 accounts 表的一列）
  *
- * 這兩個是自己的收款帳戶（結帳當下就算收到錢，金額累積在帳戶餘額裡），
+ * 全部都是「結帳當下就算收到錢、金額累積在該帳戶餘額」的收款方式，
  * 之後對帳時用帳戶頁的「資金轉帳」把錢轉到真正的銀行。
  *
  * 為什麼不用帳戶頁的「新增帳戶」直接建：
- *   - 那個表單不給填 payment_method_code，會照中文名自動產生（會是中文代碼）
- *   - auto_mark_paid 舊版表單沒有開放，預設 false，手機版 POS 會把單子當成未收款
- * 這支用固定的英數代碼建，POS／日結／現金流才串得起來。
+ *   那個表單不給填 payment_method_code，會照中文名自動產生中文代碼。
+ *   這支用固定的英數代碼建，POS／日結／現金流／收據才串得起來。
+ *   （auto_mark_paid 現在表單有開放了，但代碼還是只能從這裡指定。）
  *
- * 冪等：同名或同代碼已存在就跳過。
+ * 冪等：同名或同代碼已存在就跳過，所以可以重複執行。
  *
  * 用法：
- *   node add-ledger-accounts.mjs            # dry-run
- *   node add-ledger-accounts.mjs --apply    # 實際寫入
+ *   node add-payment-accounts.mjs            # dry-run
+ *   node add-payment-accounts.mjs --apply    # 實際寫入
  */
 
 import { readFileSync } from 'node:fs'
@@ -38,9 +38,11 @@ const db = createClient(url, key)
 const WANTED = [
   { account_name: '官方賴記帳', payment_method_code: 'line_oa_ledger', sort_order: 5 },
   { account_name: 'IG記帳', payment_method_code: 'ig_ledger', sort_order: 6 },
+  // transfer_linepay 這個代碼 lib/utils.ts 的 formatPaymentMethod 本來就認得（轉帳 - LINE Pay）
+  { account_name: 'LINE Pay', payment_method_code: 'transfer_linepay', sort_order: 7 },
 ]
 
-console.log(`=== 新增記帳收款帳戶 ${apply ? '【實際寫入】' : '（dry-run，不寫入）'} ===`)
+console.log(`=== 建立收款帳戶 ${apply ? '【實際寫入】' : '（dry-run，不寫入）'} ===`)
 console.log(`環境檔：${envFile}\n資料庫：${url}\n`)
 
 const { data: existing, error: exErr } = await db.from('accounts').select('id, account_name, payment_method_code, sort_order')
