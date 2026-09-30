@@ -196,14 +196,34 @@ export async function updateAccountBalance(
       .insert(transactionLog)
 
     if (logError) {
-      // 審計日誌失敗不影響主要流程，但要記錄警告
-      console.error('[Account Service] 寫入審計日誌失敗:', logError)
+      // 審計日誌不是「附帶記錄」，而是對帳的唯一依據：
+      // 餘額動了卻沒有明細，帳戶餘額就永遠比明細累計多這一筆，而且畫面上看不出來
+      // （2026-09-13 的 S0333 就這樣讓現金多出 220，是靠稽核腳本才找到的）。
+      // 所以這裡把餘額改回去，並回報失敗 —— 寧可變成「單子已收款但沒入帳」
+      // 那種查得出來、補得回來的狀態，也不要留下無聲的餘額漂移。
+      console.error('[Account Service] 寫入審計日誌失敗，將餘額改回:', logError)
+
+      const { error: revertError } = await (supabase
+        .from('accounts') as any)
+        .update({ balance: previousBalance, updated_at: getTaiwanTime() })
+        .eq('id', accountId)
+
+      if (revertError) {
+        console.error('[Account Service] 餘額回復失敗，帳戶餘額與明細不一致:', revertError)
+        return {
+          success: false,
+          accountId,
+          previousBalance,
+          newBalance,
+          error: `審計日誌寫入失敗（${logError.message}），而且餘額回復也失敗（${revertError.message}）。帳戶餘額與明細已不一致，請執行 audit-cashflow.mjs 檢查。`
+        }
+      }
+
       return {
-        success: true,
+        success: false,
         accountId,
         previousBalance,
-        newBalance,
-        warning: `餘額更新成功，但審計日誌寫入失敗: ${logError.message}`
+        error: `審計日誌寫入失敗，餘額已回復未變動狀態: ${logError.message}`
       }
     }
 
