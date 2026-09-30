@@ -10,7 +10,8 @@ export const productSchema = z.object({
   unit: z.string().default('件'),
   tags: z.array(z.string()).default([]),
   stock: z.number().min(0, 'Stock cannot be negative').default(0),
-  allow_negative: z.boolean().default(true),
+  // 預設不允許負庫存：新增商品時不用每次去把勾勾點掉
+  allow_negative: z.boolean().default(false),
   is_active: z.boolean().default(true),
   is_points_base: z.boolean().optional(),
   points_cost: z.number().int().min(1).nullable().optional(),

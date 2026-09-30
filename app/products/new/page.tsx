@@ -207,7 +207,7 @@ export default function NewProductPage() {
 
           <div className="mb-6">
             <label className="flex items-center gap-2">
-              <input type="checkbox" name="allow_negative" defaultChecked className="h-4 w-4" />
+              <input type="checkbox" name="allow_negative" className="h-4 w-4" />
               <span className="text-sm text-gray-900 dark:text-gray-100">允許負庫存</span>
             </label>
           </div>
