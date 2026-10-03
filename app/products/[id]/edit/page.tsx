@@ -5,6 +5,7 @@ import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { formatDate } from '@/lib/utils'
 import type { Product } from '@/types'
 import InventoryLogModal from '@/components/InventoryLogModal'
+import { formatDbUtcAsTaiwan } from '@/lib/timezone'
 
 type UserRole = 'admin' | 'staff'
 
@@ -357,7 +358,8 @@ export default function EditProductPage() {
                   <tbody className="divide-y divide-blue-100 dark:divide-blue-900">
                     {adjustments.map((adj) => (
                       <tr key={adj.id}>
-                        <td className="py-1 text-gray-900 dark:text-gray-100">{formatDate(adj.created_at)}</td>
+                        {/* stock_adjustments.created_at 是帶時區的 UTC，formatDate 直接截字串會顯示成前一天 */}
+                        <td className="py-1 text-gray-900 dark:text-gray-100">{formatDbUtcAsTaiwan(adj.created_at)}</td>
                         <td className="py-1 text-right text-gray-900 dark:text-gray-100">{adj.previous_stock}</td>
                         <td className="py-1 text-right text-gray-900 dark:text-gray-100">{adj.adjusted_stock}</td>
                         <td className={`py-1 text-right ${adj.difference > 0 ? 'text-green-600 dark:text-green-400' : adj.difference < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-gray-400'

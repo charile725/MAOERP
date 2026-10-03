@@ -8,9 +8,16 @@
  *      → 存「真實 UTC 瞬間」，用 getTaiwanTime()
  *
  *   2. timestamp（不帶時區）
- *      例：sales.created_at、deliveries.created_at、inventory_logs.created_at
+ *      例：sales.created_at、deliveries.created_at
  *      → 慣例是存「台灣牆上時間」，用 getTaiwanWallClock()
  *        台灣的瀏覽器讀回來會當成當地時間解析，顯示才會正確
+ *
+ *   2b. timestamp（不帶時區）但實際存的是真 UTC —— 例外，要特別小心
+ *      例：inventory_logs.created_at、products.created_at
+ *      → 因為沒有任何程式碼指定 created_at，吃的是資料庫預設 now()（UTC）。
+ *        欄位型別跟第 2 類一樣，但內容是 UTC，直接顯示會少 8 小時。
+ *        讀出來要顯示時用 parseDbUtc() / formatDbUtcAsTaiwan()，
+ *        千萬不要用 parseTaiwanWallClock()（那會把 UTC 當成台灣時間）。
  *
  *   3. date（日期）
  *      例：sales.sale_date、deliveries.delivery_date、partner_accounts.due_date
@@ -78,4 +85,31 @@ export function parseTaiwanWallClock(value: string | Date): Date {
   return hasTimezone
     ? new Date(new Date(text).getTime() + TAIWAN_OFFSET_MS)
     : new Date(text + 'Z')
+}
+
+/**
+ * 解析「不帶時區、但內容是真 UTC」的欄位，回傳可以用 getUTC* 取出台灣時間數字的 Date。
+ *
+ * 適用對象是沒有被程式碼指定過 created_at、直接吃資料庫預設 now() 的欄位，
+ * 目前已知有 inventory_logs.created_at 與 products.created_at。
+ * 這類欄位用 parseTaiwanWallClock() 會把 UTC 當成台灣時間，顯示就少 8 小時。
+ */
+export function parseDbUtc(value: string | Date): Date {
+  if (value instanceof Date) {
+    return new Date(value.getTime() + TAIWAN_OFFSET_MS)
+  }
+
+  const text = String(value)
+  const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/.test(text)
+  const utcMs = hasTimezone ? new Date(text).getTime() : new Date(text + 'Z').getTime()
+
+  return new Date(utcMs + TAIWAN_OFFSET_MS)
+}
+
+/** 把「不帶時區但內容是真 UTC」的欄位格式化成台灣時間 YYYY-MM-DD HH:mm */
+export function formatDbUtcAsTaiwan(value: string | Date | null | undefined): string {
+  if (!value) return '-'
+  const d = parseDbUtc(value)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`
 }

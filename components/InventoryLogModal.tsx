@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { formatCurrency } from '@/lib/utils'
+import { formatDbUtcAsTaiwan } from '@/lib/timezone'
 
 type InventoryLog = {
   id: string
@@ -164,7 +165,7 @@ export default function InventoryLogModal({ productId, onClose }: Props) {
                       {rows.map(({ log, balance }) => (
                         <tr key={log.id} className={log.ref_type === 'init' ? 'bg-emerald-50 dark:bg-emerald-900/20' : ''}>
                           <td className="whitespace-nowrap px-3 py-2 text-gray-600 dark:text-gray-400">
-                            {String(log.created_at).slice(0, 16).replace('T', ' ')}
+                            {formatDbUtcAsTaiwan(log.created_at)}
                           </td>
                           <td className="whitespace-nowrap px-3 py-2 text-gray-900 dark:text-gray-100">
                             {typeLabel(log.ref_type)}
