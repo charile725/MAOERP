@@ -1384,6 +1384,9 @@ export async function POST(request: NextRequest) {
     // 只有官方套賞品沒有商品（product_id 為 null）才跳過。
     // 放在兩張出貨單都建好之後才寫：中途失敗回滾時只刪 sale/delivery，
     // 若庫存日誌已寫入就會變成庫存白扣。
+    // 庫存沒扣成功的品項，一起回傳給前端提示（不中斷結帳）
+    const stockWarnings: string[] = []
+
     if (confirmedDelivery) {
       const stockLogs = deliveredItems
         .filter(({ saleItem }) => !!saleItem.product_id)
@@ -1395,13 +1398,24 @@ export async function POST(request: NextRequest) {
           memo: `出貨扣庫存 - ${confirmedDelivery.delivery_no}`,
         }))
 
-      if (stockLogs.length > 0) {
+      // ⚠️ 一定要逐筆寫、而且要把失敗講出來。
+      //    資料庫有觸發器：商品的 allow_negative=false 且扣下去會變負庫存時，
+      //    會直接拒絕那筆 inventory_logs（訊息是 Insufficient stock for product...）。
+      //    原本是整批 insert + 只 console.error，所以只要有一個商品庫存不足，
+      //    整張出貨單的庫存就全部沒扣，而且畫面顯示結帳成功、完全看不出來。
+      for (const log of stockLogs) {
         const { error: stockLogError } = await (supabaseServer
           .from('inventory_logs') as any)
-          .insert(stockLogs)
+          .insert(log)
 
         if (stockLogError) {
-          console.error(`[Sales API] Failed to write inventory logs for delivery ${confirmedDelivery.id}:`, stockLogError)
+          console.error(
+            `[Sales API] 庫存扣除失敗 delivery=${confirmedDelivery.delivery_no} product=${log.product_id}:`,
+            stockLogError
+          )
+          stockWarnings.push(
+            `${productMap.get(log.product_id as string)?.name || log.product_id}：庫存未扣除（${stockLogError.message}）`
+          )
         }
       }
     }
@@ -1487,7 +1501,11 @@ export async function POST(request: NextRequest) {
     )
 
     return NextResponse.json(
-      { ok: true, data: confirmedSale },
+      {
+        ok: true,
+        data: confirmedSale,
+        ...(stockWarnings.length > 0 ? { warnings: stockWarnings } : {}),
+      },
       { status: 201 }
     )
   } catch (error) {

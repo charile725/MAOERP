@@ -168,15 +168,27 @@ if (!apply) {
 }
 
 console.log('\n寫入中...')
+// 逐筆寫：資料庫觸發器會拒絕「allow_negative=false 又會扣成負庫存」的那幾筆，
+// 整批寫的話一筆被拒就全部沒寫 —— 這正是當初那些出貨沒扣到庫存的原因。
 let written = 0
-for (const batch of chunks(rowsToInsert, 100)) {
-  const { error } = await db.from('inventory_logs').insert(batch)
+const blocked = []
+for (const row of rowsToInsert) {
+  const { error } = await db.from('inventory_logs').insert(row)
   if (error) {
-    console.error(`❌ 批次寫入失敗（已寫入 ${written} 筆）：${error.message}`)
-    process.exit(1)
+    blocked.push({ row, product: productById.get(row.product_id), message: error.message })
+    continue
   }
-  written += batch.length
-  console.log(`  已寫入 ${written}/${rowsToInsert.length}`)
+  written += 1
+}
+console.log(`  成功寫入 ${written} / ${rowsToInsert.length} 筆`)
+
+if (blocked.length > 0) {
+  console.log(`\n⚠️  ${blocked.length} 筆被資料庫擋下（商品設定「不允許負庫存」，扣下去會變負數）：`)
+  for (const b of blocked) {
+    console.log(`  ${String(b.product?.item_code || '').padEnd(10)}${String(b.product?.name || b.row.product_id).slice(0, 26).padEnd(28)}要扣 ${-b.row.qty_change} 件、目前庫存 ${b.product?.stock}`)
+  }
+  console.log('\n  這幾個要你決定：補一張進貨單（實際有進貨只是沒登記），')
+  console.log('  或把該商品改成「允許負庫存」後再跑一次這支腳本。')
 }
 
 console.log('\n驗證補正後的庫存：')

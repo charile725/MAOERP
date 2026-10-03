@@ -216,29 +216,67 @@ export async function POST(request: NextRequest) {
           continue
         }
 
-        // 寫入庫存日誌（批次 insert 優化，trigger 會自動扣除庫存）
-        // 官方套一番賞賞品沒有對應商品（product_id 為 null），必須先濾掉：
-        // 批次 insert 只要有一筆違反 NOT NULL，整批都會被退，
-        // 那張出貨單裡其他商品的庫存就全部不會扣。
-        const inventoryLogs = items
-          .filter((item: any) => !!item.product_id)
-          .map((item: any) => ({
-            product_id: item.product_id,
-            ref_type: 'delivery',
-            ref_id: delivery.id,
-            qty_change: -item.requestedQty,
-            memo: `批量出貨 - ${delivery.delivery_no} (${item.snapshot_name} x${item.requestedQty})`
-          }))
+        // 寫入庫存日誌（trigger 會自動扣除庫存）
+        //
+        // ⚠️ 這段原本是「批次 insert 一次寫完，失敗只記錄警告」，結果出貨單留在
+        //    已確認狀態、庫存卻完全沒扣 —— 畫面上還是顯示出貨成功。
+        //    2026-10-03 稽核發現這條路徑歷史上 4 次出貨全部沒寫進日誌
+        //    （整個 inventory_logs 裡一筆「批量出貨」的紀錄都沒有，
+        //     而結帳那條路徑同期寫了 6000 多筆），共 73 件庫存沒扣。
+        //
+        // 所以改成：
+        //   1. 逐筆寫入 —— 一筆失敗不會把整批拖下水，而且錯誤訊息講得出是哪個商品
+        //   2. 寫完讀回來核對筆數
+        //   3. 對不上就把這張出貨單整個刪掉並回報失敗
+        //      寧可讓店員看到「出貨失敗請重試」，也不要留下庫存沒扣的已確認出貨單
+        // 官方套一番賞賞品沒有對應商品（product_id 為 null），本來就不進庫存。
+        const logTargets = items.filter((item: any) => !!item.product_id)
+        const logFailures: string[] = []
 
-        if (inventoryLogs.length > 0) {
+        for (const item of logTargets) {
           const { error: invLogError } = await (supabaseServer
             .from('inventory_logs') as any)
-            .insert(inventoryLogs)
+            .insert({
+              product_id: item.product_id,
+              ref_type: 'delivery',
+              ref_id: delivery.id,
+              qty_change: -item.requestedQty,
+              // memo 跟結帳那條路徑一致，少一個會出問題的變數
+              memo: `出貨扣庫存 - ${delivery.delivery_no}`,
+            })
 
           if (invLogError) {
-            console.error(`[Batch Deliver] Failed to write inventory logs for delivery ${delivery.id}:`, invLogError)
-            deliveryErrors.push(`出貨單 ${delivery.delivery_no} 庫存扣除失敗: ${invLogError.message}`)
+            console.error(`[Batch Deliver] 寫入庫存日誌失敗 delivery=${delivery.delivery_no} product=${item.product_id}:`, invLogError)
+            logFailures.push(`${item.snapshot_name || item.product_id}：${invLogError.message}`)
           }
+        }
+
+        // 核對：實際寫進去的筆數要跟應寫的一致
+        const { data: writtenLogs, error: verifyError } = await (supabaseServer
+          .from('inventory_logs') as any)
+          .select('id')
+          .eq('ref_type', 'delivery')
+          .eq('ref_id', delivery.id)
+
+        const writtenCount = writtenLogs?.length ?? -1
+        if (logFailures.length > 0 || verifyError || writtenCount !== logTargets.length) {
+          console.error(
+            `[Batch Deliver] 庫存扣除不完整，回滾出貨單 ${delivery.delivery_no}：` +
+            `應寫 ${logTargets.length} 筆、實際 ${writtenCount} 筆`,
+            logFailures
+          )
+
+          // 回滾：先刪日誌，再刪明細與出貨單，讓店員可以重新出貨
+          await (supabaseServer.from('inventory_logs') as any)
+            .delete().eq('ref_type', 'delivery').eq('ref_id', delivery.id)
+          await (supabaseServer.from('delivery_items') as any).delete().eq('delivery_id', delivery.id)
+          await (supabaseServer.from('deliveries') as any).delete().eq('id', delivery.id)
+
+          deliveryErrors.push(
+            `銷售單 ${items[0].sales.sale_no} 出貨失敗（庫存未扣除，出貨單已取消，請重試）` +
+            (logFailures.length > 0 ? `：${logFailures.join('；')}` : '')
+          )
+          continue
         }
 
         // 更新 sale 的 fulfillment_status（考慮出貨和購物金轉換）
