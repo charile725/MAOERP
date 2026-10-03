@@ -4,6 +4,7 @@ import React from 'react'
 import Link from 'next/link'
 import useSWR from 'swr'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatDbUtcDate } from '@/lib/timezone'
 
 type OfficialKuji = {
   id: string
@@ -100,7 +101,7 @@ export default function OfficialKujiPurchasesPage() {
                           {kuji.is_active ? '販售中' : '未啟用'}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{formatDate(kuji.created_at)}</td>
+                      <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{formatDbUtcDate(kuji.created_at)}</td>
                     </tr>
                   ))}
                 </tbody>

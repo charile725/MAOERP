@@ -99,6 +99,25 @@ for (const a of accounts) {
 }
 console.log(chainBreaks === 0 ? '  ✅ 完全連續' : `  ℹ️  ${chainBreaks} 處斷點（A 已確認餘額正確，屬於刪除交易留下的洞，不是掉錢）`)
 
+// ---------- B3. 交易時間的時區慣例 ----------
+// account_transactions.created_at 應該一律是真 UTC（updateAccountBalance 寫 getTaiwanTime()）。
+// 費用那些是資料庫端寫的，存的是台灣牆鐘卻貼 +00:00，會「出現在未來」，
+// 排序與任何依時間篩選都會錯 8 小時。
+console.log('')
+console.log('--- B3. 交易時間是否都是真 UTC ---')
+const nowMs = Date.now()
+const futureTx = txns.filter((t) => new Date(String(t.created_at)).getTime() > nowMs + 60000)
+if (futureTx.length === 0) console.log('  ✅ 沒有時間落在未來的交易')
+else {
+  problems += futureTx.length
+  console.log(`  ⚠️  ${futureTx.length} 筆交易的時間在未來（存的是台灣牆鐘，不是 UTC）：`)
+  for (const t of futureTx.slice(0, 10)) {
+    console.log(`      ${String(t.created_at).slice(0, 19)} ${t.transaction_type} ${money(t.amount)} ref_type=${t.ref_type} ref=${t.ref_no || t.ref_id}`)
+  }
+  if (futureTx.length > 10) console.log(`      ...另外 ${futureTx.length - 10} 筆`)
+  console.log('      （費用交易由資料庫端寫入，根治要改那支觸發器）')
+}
+
 // ---------- C. 日結快照 vs 重算 ----------
 console.log('\n--- C. 已存檔的日結 vs 用現在資料重算 ---')
 const closings = await all(() => db.from('business_day_closings').select('*').order('business_date'))

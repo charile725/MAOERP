@@ -113,3 +113,11 @@ export function formatDbUtcAsTaiwan(value: string | Date | null | undefined): st
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`
 }
+
+/** 把「真 UTC」的時間欄位格式化成台灣日期 YYYY-MM-DD（不帶時間） */
+export function formatDbUtcDate(value: string | Date | null | undefined): string {
+  if (!value) return '-'
+  const d = parseDbUtc(value)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`
+}

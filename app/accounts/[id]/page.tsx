@@ -3,7 +3,8 @@
 import React, { useState, use } from 'react'
 import useSWR from 'swr'
 import { rawFetcher } from '@/lib/swr/fetcher'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils'
+import { formatDbUtcAsTaiwan } from '@/lib/timezone'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react'
@@ -45,6 +46,20 @@ const TRANSACTION_TYPE_LABELS: Record<string, string> = {
     settlement: '結算',
     transfer_out: '轉出',
     transfer_in: '轉入',
+}
+
+/**
+ * 帳戶交易的時間顯示。
+ *
+ * ⚠️ account_transactions.created_at 混了兩種慣例（2026-10-03 實測）：
+ *   - 銷售／收款／調整：由 updateAccountBalance 寫入，是真 UTC（顯示要 +8）
+ *   - 費用：由資料庫端寫入（金額也是負數，跟我們程式的慣例都不同），
+ *     存的是台灣牆上時間卻貼著 +00:00 標籤，有些甚至會「出現在未來」
+ *     → 直接照字面顯示才正確
+ * 根治要改資料庫那支觸發器，程式這邊先分開處理，免得其中一種差 8 小時。
+ */
+function txTime(tx: { ref_type: string; created_at: string }) {
+  return tx.ref_type === 'expense' ? formatDateTime(tx.created_at) : formatDbUtcAsTaiwan(tx.created_at)
 }
 
 export default function AccountDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -192,7 +207,7 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
                                                         }`}>
                                                         {TRANSACTION_TYPE_LABELS[tx.transaction_type] || tx.transaction_type}
                                                     </span>
-                                                    <div className="text-xs text-gray-500 mt-1">{formatDate(tx.created_at)}</div>
+                                                    <div className="text-xs text-gray-500 mt-1">{txTime(tx)}</div>
                                                 </div>
                                                 <div className="text-right">
                                                     <div className={`font-semibold ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
@@ -252,7 +267,7 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
                                         return (
                                             <tr key={tx.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                                                 <td className="px-6 py-4 whitespace-nowrap">
-                                                    {formatDate(tx.created_at)}
+                                                    {txTime(tx)}
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${['sale', 'customer_payment', 'transfer_in'].includes(tx.transaction_type)

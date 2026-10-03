@@ -6,6 +6,7 @@ import useSWR, { useSWRConfig } from 'swr'
 import { SWR_KEYS, ichibanKujiKey } from '@/lib/swr/keys'
 import { paginatedFetcher } from '@/lib/swr/fetcher'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatDbUtcAsTaiwan } from '@/lib/timezone'
 
 type Product = {
   id: string
@@ -581,7 +582,7 @@ export default function IchibanKujiPage() {
                           </div>
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
-                          {formatDate(kuji.created_at)}
+                          {formatDbUtcAsTaiwan(kuji.created_at)}
                         </td>
                         <td className="px-6 py-4 text-center text-sm" onClick={(e) => e.stopPropagation()}>
                           <div className="relative flex items-center justify-center">
