@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
       tags: [],
       stock: 0,
       avg_cost: data.cost || 0,  // 初始平均成本等於進貨成本
-      allow_negative: false,
+      allow_negative: true,
       is_active: true,
     }
 

@@ -198,7 +198,7 @@ export async function POST(request: NextRequest) {
         avg_cost: quantity > 0 ? unitCost : 0,
         unit: '件',
         tags: [],
-        allow_negative: false,
+        allow_negative: true,
         is_active: true,
       }
     })
