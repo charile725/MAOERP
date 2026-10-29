@@ -15,6 +15,7 @@
  * 用法：
  *   node fix-kuji-remaining.mjs            # dry-run
  *   node fix-kuji-remaining.mjs --apply    # 實際寫入
+ *   node fix-kuji-remaining.mjs --apply --raise   # 連「停用套剩餘比應有的少」一起修
  */
 
 import { readFileSync } from 'node:fs'
@@ -22,6 +23,7 @@ import { createClient } from '@supabase/supabase-js'
 
 const args = process.argv.slice(2)
 const apply = args.includes('--apply')
+const raise = args.includes('--raise')
 const envFile = args.find((a) => !a.startsWith('--')) || '.env.local'
 
 const env = {}
@@ -83,37 +85,53 @@ function printGroup(list) {
   }
 }
 
-if (under.length > 0) {
-  console.log(`--- 剩餘比應有的少（${under.length} 筆，只列出不修，可能是銷貨更正）---`)
-  printGroup(under)
+// 剩餘比應有的少：紙籤可能實際已經被抽走，硬加回去會讓店員多賣一抽，所以啟用中的套不自動修。
+// 但已經停用（含廢套結算掉）的套不會再賣，把帳對回來沒有風險 —— 這種用 --raise 修。
+const underClosed = under.filter((x) => kujiById.get(x.p.kuji_id)?.is_active === false)
+const underOpen = under.filter((x) => kujiById.get(x.p.kuji_id)?.is_active !== false)
+
+if (underOpen.length > 0) {
+  console.log(`--- 剩餘比應有的少、套還在啟用中（${underOpen.length} 筆，只列出不修）---`)
+  printGroup(underOpen)
+  console.log('')
+}
+if (underClosed.length > 0) {
+  console.log(`--- 剩餘比應有的少、套已停用（${underClosed.length} 筆，${raise ? '要修' : '要修請加 --raise'}）---`)
+  printGroup(underClosed)
   console.log('')
 }
 
-if (over.length === 0) { console.log('✅ 沒有被重複加回的賞項。'); process.exit(0) }
+const toFix = raise ? [...over, ...underClosed] : [...over]
+if (toFix.length === 0) { console.log('✅ 沒有需要修正的賞項。'); process.exit(0) }
 
-console.log(`--- 剩餘比應有的多（${over.length} 筆，要修）---`)
-printGroup(over)
+if (over.length > 0) {
+  console.log(`--- 剩餘比應有的多（${over.length} 筆，要修）---`)
+  printGroup(over)
+}
 
 if (!apply) { console.log('\n(dry-run，沒有寫入任何資料。要實際執行請加 --apply)'); process.exit(0) }
 
 console.log('\n寫入中...')
 let ok = 0
-for (const x of over) {
+for (const x of toFix) {
   const { error } = await db.from('ichiban_kuji_prizes').update({ remaining: x.expected }).eq('id', x.p.id)
   if (error) { console.error(`  ❌ ${x.p.id}：${error.message}`); continue }
   ok += 1
 }
-console.log(`  ✅ 修正 ${ok} / ${over.length} 筆`)
+console.log(`  ✅ 修正 ${ok} / ${toFix.length} 筆`)
 
 console.log('\n驗證：')
 const prizes2 = await all(() => db.from('ichiban_kuji_prizes').select('id, quantity, remaining'))
 let stillOver = 0
+let stillUnder = 0
 let overQty = 0
 for (const p of prizes2) {
   const expected = Math.max(0, Number(p.quantity) - (soldByPrize.get(p.id) || 0))
   if (Number(p.remaining) > expected) stillOver += 1
+  if (Number(p.remaining) < expected) stillUnder += 1
   if (Number(p.remaining) > Number(p.quantity)) overQty += 1
 }
 console.log(`  剩餘比應有的多：${stillOver} 筆`)
+console.log(`  剩餘比應有的少：${stillUnder} 筆`)
 console.log(`  剩餘比總數還大：${overQty} 筆`)
 if (stillOver === 0 && overQty === 0) console.log('  ✅ 修正完成。')

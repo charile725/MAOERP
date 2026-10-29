@@ -260,7 +260,17 @@ for (const p of kujiPrizes) {
   if (!prizesByKuji.has(p.kuji_id)) prizesByKuji.set(p.kuji_id, [])
   prizesByKuji.get(p.kuji_id).push(p)
 }
+// 每個賞項實際賣掉幾抽 —— 重複判定跟剩餘抽數都要用
+const kujiSold = await all(() => db.from('sale_items').select('ichiban_kuji_prize_id, quantity').not('ichiban_kuji_prize_id', 'is', null))
+const soldByKujiPrize = new Map()
+for (const s of kujiSold) soldByKujiPrize.set(s.ichiban_kuji_prize_id, (soldByKujiPrize.get(s.ichiban_kuji_prize_id) || 0) + Number(s.quantity))
+
+// 「重複賞項」要抓的是程式 bug 塞進去的多餘列：同一組签章裡有沒賣過、也沒被抽過的空白列，
+// 那種刪掉不會損失資料。反過來說，同一個賞品被店家分兩列登記（例如 G賞 野餐款 3 + 3）
+// 而且每一列都有賣出紀錄，那是登記方式而不是錯誤 —— 刪掉會把已賣出的明細弄成孤兒，
+// 數量加總也會對不上 total_draws，所以只提示、不計入問題數。
 const dupKuji = []
+const dupBenign = []
 const drawsMismatch = []
 for (const [kujiId, list] of prizesByKuji) {
   const k = kujiById.get(kujiId)
@@ -270,17 +280,30 @@ for (const [kujiId, list] of prizesByKuji) {
     const sig = opts.length > 0
       ? `${p.prize_tier}|selection:${opts.join(',')}`
       : `${p.prize_tier}|${p.product_id || ''}|${p.prize_name || ''}`
-    seen.set(sig, (seen.get(sig) || 0) + 1)
+    if (!seen.has(sig)) seen.set(sig, [])
+    seen.get(sig).push(p)
   }
-  const dups = [...seen.values()].filter((n) => n > 1).length
-  if (dups > 0) dupKuji.push({ k, dups, total: list.length })
+  let dups = 0
+  let benign = 0
+  const detail = []
+  for (const rows of seen.values()) {
+    if (rows.length < 2) continue
+    const untouched = rows.filter(
+      (p) => (soldByKujiPrize.get(p.id) || 0) === 0 && Number(p.remaining) === Number(p.quantity)
+    )
+    if (untouched.length > 0) {
+      dups += 1
+      detail.push({ rows, untouched })
+    } else {
+      benign += 1
+    }
+  }
+  if (dups > 0) dupKuji.push({ k, dups, total: list.length, detail })
+  if (benign > 0) dupBenign.push({ k, benign })
   const qty = list.reduce((a, p) => a + Number(p.quantity), 0)
   if (k && Number(k.total_draws) !== qty) drawsMismatch.push({ k, qty })
 }
 // 剩餘抽數必須等於「總數 − 實際賣出」，而且總數不可小於實際賣出
-const kujiSold = await all(() => db.from('sale_items').select('ichiban_kuji_prize_id, quantity').not('ichiban_kuji_prize_id', 'is', null))
-const soldByKujiPrize = new Map()
-for (const s of kujiSold) soldByKujiPrize.set(s.ichiban_kuji_prize_id, (soldByKujiPrize.get(s.ichiban_kuji_prize_id) || 0) + Number(s.quantity))
 const oversoldPrizes = []
 const remainingDrift = []
 for (const p of kujiPrizes) {
@@ -289,12 +312,22 @@ for (const p of kujiPrizes) {
   else if (Number(p.remaining) !== Number(p.quantity) - sold) remainingDrift.push({ p, sold })
 }
 
-if (dupKuji.length === 0) console.log(`  ✅ ${prizesByKuji.size} 套一番賞都沒有重複賞項`)
+if (dupKuji.length === 0) console.log(`  ✅ ${prizesByKuji.size} 套一番賞都沒有多餘的重複賞項`)
 else {
   issues += dupKuji.length
-  for (const { k, dups, total } of dupKuji) {
-    console.log(`  ⚠️  【${k?.name || '?'}】${total} 筆賞項中有 ${dups} 組重複`)
+  for (const { k, dups, total, detail } of dupKuji) {
+    console.log(`  ⚠️  【${k?.name || '?'}】${total} 筆賞項中有 ${dups} 組重複（含沒賣過的多餘列）`)
+    for (const d of detail) {
+      for (const p of d.rows) {
+        const sold = soldByKujiPrize.get(p.id) || 0
+        const mark = d.untouched.includes(p) ? ' ← 沒賣過，可刪' : ''
+        console.log(`      [${p.prize_tier}] ${p.prize_name || p.product_id || '(複選)'} 總數 ${p.quantity}、已賣 ${sold}、剩餘 ${p.remaining}${mark}`)
+      }
+    }
   }
+}
+for (const { k, benign } of dupBenign) {
+  console.log(`  ℹ️  【${k?.name || '?'}】有 ${benign} 組同名賞項分列登記，但每列都賣出過 —— 屬於登記方式，不是錯誤`)
 }
 if (oversoldPrizes.length > 0) {
   issues += oversoldPrizes.length
