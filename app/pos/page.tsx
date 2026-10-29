@@ -1061,6 +1061,12 @@ export default function POSPage() {
       const data = await res.json()
 
       if (data.ok) {
+        // 後端回報庫存沒扣成功時一定要讓店員看到 —— 資料庫會拒絕
+        // 「不允許負庫存又會扣成負數」的扣帳，沉默掉庫存就會一直錯下去。
+        if (Array.isArray(data.warnings) && data.warnings.length > 0) {
+          alert('⚠️ 結帳完成，但以下商品的庫存沒有扣除：\n\n' + data.warnings.join('\n') + '\n\n請補進貨單，或把商品改成「允許負庫存」。')
+        }
+
         setCart([])
         setSelectedCustomer(null)
         setCustomerSearchQuery('')

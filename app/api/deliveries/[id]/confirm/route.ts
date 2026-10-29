@@ -88,19 +88,31 @@ export async function PATCH(
       // if (!product.allow_negative && product.stock < item.quantity) { ... }
     }
 
-    // 扣庫存：批次寫入 inventory_logs（trigger 會自動更新 products.stock）
-    const inventoryLogs = stockItems.map((item: any) => ({
-      product_id: item.product_id,
-      ref_type: 'delivery',
-      ref_id: id,
-      qty_change: -item.quantity,
-      memo: `出貨扣庫存 - ${delivery.delivery_no}`,
-    }))
-
-    if (inventoryLogs.length > 0) {
-      await (supabaseServer
+    // 扣庫存：寫 inventory_logs（trigger 會自動更新 products.stock）
+    //
+    // ⚠️ 一定要逐筆寫，而且失敗要講出來。
+    //    資料庫有觸發器：商品 allow_negative=false 且扣下去會變負庫存時，
+    //    直接拒絕那筆日誌（Insufficient stock for product ...）。
+    //    原本是整批 insert 又完全沒檢查錯誤，所以只要有一個商品庫存不足，
+    //    整張出貨單的庫存就全部不扣，畫面照樣顯示確認成功。
+    const stockWarnings: string[] = []
+    for (const item of stockItems) {
+      const { error: logError } = await (supabaseServer
         .from('inventory_logs') as any)
-        .insert(inventoryLogs)
+        .insert({
+          product_id: item.product_id,
+          ref_type: 'delivery',
+          ref_id: id,
+          qty_change: -item.quantity,
+          memo: `出貨扣庫存 - ${delivery.delivery_no}`,
+        })
+
+      if (logError) {
+        console.error(`[Delivery Confirm ${id}] 庫存扣除失敗 product=${item.product_id}:`, logError)
+        stockWarnings.push(
+          `${(productMap.get(item.product_id) as any)?.name || item.product_id}：庫存未扣除（${logError.message}）`
+        )
+      }
     }
 
     // 更新出貨單狀態
@@ -178,7 +190,10 @@ export async function PATCH(
     return NextResponse.json({
       ok: true,
       data: confirmedDelivery,
-      message: '出貨確認成功，庫存已扣減',
+      message: stockWarnings.length > 0
+        ? `出貨確認成功，但有 ${stockWarnings.length} 項商品的庫存沒有扣除`
+        : '出貨確認成功，庫存已扣減',
+      ...(stockWarnings.length > 0 ? { warnings: stockWarnings } : {}),
     })
   } catch (error) {
     return NextResponse.json(

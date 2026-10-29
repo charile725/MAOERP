@@ -565,7 +565,7 @@ export default function SalesPage() {
       const data = await res.json()
 
       if (data.ok) {
-        alert(data.message || '出貨成功！')
+        alert((data.message || '出貨成功！') + (Array.isArray(data.warnings) && data.warnings.length > 0 ? '\n\n⚠️ 以下商品庫存沒扣除：\n' + data.warnings.join('\n') : ''))
         mutate()
       } else {
         alert(`出貨失敗：${data.error}`)
@@ -626,7 +626,7 @@ export default function SalesPage() {
       const data = await res.json()
 
       if (data.ok) {
-        alert(data.message || '批量出貨成功！')
+        alert((data.message || '批量出貨成功！') + (Array.isArray(data.warnings) && data.warnings.length > 0 ? '\n\n⚠️ 以下商品庫存沒扣除：\n' + data.warnings.join('\n') : ''))
         setSelectedItemIds(new Set())
         mutate()
       } else {
@@ -666,7 +666,7 @@ export default function SalesPage() {
       const data = await res.json()
 
       if (data.ok) {
-        alert(data.message || '批量出貨成功！')
+        alert((data.message || '批量出貨成功！') + (Array.isArray(data.warnings) && data.warnings.length > 0 ? '\n\n⚠️ 以下商品庫存沒扣除：\n' + data.warnings.join('\n') : ''))
         setSelectedItemIds(new Set())
         setItemQuantities(new Map())
         setShowQuantityModal(false)
