@@ -411,7 +411,11 @@ export async function POST(request: NextRequest) {
     // 2. 計算該營業日銷售統計（用 sale_date 查詢）
     const { data: sales, error: salesError } = await (supabaseServer
       .from('sales') as any)
-      .select('total, payment_method, account_id, is_paid, source, sale_no, created_at')
+      // id 一定要選出來：下面的分帳要用 sale.id 去比對 account_transactions，
+      // 少了它每一筆的 id 都是 undefined，帳戶明細那條路整段失效，
+      // 只能退回「整筆算在 sales.account_id」—— 多元付款就全部堆在主帳戶，
+      // 日結的分帳跟帳戶明細永遠對不起來（AR 收款也完全不會被算進去）。
+      .select('id, total, payment_method, account_id, is_paid, source, sale_no, created_at')
       .eq('sale_date', businessDate)
       .eq('source', source)
       .eq('status', 'confirmed')
