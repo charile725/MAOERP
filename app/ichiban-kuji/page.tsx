@@ -7,6 +7,7 @@ import { SWR_KEYS, ichibanKujiKey } from '@/lib/swr/keys'
 import { paginatedFetcher } from '@/lib/swr/fetcher'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { formatDbUtcAsTaiwan } from '@/lib/timezone'
+import { fetchNextSetName } from '@/lib/kuji-set-name'
 
 type Product = {
   id: string
@@ -229,6 +230,7 @@ export default function IchibanKujiPage() {
 
   // 開新套：以本套為範本建立一套全新的（賞項全滿），舊套與其銷售紀錄原封不動
   const handleReopen = async (kuji: IchibanKuji) => {
+    const isOfficial = kuji.set_type === 'official'
     const drawn = (kuji.ichiban_kuji_prizes || []).reduce(
       (sum, p) => sum + (p.quantity - p.remaining), 0
     )
@@ -237,14 +239,18 @@ export default function IchibanKujiPage() {
 
 注意：「${kuji.name}」目前仍在啟用中，開完後收銀台會同時看到兩套（掃條碼會抓到新的這套）。`
       : ''
-    const defaultName = await fetchNextSetName(kuji)
+    // 自製套的成本可以從商品成本重算；官方套的賞項沒有對應商品，成本一向是人工輸入的
+    const costLine = isOfficial
+      ? `成本沿用舊套的 $${kuji.total_cost ?? 0}（下一步可以改）。`
+      : `成本會依「目前的商品成本」重新計算。`
+    const defaultName = await fetchNextSetName(kuji.name)
     const name = prompt(
       `以「${kuji.name}」為範本開一套全新的。
 
 `
       + `新套所有賞項都是全新未抽（舊套已抽 ${drawn} 抽的紀錄不會被動到）。
 `
-      + `成本會依「目前的商品成本」重新計算。${warnActive}
+      + `${costLine}${warnActive}
 
 `
       + `新套名稱：`,
@@ -253,16 +259,38 @@ export default function IchibanKujiPage() {
     if (name === null) return
     if (!name.trim()) { alert('名稱不能空白'); return }
 
+    // 官方套再問一次成本：同一款賞進價會變，而且這是唯一來源
+    let totalCost: number | undefined
+    if (isOfficial) {
+      const costInput = prompt(
+        `「${name.trim()}」這一套的進貨成本（元）：`,
+        String(kuji.total_cost ?? 0)
+      )
+      if (costInput === null) return
+      const parsed = Number(costInput.replace(/[,\s]/g, ''))
+      if (!Number.isFinite(parsed) || parsed < 0) { alert('成本請輸入 0 或正數'); return }
+      totalCost = parsed
+    }
+
     setReopening(kuji.id)
     try {
       const res = await fetch(`/api/ichiban-kuji/${kuji.id}/reopen`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim() }),
+        body: JSON.stringify({
+          name: name.trim(),
+          ...(totalCost !== undefined ? { total_cost: totalCost } : {}),
+        }),
       })
       const data = await res.json()
       if (data.ok) {
-        alert(`已開新套：「${data.data.new_name}」，共 ${data.data.total_draws} 抽`)
+        alert(
+          `已開新套：「${data.data.new_name}」，共 ${data.data.total_draws} 抽`
+          + (isOfficial ? `，成本 $${data.data.total_cost ?? 0}` : '')
+          + (data.warning ? `
+
+⚠️ ${data.warning}` : '')
+        )
         mutate()
       } else {
         alert(data.error || '開新套失敗')
@@ -271,26 +299,6 @@ export default function IchibanKujiPage() {
       alert('開新套失敗')
     } finally {
       setReopening(null)
-    }
-  }
-
-  // 預設名稱交給後端算（要看全部套組才知道現在到第幾套），拿不到就本地退而求其次
-  const fetchNextSetName = async (kuji: IchibanKuji) => {
-    const base = kuji.name.replace(/\s*[（(]\s*第\s*\d+\s*套\s*[)）]\s*$/, '').trim()
-    try {
-      const res = await fetch('/api/ichiban-kuji?all=true')
-      const data = await res.json()
-      const names: string[] = (data?.data || []).map((k: any) => k.name)
-      let maxSet = 0
-      for (const n of names) {
-        const t = (n || '').trim()
-        const m = t.match(/\s*[（(]\s*第\s*(\d+)\s*套\s*[)）]\s*$/)
-        if (t.replace(/\s*[（(]\s*第\s*\d+\s*套\s*[)）]\s*$/, '').trim() !== base) continue
-        maxSet = Math.max(maxSet, m ? parseInt(m[1], 10) : 1)
-      }
-      return `${base} (第${maxSet + 1}套)`
-    } catch {
-      return `${base} (第2套)`
     }
   }
 
@@ -644,8 +652,8 @@ export default function IchibanKujiPage() {
                                       廢套結算
                                     </button>
                                   )}
-                                  {/* 開新套（僅自製套）：以本套為範本開一套全新的 */}
-                                  {kuji.set_type === 'custom' && userRole === 'admin' && (
+                                  {/* 開新套：以本套為範本開一套全新的（自製套、官方套都可以） */}
+                                  {userRole === 'admin' && (
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation()

@@ -1,10 +1,11 @@
 'use client'
 
-import React from 'react'
+import React, { useState } from 'react'
 import Link from 'next/link'
 import useSWR from 'swr'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { formatDbUtcDate } from '@/lib/timezone'
+import { fetchNextSetName } from '@/lib/kuji-set-name'
 
 type OfficialKuji = {
   id: string
@@ -18,10 +19,62 @@ type OfficialKuji = {
 }
 
 export default function OfficialKujiPurchasesPage() {
-  const { data: kujis = [], isLoading: loading } = useSWR<OfficialKuji[]>('/api/ichiban-kuji/official-purchases')
+  const { data: kujis = [], isLoading: loading, mutate } = useSWR<OfficialKuji[]>('/api/ichiban-kuji/official-purchases')
+  const [reopening, setReopening] = useState<string | null>(null)
 
   const totalCost = kujis.reduce((sum, k) => sum + k.total_cost, 0)
   const active = kujis.filter(k => k.is_active).length
+
+  /**
+   * 開新套：同一款官方賞再進一套。
+   *
+   * 以舊套為範本複製賞項（官方套的賞項只有名稱，沒有對應商品），賞項全部歸回未抽，
+   * 舊套與它的銷售紀錄完全不動。成本問一次 —— 官方套的成本沒有商品可以算，
+   * 一向是人工輸入的，而且同一款再進貨時進價常常不一樣。
+   */
+  const handleReopen = async (kuji: OfficialKuji) => {
+    const defaultName = await fetchNextSetName(kuji.name)
+    const name = prompt(
+      `以「${kuji.name}」為範本再開一套。\n\n`
+      + `新套的賞項跟舊套相同、全部未抽，舊套的銷售紀錄不會被動到。\n`
+      + `廠商沿用 ${kuji.vendor_name}。\n\n`
+      + `新套名稱：`,
+      defaultName
+    )
+    if (name === null) return
+    if (!name.trim()) { alert('名稱不能空白'); return }
+
+    const costInput = prompt(
+      `「${name.trim()}」這一套的進貨成本（元）：`,
+      String(kuji.total_cost || 0)
+    )
+    if (costInput === null) return
+    const parsedCost = Number(costInput.replace(/[,\s]/g, ''))
+    if (!Number.isFinite(parsedCost) || parsedCost < 0) { alert('成本請輸入 0 或正數'); return }
+
+    setReopening(kuji.id)
+    try {
+      const res = await fetch(`/api/ichiban-kuji/${kuji.id}/reopen`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim(), total_cost: parsedCost }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        alert(
+          `已開新套：「${data.data.new_name}」，共 ${data.data.total_draws} 抽、成本 ${formatCurrency(data.data.total_cost || 0)}`
+          + (data.warning ? `\n\n⚠️ ${data.warning}` : '')
+        )
+        mutate()
+      } else {
+        alert(data.error || '開新套失敗')
+      }
+    } catch {
+      alert('開新套失敗')
+    } finally {
+      setReopening(null)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
@@ -74,6 +127,7 @@ export default function OfficialKujiPurchasesPage() {
                     <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900 dark:text-gray-100">抽數</th>
                     <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900 dark:text-gray-100">狀態</th>
                     <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">建立日期</th>
+                    <th className="px-6 py-3 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">操作</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -102,6 +156,15 @@ export default function OfficialKujiPurchasesPage() {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{formatDbUtcDate(kuji.created_at)}</td>
+                      <td className="px-6 py-4 text-right text-sm">
+                        <button
+                          onClick={() => handleReopen(kuji)}
+                          disabled={reopening === kuji.id}
+                          className="rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed"
+                        >
+                          {reopening === kuji.id ? '開新套中…' : '開新套'}
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
