@@ -3,7 +3,7 @@
 import React, { useState, use } from 'react'
 import useSWR from 'swr'
 import { rawFetcher } from '@/lib/swr/fetcher'
-import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils'
+import { formatCurrency, formatDate } from '@/lib/utils'
 import { formatDbUtcAsTaiwan } from '@/lib/timezone'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -51,15 +51,16 @@ const TRANSACTION_TYPE_LABELS: Record<string, string> = {
 /**
  * 帳戶交易的時間顯示。
  *
- * ⚠️ account_transactions.created_at 混了兩種慣例（2026-10-03 實測）：
- *   - 銷售／收款／調整：由 updateAccountBalance 寫入，是真 UTC（顯示要 +8）
- *   - 費用：由資料庫端寫入（金額也是負數，跟我們程式的慣例都不同），
- *     存的是台灣牆上時間卻貼著 +00:00 標籤，有些甚至會「出現在未來」
- *     → 直接照字面顯示才正確
- * 根治要改資料庫那支觸發器，程式這邊先分開處理，免得其中一種差 8 小時。
+ * account_transactions.created_at 是 timestamptz，全部存真 UTC，所以顯示一律 +8。
+ *
+ * 費用那批曾經比別人晚 8 小時（剛記的費用會出現在未來）。原因不是「存台灣牆上時間」，
+ * 而是這個欄位的資料庫預設值是 `now() + '08:00:00'::interval`：程式自己寫入時會帶
+ * getTaiwanTime()（真 UTC）所以正確，費用是資料庫端寫的、沒帶 created_at，就吃到壞預設值。
+ * 71 筆歷史資料已用 fix-expense-tx-timestamp.mjs 改正，預設值由
+ * sql/fix_db_defaults_and_triggers.sql 改掉，這裡不再分類處理。
  */
 function txTime(tx: { ref_type: string; created_at: string }) {
-  return tx.ref_type === 'expense' ? formatDateTime(tx.created_at) : formatDbUtcAsTaiwan(tx.created_at)
+  return formatDbUtcAsTaiwan(tx.created_at)
 }
 
 export default function AccountDetailPage({ params }: { params: Promise<{ id: string }> }) {
